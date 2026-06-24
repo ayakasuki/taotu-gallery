@@ -6,7 +6,7 @@
 
     <header class="site-header">
       <div class="header-inner">
-        <NuxtLink to="/" class="logo">桃图智库</NuxtLink>
+        <NuxtLink to="/" class="logo">{{ siteName }}</NuxtLink>
         <nav class="nav-links">
           <NuxtLink to="/" class="nav-link">图库</NuxtLink>
           <NuxtLink to="/albums" class="nav-link">相册</NuxtLink>
@@ -43,6 +43,7 @@ const showConnectionBanner = ref(false)
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
 const currentUser = ref(null)
+const siteName = ref('桃图智库')
 
 const checkAuth = () => {
   if (!import.meta.client) return
@@ -62,6 +63,12 @@ const checkAuth = () => {
 
 onMounted(async () => {
   checkAuth()
+  // 获取站点名称（公开接口，无需登录）
+  try {
+    const config = await api.get('/api/admin/site-config/public')
+    if (config.siteName) siteName.value = config.siteName
+    document.title = config.siteName || '桃图智库'
+  } catch {}
   try { showConnectionBanner.value = !(await api.checkConnection()).connected } catch { showConnectionBanner.value = true }
 })
 

@@ -4,7 +4,21 @@ const configService = require('../../services/configService');
 
 const router = express.Router();
 
-// 获取网站配置
+// 公开站点信息（无需登录，用于前端标题、注册判断等）
+router.get('/public', async (req, res, next) => {
+  try {
+    const siteConfig = await configService.readSiteConfig();
+    res.json({
+      siteName: siteConfig.siteName || '桃图智库',
+      publicDomain: siteConfig.publicDomain || '',
+      registration: siteConfig.registration || { enabled: false }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 获取完整网站配置（需登录）
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
     const siteConfig = await configService.readSiteConfig();
@@ -14,7 +28,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 });
 
-// 更新网站配置
+// 更新网站配置（需登录）
 router.put('/', authMiddleware, async (req, res, next) => {
   try {
     const siteConfig = await configService.readSiteConfig();

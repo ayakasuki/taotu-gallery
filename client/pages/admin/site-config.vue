@@ -51,6 +51,9 @@ onMounted(async () => {
     form.registrationEnabled = data.registration?.enabled || false
     form.emailVerification = data.registration?.emailVerification || false
     form.publicDomain = data.publicDomain || ''
+    form.httpsEnabled = data.https?.enabled || false
+    form.certPath = data.https?.certPath || ''
+    form.keyPath = data.https?.keyPath || ''
   } catch {}
 })
 
@@ -70,7 +73,12 @@ const saveSiteConfig = async () => {
     await api.put('/api/admin/site-config', {
       siteName: form.siteName,
       publicDomain: form.publicDomain,
-      registration: { enabled: form.registrationEnabled, emailVerification: form.emailVerification }
+      registration: { enabled: form.registrationEnabled, emailVerification: form.emailVerification },
+      https: {
+        enabled: form.httpsEnabled,
+        certPath: form.certPath,
+        keyPath: form.keyPath
+      }
     })
     msg.value = '配置已保存'
   } catch (err) { msg.value = '失败: ' + err.message }
