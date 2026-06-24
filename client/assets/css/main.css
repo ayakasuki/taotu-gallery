@@ -1,0 +1,138 @@
+/* 主样式文件 */
+
+/* 通用组件样式 */
+.fluent-card {
+  background: var(--fluent-bg-card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-lg);
+  transition: box-shadow var(--transition-normal);
+}
+
+.fluent-card:hover {
+  box-shadow: var(--shadow-2);
+}
+
+.fluent-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.fluent-btn-primary {
+  background: var(--fluent-blue);
+  color: white;
+}
+
+.fluent-btn-primary:hover {
+  background: var(--fluent-blue-hover);
+}
+
+.fluent-btn-primary:active {
+  background: var(--fluent-blue-pressed);
+}
+
+.fluent-btn-secondary {
+  background: transparent;
+  color: var(--fluent-text);
+  border: 1px solid var(--fluent-border);
+}
+
+.fluent-btn-secondary:hover {
+  background: var(--fluent-hover);
+}
+
+/* 标签徽章 */
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--fluent-blue-light);
+  color: var(--fluent-blue);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.tag-badge:hover {
+  background: var(--fluent-blue);
+  color: white;
+}
+
+.tag-badge.selected {
+  background: var(--fluent-blue);
+  color: white;
+}
+
+.tag-badge.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 页面容器 */
+.page-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+}
+
+/* 响应式栅格 */
+.grid {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-cols-5 { grid-template-columns: repeat(5, 1fr); }
+
+@media (max-width: 768px) {
+  .grid-cols-3, .grid-cols-4, .grid-cols-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 瀑布流布局 */
+.waterfall {
+  column-count: 4;
+  column-gap: var(--space-md);
+}
+
+.waterfall-item {
+  break-inside: avoid;
+  margin-bottom: var(--space-md);
+}
+
+@media (max-width: 1200px) { .waterfall { column-count: 3; } }
+@media (max-width: 768px) { .waterfall { column-count: 2; } }
+@media (max-width: 480px) { .waterfall { column-count: 1; } }
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--fluent-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fluent-text-secondary);
+}

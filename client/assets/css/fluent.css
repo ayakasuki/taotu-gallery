@@ -1,0 +1,66 @@
+/* Fluent Design 设计变量 */
+:root {
+  /* 强调色 */
+  --fluent-blue: #0078D4;
+  --fluent-blue-hover: #106EBE;
+  --fluent-blue-pressed: #005A9E;
+  --fluent-blue-light: #E8F4FD;
+
+  /* 中性色板 */
+  --fluent-bg: #FAF9F8;
+  --fluent-bg-card: #FFFFFF;
+  --fluent-text: #323130;
+  --fluent-text-secondary: #605E5C;
+  --fluent-border: #EDEBE9;
+  --fluent-divider: #EDEBE9;
+  --fluent-hover: #F3F2F1;
+
+  /* 阴影层级 */
+  --shadow-1: 0 1.6px 3.6px rgba(0,0,0,0.132), 0 0.3px 0.9px rgba(0,0,0,0.108);
+  --shadow-2: 0 3.2px 7.2px rgba(0,0,0,0.132), 0 0.6px 1.8px rgba(0,0,0,0.108);
+  --shadow-3: 0 6.4px 14.4px rgba(0,0,0,0.132), 0 1.2px 3.6px rgba(0,0,0,0.108);
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* 动效 */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+
+  /* 间距 */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+}
+
+/* 全局重置 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--fluent-bg);
+  color: var(--fluent-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--fluent-blue);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--fluent-blue-hover);
+}
