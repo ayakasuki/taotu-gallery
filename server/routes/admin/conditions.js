@@ -1,124 +1,109 @@
 /**
- * 管理后台 - 条件标签 CRUD
- * 条件标签同时在 tags.json 中创建对应标签条目
+ * 管理后台 - 条件标签 CRUD（数据库模式）
  */
 const express = require('express');
 const authMiddleware = require('../../middleware/auth');
 const configService = require('../../services/configService');
+const db = require('../../db');
+const logger = require('../../config/logger');
 
 const router = express.Router();
 
 // 获取条件标签列表
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
-    const conditions = await configService.readConditions();
+    const conditions = await db('conditions').select('*');
     res.json({ conditions });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
 // 添加条件标签
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
-    const conditions = await configService.readConditions();
-    const tags = await configService.readTags();
-    if (!tags.nextId) tags.nextId = 20;
+    const { name, type, config: condConfig, is_enabled } = req.body;
+    if (!name || !type) return res.status(400).json({ error: '名称和类型必填' });
 
-    const newTagId = tags.nextId++;
-    const newCondition = {
+    // 计算新 ID
+    const maxRow = await db('conditions').max('id as maxId').first();
+    const newCondId = (maxRow?.maxId || 0) + 1;
+
+    // 写入 conditions 表
+    const [id] = await db('conditions').insert({
+      id: newCondId,
+      name,
+      type,
+      config: JSON.stringify(condConfig || {}),
+      is_enabled: is_enabled !== false,
+      is_public: false
+    });
+
+    // 同步创建对应标签到 tags 表
+    const maxTagRow = await db('tags').max('id as maxId').first();
+    const newTagId = (maxTagRow?.maxId || 0) + 1;
+
+    await db('tags').insert({
       id: newTagId,
-      name: req.body.name,
-      type: req.body.type,
-      config: req.body.config || {},
-      is_enabled: req.body.is_enabled !== false,
-      tag_id: newTagId,
-      created_at: new Date().toISOString()
-    };
-
-    conditions.push(newCondition);
-    await configService.writeConditions(conditions);
-
-    // 同步创建标签条目
-    if (!tags.combinable) tags.combinable = [];
-    tags.combinable.push({
-      id: newTagId,
-      name: `cond_${req.body.type}_${req.body.name}`,
-      display_name: req.body.name,
+      name: `cond_${type}_${name}`,
+      display_name: name,
       combinable: true,
+      is_public: false,
       tag_type: 'condition'
     });
-    await configService.writeTags(tags);
 
-    // 立即对所有图片执行该条件标签（后台异步执行）
-    const conditionTagService = require('../../services/conditionTagService');
-    conditionTagService.tagImagesByConditions(null, [newCondition.id], true)
-      .then(result => console.log(`条件标签执行完成: 标记 ${result.tagged} 张`))
-      .catch(err => console.error(`条件标签执行失败: ${err.message}`));
+    // 更新 conditions 的 tag_id（如果有这个列的话）
+    try {
+      await db('conditions').where({ id }).update({ tag_id: newTagId });
+    } catch {}
 
-    res.json(newCondition);
-  } catch (err) {
-    next(err);
-  }
+    logger.info(`条件标签已创建: ${name} (${type})`);
+    res.json({ id, name, type, config: condConfig, is_enabled, tag_id: newTagId });
+  } catch (err) { next(err); }
 });
 
 // 更新条件标签
 router.put('/:id', authMiddleware, async (req, res, next) => {
   try {
-    const conditions = await configService.readConditions();
-    const idx = conditions.findIndex(c => c.id === parseInt(req.params.id));
-    if (idx === -1) return res.status(404).json({ error: '条件不存在' });
+    const condId = parseInt(req.params.id);
+    const updates = {};
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.config !== undefined) updates.config = JSON.stringify(req.body.config);
+    if (req.body.is_enabled !== undefined) updates.is_enabled = req.body.is_enabled;
+    if (req.body.is_public !== undefined) updates.is_public = req.body.is_public;
 
-    conditions[idx] = { ...conditions[idx], ...req.body };
-    await configService.writeConditions(conditions);
+    await db('conditions').where({ id: condId }).update(updates);
 
-    // 同步更新标签显示名
-    if (req.body.name) {
-      const tags = await configService.readTags();
-      const tag = (tags.combinable || []).find(t => t.id === conditions[idx].tag_id);
-      if (tag) {
-        tag.display_name = req.body.name;
-        await configService.writeTags(tags);
-      }
+    // 同步更新关联的标签
+    const cond = await db('conditions').where({ id: condId }).first();
+    if (cond && req.body.name) {
+      try {
+        await db('tags').where({ name: `like`, display_name: cond.name }).update({ display_name: req.body.name });
+      } catch {}
     }
 
-    // 立即重新执行该条件标签（覆盖式）
-    const conditionTagService = require('../../services/conditionTagService');
-    conditionTagService.tagImagesByConditions(null, [conditions[idx].id], true)
-      .then(result => console.log(`条件标签更新执行完成: 标记 ${result.tagged} 张`))
-      .catch(err => console.error(`条件标签更新执行失败: ${err.message}`));
-
-    res.json(conditions[idx]);
-  } catch (err) {
-    next(err);
-  }
+    res.json({ message: '已更新' });
+  } catch (err) { next(err); }
 });
 
 // 删除条件标签
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
     const condId = parseInt(req.params.id);
-    const conditions = await configService.readConditions();
-    const cond = conditions.find(c => c.id === condId);
-    const filtered = conditions.filter(c => c.id !== condId);
-    await configService.writeConditions(filtered);
+    const cond = await db('conditions').where({ id: condId }).first();
 
-    // 同步删除对应标签
-    if (cond && cond.tag_id) {
-      const tags = await configService.readTags();
-      tags.combinable = (tags.combinable || []).filter(t => t.id !== cond.tag_id);
-      tags.nonCombinable = (tags.nonCombinable || []).filter(t => t.id !== cond.tag_id);
-      await configService.writeTags(tags);
-
-      // 删除 image_tags 中的关联
-      const db = require('../../db');
-      await db('image_tags').where({ tag_id: cond.tag_id, source: 'condition' }).del();
+    // 删除关联的标签
+    if (cond) {
+      const tagName = `cond_${cond.type}_${cond.name}`;
+      const tag = await db('tags').where({ name: tagName }).first();
+      if (tag) {
+        await db('image_tags').where({ tag_id: tag.id }).del();
+        await db('tags').where({ id: tag.id }).del();
+      }
     }
 
+    await db('conditions').where({ id: condId }).del();
+    logger.info(`条件标签已删除: ID ${condId}`);
     res.json({ message: '已删除' });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

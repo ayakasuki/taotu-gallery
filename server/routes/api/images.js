@@ -81,15 +81,53 @@ router.get('/', async (req, res, next) => {
 // 随机图片
 router.get('/random', async (req, res, next) => {
   try {
-    const { count, tags, album, orientation, pic } = req.query;
-    const tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : null;
+    const { count, tags, album, orientation, pic, tag_g, sid } = req.query;
+    let tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : [];
     const requestedCount = parseInt(count) || 1;
     const useMedium = pic === 'md';
     const userId = await resolveUserId(req);
 
+    // tag_g 参数：按分组 ID 筛选（支持逗号分隔多值）
+    // sid 参数：按子分组 sid 筛选（支持逗号分隔多值）
+    // tags 参数：按标签 ID 筛选
+    // 三者叠加（OR 逻辑）
+    const configService = require('../../services/configService');
+    const groupData = await configService.readTagGroups();
+
+    if (tag_g) {
+      const groupIds = tag_g.split(',').map(Number);
+      for (const gid of groupIds) {
+        const group = groupData.groups.find(g => g.id === gid);
+        if (group) {
+          // 如果没有指定 sid，则取分组内所有标签（含子分组）
+          if (!sid) {
+            for (const tid of (group.tagIds || [])) tagIds.push(tid);
+            for (const sg of group.subgroups || []) {
+              for (const tid of (sg.tagIds || [])) tagIds.push(tid);
+            }
+          } else {
+            // 只取分组直属标签
+            for (const tid of (group.tagIds || [])) tagIds.push(tid);
+          }
+        }
+      }
+    }
+
+    if (sid) {
+      const sids = sid.split(',').map(Number);
+      for (const sg of (groupData.groups || []).flatMap(g => g.subgroups || [])) {
+        if (sids.includes(sg.sid)) {
+          for (const tid of (sg.tagIds || [])) tagIds.push(tid);
+        }
+      }
+    }
+
+    // 去重
+    tagIds = [...new Set(tagIds)];
+
     const images = await imageService.getRandomImages({
       count: requestedCount,
-      tagIds,
+      tagIds: tagIds.length > 0 ? tagIds : null,
       albumId: album ? parseInt(album) : null,
       orientation,
       userId,
@@ -106,12 +144,10 @@ router.get('/random', async (req, res, next) => {
       let filePath;
 
       if (useMedium) {
-        // 返回中等尺寸图
         const ext = path.extname(image.path);
         const baseName = path.basename(image.path, ext);
         const dirName = path.dirname(image.path);
         filePath = path.resolve(__dirname, '../../..', dirName, '.thumbs', `${baseName}_medium${ext}`);
-        // 如果中等图不存在，回退到原图
         if (!fs.existsSync(filePath)) {
           filePath = path.resolve(__dirname, '../../..', image.path);
         }

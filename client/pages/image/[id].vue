@@ -132,7 +132,7 @@ const copyCode = async () => {
 onMounted(async () => {
   try {
     const api = useApi()
-    image.value = await api.get(`/api/images/${route.params.id}`)
+    image.value = await api.get(`/api/internal/images/${route.params.id}`)
   } catch (err) {
     console.error('获取图片详情失败:', err)
   } finally {

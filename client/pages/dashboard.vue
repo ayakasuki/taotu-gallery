@@ -178,7 +178,7 @@ onMounted(async () => {
 const loadMyImages = async (p = 1) => {
   myPage.value = p
   try {
-    const data = await api.get('/api/images', { page: p, limit: 20, mine: 'true' })
+    const data = await api.get('/api/internal/images', { page: p, limit: 20, mine: 'true' })
     myImages.value = data.images || []
     myTotal.value = data.total || 0
     myStats.value = {

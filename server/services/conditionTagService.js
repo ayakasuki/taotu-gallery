@@ -104,13 +104,17 @@ async function tagImagesByConditions(imageIds = null, conditionIds = null, overw
     if (matchedConditions.length > 0) {
       for (const cond of matchedConditions) {
         try {
-          // 使用 condition ID 作为 source_detail，方便后续删除
-          await db('image_tags').insert({
-            image_id: image.id,
-            tag_id: cond.id,
-            source: 'condition',
-            source_detail: `condition_${cond.id}`
-          }).onConflict(['image_id', 'tag_id']).ignore();
+          // 查找条件对应的标签 ID（在 tags 表中）
+          const tagName = `cond_${cond.type}_${cond.name}`;
+          const tag = await db('tags').where({ name: tagName }).first();
+          if (tag) {
+            await db('image_tags').insert({
+              image_id: image.id,
+              tag_id: tag.id,
+              source: 'condition',
+              source_detail: `condition_${cond.id}`
+            }).onConflict(['image_id', 'tag_id']).ignore();
+          }
         } catch (err) {
           // 忽略重复
         }

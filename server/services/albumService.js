@@ -66,6 +66,8 @@ async function getAlbums(options = {}) {
     if (album.cover_image) {
       const urls = imageService.buildImageUrls(album.cover_image);
       Object.assign(album.cover_image, urls);
+      delete album.cover_image.path;
+      delete album.cover_image.original_path;
     }
     album.tags = await db('album_tags')
       .join('tags', 'album_tags.tag_id', 'tags.id')
@@ -91,6 +93,8 @@ async function getAlbumById(albumId) {
     if (album.cover_image) {
       const urls = imageService.buildImageUrls(album.cover_image);
       Object.assign(album.cover_image, urls);
+      delete album.cover_image.path;
+      delete album.cover_image.original_path;
     }
   }
 
@@ -102,6 +106,8 @@ async function getAlbumById(albumId) {
   for (const image of album.images) {
     const urls = imageService.buildImageUrls(image);
     Object.assign(image, urls);
+    delete image.path;
+    delete image.original_path;
   }
 
   album.image_count = album.images.length;
@@ -173,6 +179,8 @@ async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOn
     if (album.cover_image) {
       const urls = imageService.buildImageUrls(album.cover_image);
       Object.assign(album.cover_image, urls);
+      delete album.cover_image.path;
+      delete album.cover_image.original_path;
     }
 
     album.tags = await db('album_tags')

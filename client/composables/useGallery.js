@@ -14,7 +14,7 @@ export function useGallery() {
     loading.value = true
     try {
       const api = useApi()
-      const data = await api.get('/api/images', {
+      const data = await api.get('/api/internal/images', {
         page: params.page || page.value,
         limit: params.limit || 20,
         sort: params.sort || sort.value,
@@ -39,7 +39,7 @@ export function useGallery() {
     loading.value = true
     try {
       const api = useApi()
-      const data = await api.get('/api/images/random', {
+      const data = await api.get('/api/internal/images/random', {
         count,
         tags: params.tags || undefined,
         album: params.album || undefined

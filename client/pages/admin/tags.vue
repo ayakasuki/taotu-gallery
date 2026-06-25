@@ -126,6 +126,81 @@
       </div>
       <button class="fluent-btn fluent-btn-primary" @click="saveTagConfig">保存配置</button>
     </div>
+
+    <!-- 标签分组管理 -->
+    <div class="section-card fluent-card" style="margin-top: var(--space-xl);">
+      <div class="section-header">
+        <h3>标签分组管理</h3>
+        <button class="fluent-btn fluent-btn-primary" @click="showAddGroup = true">新建分组</button>
+      </div>
+      <p class="desc">标签分组用于前端筛选导航，支持二级子分组。不影响标签本身功能。</p>
+
+      <div v-if="tagGroups.length > 0" class="group-list">
+        <div v-for="group in tagGroups" :key="group.id" class="group-item">
+          <div class="group-header">
+            <span class="group-name">{{ group.name }}</span>
+            <span class="group-meta">{{ (group.subgroups || []).length }} 个子分组 · {{ (group.tagIds || []).length }} 个标签</span>
+            <div class="group-actions">
+              <button class="fluent-btn fluent-btn-secondary" @click="openEditGroup(group)">编辑</button>
+              <button class="fluent-btn fluent-btn-secondary" @click="openAddSubgroup(group)">添加子分组</button>
+              <button class="fluent-btn fluent-btn-secondary delete-btn" @click="deleteGroup(group)">删除</button>
+            </div>
+          </div>
+          <!-- 子分组列表 -->
+          <div v-if="group.subgroups && group.subgroups.length > 0" class="subgroup-list">
+            <div v-for="sg in group.subgroups" :key="sg.id" class="subgroup-item">
+              <span class="sg-name">{{ sg.name }}</span>
+              <span class="sg-count">{{ (sg.tagIds || []).length }} 个标签</span>
+              <button class="fluent-btn fluent-btn-secondary btn-sm" @click="openEditSubgroup(group, sg)">编辑标签</button>
+              <button class="fluent-btn fluent-btn-secondary btn-sm delete-btn" @click="deleteSubgroup(group, sg)">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="empty-msg">暂无分组</div>
+    </div>
+
+    <!-- 新建分组弹窗 -->
+    <div v-if="showAddGroup" class="modal-overlay" @click.self="showAddGroup = false">
+      <div class="modal fluent-card">
+        <h3>{{ editingGroup ? '编辑分组' : '新建分组' }}</h3>
+        <div class="form-group">
+          <label>分组名称</label>
+          <input v-model="groupForm.name" class="fluent-input" placeholder="例如：游戏、风格" />
+        </div>
+        <div class="form-group" v-if="editingGroup">
+          <label>分组内标签（多选）</label>
+          <div class="tag-picker">
+            <span v-for="tag in allTagsList" :key="tag.id" class="tag-chip"
+              :class="{ selected: groupForm.tagIds.includes(tag.id) }"
+              @click="toggleGroupTag(tag.id)">{{ tag.display_name || tag.name }}</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="fluent-btn fluent-btn-primary" @click="saveGroup">保存</button>
+          <button class="fluent-btn fluent-btn-secondary" @click="showAddGroup = false; editingGroup = null">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 编辑子分组标签弹窗 -->
+    <div v-if="editingSubgroup" class="modal-overlay" @click.self="editingSubgroup = null">
+      <div class="modal fluent-card">
+        <h3>编辑子分组: {{ editingSubgroup.name }}</h3>
+        <div class="form-group">
+          <label>子分组标签（多选）</label>
+          <div class="tag-picker">
+            <span v-for="tag in allTagsList" :key="tag.id" class="tag-chip"
+              :class="{ selected: subgroupForm.tagIds.includes(tag.id) }"
+              @click="toggleSubgroupTag(tag.id)">{{ tag.display_name || tag.name }}</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="fluent-btn fluent-btn-primary" @click="saveSubgroup">保存</button>
+          <button class="fluent-btn fluent-btn-secondary" @click="editingSubgroup = null">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -183,7 +258,7 @@ const openEditTag = (tag) => {
 const closeTagModal = () => { showTagModal.value = false; editingTag.value = null }
 
 const isTagPublic = (tag) => {
-  return tag.is_public !== false
+  return !!tag.is_public
 }
 
 const saveTag = async () => {
@@ -234,33 +309,16 @@ const saveTag = async () => {
 }
 
 const deleteTag = async (tag) => {
-  if (!confirm(`确定删除标签 "${tag.display_name || tag.name}"？`)) return
+  if (!confirm(`确定删除标签 "${tag.display_name || tag.name}"？关联的图片标签也会被清除。`)) return
   try {
     if (tag.isUserTag || tag.isPublicUserTag) {
-      // 用户标签（可能已转公共）：先尝试从 user_tags 删除
+      // 用户标签：从 user_tags 表删除
       const tagId = typeof tag.id === 'string' ? parseInt(tag.id.substring(1)) : tag.id
-      try {
-        await api.del(`/api/user-tags/${tagId}`)
-      } catch (e) {
-        // user_tags 里找不到（已转公共），从 tags.json 删除
-        const currentTags = JSON.parse(JSON.stringify(tags.value))
-        currentTags.combinable = (currentTags.combinable || []).filter(t => t.id !== tag.id)
-        currentTags.nonCombinable = (currentTags.nonCombinable || []).filter(t => t.id !== tag.id)
-        await api.post('/api/admin/tags', currentTags)
-      }
+      await api.del(`/api/user-tags/${tagId}`)
     } else {
-      // 纯公共标签：从 tags.json 移除
-      const currentTags = JSON.parse(JSON.stringify(tags.value))
-      currentTags.combinable = (currentTags.combinable || []).filter(t => t.id !== tag.id)
-      currentTags.nonCombinable = (currentTags.nonCombinable || []).filter(t => t.id !== tag.id)
-      await api.post('/api/admin/tags', currentTags)
-
-      // 同步删除关联的条件标签
-      try {
-        await api.del(`/api/admin/conditions/${tag.id}`)
-      } catch {}
+      // 系统标签：从 tags 表直接删除
+      await api.del(`/api/admin/tags/${tag.id}`)
     }
-
     await fetchTags()
   } catch (err) { alert('删除失败: ' + err.message) }
 }
@@ -296,7 +354,7 @@ const albums = ref([])
 const loadManualImages = async (p = 1) => {
   manualPage.value = p
   try {
-    const data = await api.get('/api/images', {
+    const data = await api.get('/api/internal/images', {
       page: p, limit: 10, sort: manualSort.value, order: 'desc',
       album: manualAlbum.value || undefined
     })
@@ -344,13 +402,104 @@ onMounted(async () => {
   await fetchAdminTags()
   await loadManualImages()
   try {
-    const aData = await api.get('/api/albums')
+    const aData = await api.get('/api/internal/albums')
     albums.value = aData.albums || []
     const sData = await api.get('/api/admin/site-config')
     tagConfig.delayMinutes = sData.tagDelayMinutes || 5
     tagConfig.diffThreshold = sData.tagDiffThreshold || 0.5
   } catch {}
 })
+
+// 标签分组管理
+const tagGroups = ref([])
+const showAddGroup = ref(false)
+const editingGroup = ref(null)
+const groupForm = reactive({ name: '', tagIds: [] })
+const editingSubgroup = ref(null)
+const subgroupForm = reactive({ groupId: null, subId: null, tagIds: [] })
+
+const allTagsList = computed(() => {
+  return [...(tags.value.combinable || []), ...(tags.value.nonCombinable || [])]
+})
+
+const loadGroups = async () => {
+  try {
+    const data = await api.get('/api/admin/tag-groups')
+    tagGroups.value = data.groups || []
+  } catch {}
+}
+
+onMounted(() => { loadGroups() })
+
+const openEditGroup = (group) => {
+  editingGroup.value = group
+  groupForm.name = group.name
+  groupForm.tagIds = [...(group.tagIds || [])]
+  showAddGroup.value = true
+}
+
+const toggleGroupTag = (id) => {
+  const idx = groupForm.tagIds.indexOf(id)
+  if (idx >= 0) groupForm.tagIds.splice(idx, 1)
+  else groupForm.tagIds.push(id)
+}
+
+const saveGroup = async () => {
+  try {
+    if (editingGroup.value) {
+      await api.put(`/api/admin/tag-groups/${editingGroup.value.id}`, { name: groupForm.name, tagIds: groupForm.tagIds })
+    } else {
+      if (!groupForm.name) return alert('请输入分组名')
+      await api.post('/api/admin/tag-groups', { name: groupForm.name })
+    }
+    showAddGroup.value = false; editingGroup.value = null
+    groupForm.name = ''; groupForm.tagIds = []
+    await loadGroups()
+  } catch (err) { alert('操作失败: ' + err.message) }
+}
+
+const deleteGroup = async (group) => {
+  if (!confirm(`确定删除分组 "${group.name}"？`)) return
+  try {
+    await api.del(`/api/admin/tag-groups/${group.id}`)
+    await loadGroups()
+  } catch (err) { alert('删除失败') }
+}
+
+const openAddSubgroup = (group) => {
+  const name = prompt('输入子分组名称')
+  if (!name) return
+  api.post(`/api/admin/tag-groups/${group.id}/subgroup`, { name }).then(() => loadGroups())
+}
+
+const openEditSubgroup = (group, sg) => {
+  editingSubgroup.value = sg
+  subgroupForm.groupId = group.id
+  subgroupForm.subId = sg.sid  // 使用 sid 而非 id
+  subgroupForm.tagIds = [...(sg.tagIds || [])]
+}
+
+const toggleSubgroupTag = (id) => {
+  const idx = subgroupForm.tagIds.indexOf(id)
+  if (idx >= 0) subgroupForm.tagIds.splice(idx, 1)
+  else subgroupForm.tagIds.push(id)
+}
+
+const saveSubgroup = async () => {
+  try {
+    await api.put(`/api/admin/tag-groups/${subgroupForm.groupId}/subgroup/${subgroupForm.subId}`, { tagIds: subgroupForm.tagIds })
+    editingSubgroup.value = null
+    await loadGroups()
+  } catch (err) { alert('保存失败') }
+}
+
+const deleteSubgroup = async (group, sg) => {
+  if (!confirm(`确定删除子分组 "${sg.name}"？`)) return
+  try {
+    await api.del(`/api/admin/tag-groups/${group.id}/subgroup/${sg.sid}`)  // 使用 sid
+    await loadGroups()
+  } catch (err) { alert('删除失败') }
+}
 </script>
 
 <style scoped>
@@ -388,4 +537,21 @@ onMounted(async () => {
 .modal { width: 450px; padding: var(--space-xl); }
 .modal h3 { margin-bottom: var(--space-lg); }
 .modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-lg); }
+.section-card { margin-top: var(--space-xl); }
+.desc { font-size: 13px; color: var(--fluent-text-secondary); margin-bottom: var(--space-md); }
+.group-list { display: flex; flex-direction: column; gap: var(--space-md); }
+.group-item { border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); padding: var(--space-md); }
+.group-header { display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap; }
+.group-name { font-weight: 600; font-size: 15px; }
+.group-meta { font-size: 12px; color: var(--fluent-text-secondary); }
+.group-actions { display: flex; gap: 6px; margin-left: auto; }
+.subgroup-list { margin-top: var(--space-md); padding-left: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-sm); }
+.subgroup-item { display: flex; align-items: center; gap: var(--space-sm); padding: 6px 10px; background: var(--fluent-hover); border-radius: var(--radius-sm); }
+.sg-name { font-size: 13px; font-weight: 500; }
+.sg-count { font-size: 12px; color: var(--fluent-text-secondary); margin-left: auto; }
+.btn-sm { padding: 3px 8px; font-size: 12px; }
+.tag-picker { display: flex; flex-wrap: wrap; gap: 6px; max-height: 200px; overflow-y: auto; padding: var(--space-sm); border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); }
+.tag-chip { padding: 3px 10px; border: 1px solid var(--fluent-border); border-radius: 14px; font-size: 12px; cursor: pointer; transition: all var(--transition-fast); }
+.tag-chip:hover { background: var(--fluent-hover); }
+.tag-chip.selected { background: var(--fluent-blue); color: white; border-color: var(--fluent-blue); }
 </style>

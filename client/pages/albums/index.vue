@@ -102,7 +102,7 @@ onMounted(async () => {
 const loadAlbums = async () => {
   loading.value = true
   try {
-    const data = await api.get('/api/albums')
+    const data = await api.get('/api/internal/albums')
     albums.value = data.albums || []
   } catch {} finally { loading.value = false }
 }

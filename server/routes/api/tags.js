@@ -13,21 +13,24 @@ const router = express.Router();
 function resolveUserId(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    try { return jwt.verify(authHeader.substring(7), process.env.JWT_SECRET).id; } catch {}
+    try { return jwt.verify(authHeader.substring(7), process.env.JWT_SECRET); } catch {}
   }
   return null;
 }
 
 router.get('/', async (req, res, next) => {
   try {
-    const userId = resolveUserId(req);
+    const user = resolveUserId(req);
+    const userId = user?.id || null;
+    const isAdmin = user?.role === 'admin';
 
-    // 从 tags 表读取（按 is_public 过滤）
+    // 从 tags 表读取
+    // 未登录：只看公共标签
+    // 普通用户：公共标签（私有系统标签不可见）
+    // 管理员：所有标签（含私有系统标签）
     let dbTags;
-    if (userId) {
-      dbTags = await db('tags').where(function() {
-        this.where({ is_public: true }).orWhereNull('is_public');
-      });
+    if (isAdmin) {
+      dbTags = await db('tags').select('*');
     } else {
       dbTags = await db('tags').where(function() {
         this.where({ is_public: true }).orWhereNull('is_public');

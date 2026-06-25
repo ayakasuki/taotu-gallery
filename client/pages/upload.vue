@@ -257,7 +257,7 @@ const addNewTag = () => {
 const fetchAlbums = async () => {
   try {
     const api = useApi()
-    const data = await api.get('/api/albums')
+    const data = await api.get('/api/internal/albums')
     albums.value = data.albums || []
   } catch (err) {
     console.error('获取相册失败:', err)

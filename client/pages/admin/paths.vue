@@ -83,15 +83,12 @@
 
         <div class="form-group">
           <label>批量打标签（可选）</label>
-          <div class="tag-selector-inline">
-            <span
-              v-for="tag in allTags"
-              :key="tag.id"
-              class="tag-chip"
-              :class="{ selected: newPath.tagIds.includes(tag.id) }"
-              @click="toggleNewPathTag(tag.id)"
-            >{{ tag.display_name || tag.name }}</span>
-          </div>
+          <TagGroupSelector
+            :tags="{ combinable: allTags.filter(t => t.combinable !== false), nonCombinable: allTags.filter(t => t.combinable === false) }"
+            :selectedTagIds="newPath.tagIds"
+            @update:selectedTagIds="newPath.tagIds = $event"
+          />
+          <div class="tag-divider"></div>
           <div class="new-tag-inline">
             <input v-model="newPath.newTagName" class="fluent-input-sm" placeholder="新建标签名" @keyup.enter="addNewTagToPath" />
             <button v-if="newPath.newTagName" class="fluent-btn fluent-btn-secondary btn-sm" @click="addNewTagToPath">添加</button>
@@ -113,6 +110,8 @@
 </template>
 
 <script setup>
+import TagGroupSelector from '~/components/tags/TagGroupSelector.vue'
+
 definePageMeta({ layout: 'admin' })
 
 const api = useApi()
@@ -159,12 +158,6 @@ const loadTags = async () => {
     const data = await api.get('/api/admin/tags')
     allTags.value = [...(data.combinable || []), ...(data.nonCombinable || [])]
   } catch {}
-}
-
-const toggleNewPathTag = (tagId) => {
-  const idx = newPath.tagIds.indexOf(tagId)
-  if (idx >= 0) newPath.tagIds.splice(idx, 1)
-  else newPath.tagIds.push(tagId)
 }
 
 const addNewTagToPath = () => {
@@ -261,6 +254,7 @@ const scanAll = async () => {
 .new-tag-inline { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); }
 .fluent-input-sm { flex: 1; padding: 5px 10px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 13px; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
+.tag-divider { border-top: 1px solid var(--fluent-border); margin: var(--space-md) 0; }
 .new-tags-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-sm); }
 .new-tag-chip { font-size: 12px; padding: 2px 8px; background: #e6f4ea; color: #107c10; border-radius: 12px; display: flex; align-items: center; gap: 4px; }
 .new-tag-chip button { background: none; border: none; cursor: pointer; font-size: 14px; color: #107c10; padding: 0; line-height: 1; }

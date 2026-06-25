@@ -9,6 +9,7 @@ const manualTagService = require('../../services/manualTagService');
 const conditionTagService = require('../../services/conditionTagService');
 const aiTagService = require('../../services/aiTagService');
 const tagFileWatcher = require('../../services/tagFileWatcher');
+const logger = require('../../config/logger');
 
 const router = express.Router();
 
@@ -17,10 +18,8 @@ router.get('/', authMiddleware, async (req, res, next) => {
   try {
     const db = require('../../db');
 
-    // 从数据库读取公共标签 + 自己的私有标签
-    const dbTags = await db('tags').where(function() {
-      this.where({ is_public: true }).orWhereNull('is_public');
-    });
+    // 从数据库读取所有标签（管理员看全部，含私有）
+    const dbTags = await db('tags').select('*');
     const combinable = [];
     const nonCombinable = [];
 
@@ -29,7 +28,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
         id: t.id, name: t.name,
         display_name: t.display_name || t.name,
         combinable: !!t.combinable,
-        is_public: t.is_public !== false,
+        is_public: !!t.is_public,
         isPublicTag: true
       };
       if (tag.combinable) combinable.push(tag);
@@ -67,12 +66,29 @@ router.post('/', authMiddleware, async (req, res, next) => {
   }
 });
 
+// 删除标签（直接从数据库删除）
+router.delete('/:id', authMiddleware, async (req, res, next) => {
+  try {
+    const tagId = parseInt(req.params.id);
+    const db = require('../../db');
+
+    // 删除关联的 image_tags
+    await db('image_tags').where({ tag_id: tagId }).del();
+
+    // 删除标签
+    await db('tags').where({ id: tagId }).del();
+
+    logger.info(`标签已删除: ID ${tagId}`);
+    res.json({ message: '标签已删除' });
+  } catch (err) { next(err); }
+});
+
 // 立即标签 - 人工标签
 router.post('/run/manual', authMiddleware, async (req, res, next) => {
   try {
     const { imageIds, albumIds, tagIds, overwrite } = req.body;
 
-    if (!tagIds || tagIds.length === 0) {
+    if (!tagIds) {
       return res.status(400).json({ error: '请选择要应用的标签' });
     }
 

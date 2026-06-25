@@ -22,6 +22,8 @@
       <aside class="gallery-sidebar">
         <div class="sidebar-card fluent-card">
           <h3 class="sidebar-title">标签筛选</h3>
+          <TagGroupSelector :tags="tags" :selectedTagIds="selectedTagIds" @update:selectedTagIds="handleTagSelection" />
+          <div class="sidebar-divider"></div>
           <TagSelector :tags="tags" :selectedTagIds="selectedTagIds" @update:selectedTagIds="handleTagSelection" />
         </div>
       </aside>
@@ -84,6 +86,7 @@
 
 <script setup>
 import TagSelector from '~/components/tags/TagSelector.vue'
+import TagGroupSelector from '~/components/tags/TagGroupSelector.vue'
 import SortFilter from '~/components/gallery/SortFilter.vue'
 import ImageCard from '~/components/gallery/ImageCard.vue'
 
@@ -262,6 +265,7 @@ const moveToAlbum = async () => {
 .gallery-sidebar { width: 280px; flex-shrink: 0; }
 .sidebar-card { position: sticky; top: 72px; }
 .sidebar-title { font-size: 15px; font-weight: 600; margin-bottom: var(--space-md); }
+.sidebar-divider { border-top: 1px solid var(--fluent-border); margin: var(--space-md) 0; }
 .gallery-main { flex: 1; min-width: 0; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-md); padding: var(--space-xl) 0; }
 .page-info { font-size: 13px; color: var(--fluent-text-secondary); }

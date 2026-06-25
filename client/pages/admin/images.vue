@@ -168,7 +168,7 @@ const loadImages = async (p = 1) => {
     if (imgSource.value === 'public') params.public = 'true'
     else if (imgSource.value === 'mine') params.mine = 'true'
     else if (imgSource.value === 'user' && filterUserId.value) params.userId = filterUserId.value
-    const data = await api.get('/api/images', params)
+    const data = await api.get('/api/internal/images', params)
     images.value = data.images || []
     total.value = data.total || 0
   } catch {} finally { loading.value = false }

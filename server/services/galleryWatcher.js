@@ -106,12 +106,16 @@ async function handleNewImage(filePath) {
         const matched = await conditionTagService.tagImageByConditions(newImage.id);
         if (matched.length > 0) {
           for (const cond of matched) {
-            await db('image_tags').insert({
-              image_id: newImage.id,
-              tag_id: cond.id,
-              source: 'condition',
-              source_detail: `condition_${cond.id}`
-            }).onConflict(['image_id', 'tag_id']).ignore();
+            const tagName = `cond_${cond.type}_${cond.name}`;
+            const tag = await db('tags').where({ name: tagName }).first();
+            if (tag) {
+              await db('image_tags').insert({
+                image_id: newImage.id,
+                tag_id: tag.id,
+                source: 'condition',
+                source_detail: `condition_${cond.id}`
+              }).onConflict(['image_id', 'tag_id']).ignore();
+            }
           }
           logger.info(`新图片条件标签: ${filename} 匹配 ${matched.length} 个条件`);
         }

@@ -3,8 +3,8 @@
  */
 const express = require('express');
 const uploadService = require('../../services/uploadService');
-const configService = require('../../services/configService');
 const authMiddleware = require('../../middleware/auth');
+const db = require('../../db');
 
 const router = express.Router();
 
@@ -29,28 +29,22 @@ router.post('/', authMiddleware, uploadService.upload.array('files', 100), async
     let tags = req.body.tags ? JSON.parse(req.body.tags) : [];
     const newTags = req.body.newTags ? JSON.parse(req.body.newTags) : [];
 
-    // 处理新标签：写入 tags.json
+    // 处理新标签：直接写入数据库
     if (newTags.length > 0) {
-      const currentTags = await configService.readTags();
-      // 计算不冲突的新 ID
-      const allExisting = [...(currentTags.combinable || []), ...(currentTags.nonCombinable || [])];
-      const maxId = allExisting.reduce((max, t) => Math.max(max, typeof t.id === 'number' ? t.id : 0), 0);
-      if (!currentTags.nextId || currentTags.nextId <= maxId) {
-        currentTags.nextId = maxId + 1;
-      }
-
       for (const tagName of newTags) {
-        const existing = allExisting.find(t => t.name === tagName);
-        if (!existing) {
-          const newId = currentTags.nextId++;
-          if (!currentTags.combinable) currentTags.combinable = [];
-          currentTags.combinable.push({ id: newId, name: tagName, display_name: tagName, combinable: true });
-          tags.push(newId);
-        } else {
+        const existing = await db('tags').where({ name: tagName }).first();
+        if (existing) {
           tags.push(existing.id);
+        } else {
+          const maxRow = await db('tags').max('id as maxId').first();
+          const newId = (maxRow?.maxId || 0) + 1;
+          await db('tags').insert({
+            id: newId, name: tagName, display_name: tagName,
+            combinable: true, is_public: true, tag_type: 'manual'
+          });
+          tags.push(newId);
         }
       }
-      await configService.writeTags(currentTags);
     }
 
     // 分离公共标签和用户标签（u前缀为用户标签）

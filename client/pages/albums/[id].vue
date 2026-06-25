@@ -30,7 +30,7 @@ const loading = ref(true)
 onMounted(async () => {
   try {
     const api = useApi()
-    const data = await api.get(`/api/albums/${route.params.id}`)
+    const data = await api.get(`/api/internal/albums/${route.params.id}`)
     album.value = data
     images.value = data.images || []
   } catch (err) {

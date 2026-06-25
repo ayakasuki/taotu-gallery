@@ -75,7 +75,8 @@ async function getImages(options = {}) {
     page = 1, limit = 20,
     sort = 'created_at', order = 'desc',
     tagIds, albumId, orientation, search,
-    userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null
+    userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null,
+    internal = false
   } = options;
 
   const offset = (page - 1) * limit;
@@ -206,13 +207,17 @@ async function getImages(options = {}) {
     image.tags = [...publicTags, ...userTags];
     const urls = buildImageUrls(image);
     Object.assign(image, urls);
+    if (!internal) {
+      delete image.path;
+      delete image.original_path;
+    }
   }
 
   return { images, total: count, page, limit };
 }
 
 // 获取单张图片详情
-async function getImageById(imageId) {
+async function getImageById(imageId, internal = false) {
   const image = await db('images').where({ id: imageId }).first();
   if (!image) return null;
 
@@ -223,7 +228,6 @@ async function getImageById(imageId) {
     .where('image_tags.image_id', imageId)
     .select('tags.*', 'image_tags.source', 'image_tags.source_detail');
 
-  // 获取上传者用户名
   if (image.uploader_id) {
     const uploader = await db('users').where({ id: image.uploader_id }).select('username').first();
     image.uploader_name = uploader?.username || '未知';
@@ -236,6 +240,12 @@ async function getImageById(imageId) {
 
   const baseUrl = getPublicBaseUrl();
   image.embed_codes = generateEmbedCodes(baseUrl, image);
+
+  // 对外 API 隐藏真实路径
+  if (!internal) {
+    delete image.path;
+    delete image.original_path;
+  }
 
   return image;
 }
