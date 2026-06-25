@@ -67,6 +67,7 @@ app.use('/thumb', async (req, res, next) => {
 // API 调用日志（对外 API）
 const apiLogger = require('./middleware/apiLogger');
 app.use('/api/tags', apiLogger, require('./routes/api/tags'));
+app.use('/api/user-tags', require('./routes/api/userTags'));
 app.use('/api/images', apiLogger, require('./routes/api/images'));
 app.use('/api/albums', apiLogger, require('./routes/api/albums'));
 app.use('/api/embed', apiLogger, require('./routes/api/embed'));
@@ -76,6 +77,7 @@ app.use('/api/upload/url', require('./routes/api/urlUpload'));
 // 管理 API 路由
 app.use('/api/admin/auth', require('./routes/admin/auth'));
 app.use('/api/admin/tags', require('./routes/admin/tags'));
+app.use('/api/admin/tag-convert', require('./routes/admin/tagConvert'));
 app.use('/api/admin/albums', require('./routes/admin/albums'));
 app.use('/api/admin/images', require('./routes/admin/images'));
 app.use('/api/admin/models', require('./routes/admin/models'));

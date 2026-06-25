@@ -62,6 +62,7 @@
               <p class="manage-img-name">{{ img.filename }}</p>
               <p class="manage-img-meta">{{ img.width }}×{{ img.height }}</p>
             </div>
+            <button class="fluent-btn fluent-btn-secondary" @click="setCover(img)">设为封面</button>
             <button class="fluent-btn fluent-btn-secondary delete-btn" @click="removeFromAlbum(img)">移出相册</button>
           </div>
         </div>
@@ -157,6 +158,15 @@ const editAlbumName = async () => {
     managingAlbum.value.name = newName
     await loadAlbums()
   } catch (err) { alert('修改失败') }
+}
+
+const setCover = async (img) => {
+  try {
+    await api.put(`/api/admin/albums/${managingAlbum.value.id}`, { cover_image_id: img.id })
+    managingAlbum.value.cover_image_id = img.id
+    await loadAlbums()
+    alert('封面已设置')
+  } catch (err) { alert('设置失败') }
 }
 
 const deleteAlbum = async () => {

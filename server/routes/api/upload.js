@@ -15,18 +15,32 @@ router.post('/', authMiddleware, uploadService.upload.array('files', 100), async
       return res.status(400).json({ error: '请选择要上传的文件' });
     }
 
+    const userId = req.user ? req.user.id : null;
+
+    // 配额检查
+    for (const file of req.files) {
+      const quotaCheck = await uploadService.checkUserQuota(userId, file.size);
+      if (!quotaCheck.ok) {
+        return res.status(413).json({ error: quotaCheck.error });
+      }
+    }
+
     const albumId = req.body.album_id ? parseInt(req.body.album_id) : null;
     let tags = req.body.tags ? JSON.parse(req.body.tags) : [];
     const newTags = req.body.newTags ? JSON.parse(req.body.newTags) : [];
-    const userId = req.user ? req.user.id : null;
 
     // 处理新标签：写入 tags.json
     if (newTags.length > 0) {
       const currentTags = await configService.readTags();
-      if (!currentTags.nextId) currentTags.nextId = 1;
+      // 计算不冲突的新 ID
+      const allExisting = [...(currentTags.combinable || []), ...(currentTags.nonCombinable || [])];
+      const maxId = allExisting.reduce((max, t) => Math.max(max, typeof t.id === 'number' ? t.id : 0), 0);
+      if (!currentTags.nextId || currentTags.nextId <= maxId) {
+        currentTags.nextId = maxId + 1;
+      }
+
       for (const tagName of newTags) {
-        const existing = (currentTags.combinable || []).find(t => t.name === tagName) ||
-                        (currentTags.nonCombinable || []).find(t => t.name === tagName);
+        const existing = allExisting.find(t => t.name === tagName);
         if (!existing) {
           const newId = currentTags.nextId++;
           if (!currentTags.combinable) currentTags.combinable = [];
@@ -39,7 +53,11 @@ router.post('/', authMiddleware, uploadService.upload.array('files', 100), async
       await configService.writeTags(currentTags);
     }
 
-    const results = await uploadService.processUploadedFiles(req.files, albumId, tags, userId, req.body.is_public === '1');
+    // 分离公共标签和用户标签（u前缀为用户标签）
+    const publicTags = tags.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
+    const userTagIds = tags.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
+
+    const results = await uploadService.processUploadedFiles(req.files, albumId, publicTags, userId, req.body.is_public === '1', userTagIds);
 
     const successCount = results.filter(r => r.success).length;
     const failCount = results.filter(r => !r.success).length;

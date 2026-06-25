@@ -9,7 +9,7 @@ const config = require('../config');
 const logger = require('../config/logger');
 
 // 生成缩略图和中等图
-async function generateThumbnails(imagePath) {
+async function generateThumbnails(imagePath, options = {}) {
   const ext = path.extname(imagePath);
   const baseName = path.basename(imagePath, ext);
   const dirName = path.dirname(imagePath);
@@ -17,20 +17,21 @@ async function generateThumbnails(imagePath) {
   const thumbDir = path.join(dirName, '.thumbs');
   await fs.mkdir(thumbDir, { recursive: true });
 
+  const mediumW = options.mediumWidth || config.thumbnails.medium.width;
+  const mediumH = options.mediumHeight || config.thumbnails.medium.height;
+
   // 缩略图
   const thumbPath = path.join(thumbDir, `${baseName}_thumb${ext}`);
   await sharp(imagePath)
     .resize(config.thumbnails.small.width, config.thumbnails.small.height, { fit: 'inside' })
     .jpeg({ quality: 80 })
-    .webp({ quality: 80 })
     .toFile(thumbPath);
 
   // 中等图（质量稍高）
   const mediumPath = path.join(thumbDir, `${baseName}_medium${ext}`);
   await sharp(imagePath)
-    .resize(config.thumbnails.medium.width, config.thumbnails.medium.height, { fit: 'inside' })
+    .resize(mediumW, mediumH, { fit: 'inside' })
     .jpeg({ quality: 90 })
-    .webp({ quality: 90 })
     .toFile(mediumPath);
 
   return { thumbPath, mediumPath };

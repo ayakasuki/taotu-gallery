@@ -53,6 +53,23 @@
       </div>
     </div>
 
+    <!-- 我的标签 -->
+    <div class="section fluent-card">
+      <div class="section-header">
+        <h2>我的标签</h2>
+        <button class="fluent-btn fluent-btn-primary" @click="showTagModal = true">新建标签</button>
+      </div>
+      <p class="desc">私有标签仅自己可见，用于分类自己的图片。公共标签由管理员管理。</p>
+      <div v-if="myTags.length > 0" class="my-tags-list">
+        <div v-for="tag in myTags" :key="tag.id" class="my-tag-item">
+          <span class="tag-badge">{{ tag.display_name || tag.name }}</span>
+          <span class="tag-meta">{{ tag.combinable ? '可组合' : '互斥' }}</span>
+          <button class="fluent-btn fluent-btn-secondary delete-btn" @click="deleteMyTag(tag)">删除</button>
+        </div>
+      </div>
+      <div v-else class="empty-msg">暂无私有标签</div>
+    </div>
+
     <!-- 我的图片管理 -->
     <div class="section">
       <div class="section-header">
@@ -103,6 +120,24 @@
         </div>
       </div>
     </div>
+
+    <!-- 新建标签弹窗 -->
+    <div v-if="showTagModal" class="modal-overlay" @click.self="showTagModal = false">
+      <div class="modal fluent-card">
+        <h3>新建私有标签</h3>
+        <div class="form-group">
+          <label>标签名称</label>
+          <input v-model="newTagName" class="fluent-input" placeholder="例如：风景、人物" />
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" v-model="newTagCombinable" /> 可组合标签</label>
+        </div>
+        <div class="modal-actions">
+          <button class="fluent-btn fluent-btn-primary" @click="createMyTag">创建</button>
+          <button class="fluent-btn fluent-btn-secondary" @click="showTagModal = false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -122,6 +157,12 @@ const showTokenModal = ref(false)
 const tokenLabel = ref('')
 const newTokenValue = ref('')
 
+// 标签相关
+const myTags = ref([])
+const showTagModal = ref(false)
+const newTagName = ref('')
+const newTagCombinable = ref(true)
+
 onMounted(async () => {
   const token = localStorage.getItem('jwt_token')
   if (!token) { router.push('/login'); return }
@@ -130,6 +171,7 @@ onMounted(async () => {
     user.value = await api.get('/api/admin/auth/me')
     await loadMyImages()
     await loadTokens()
+    await loadMyTags()
   } catch {} finally { loading.value = false }
 })
 
@@ -201,6 +243,36 @@ const formatSize = (bytes) => {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
+
+// 标签管理
+const loadMyTags = async () => {
+  try {
+    const data = await api.get('/api/user-tags')
+    myTags.value = data.tags || []
+  } catch {}
+}
+
+const createMyTag = async () => {
+  if (!newTagName.value.trim()) return alert('请输入标签名')
+  try {
+    await api.post('/api/user-tags', {
+      name: newTagName.value.trim(),
+      display_name: newTagName.value.trim(),
+      combinable: newTagCombinable.value
+    })
+    newTagName.value = ''
+    showTagModal.value = false
+    await loadMyTags()
+  } catch (err) { alert('创建失败: ' + (err.data?.error || err.message)) }
+}
+
+const deleteMyTag = async (tag) => {
+  if (!confirm(`确定删除标签 "${tag.display_name || tag.name}"？`)) return
+  try {
+    await api.del(`/api/user-tags/${tag.id}`)
+    await loadMyTags()
+  } catch (err) { alert('删除失败') }
+}
 </script>
 
 <style scoped>
@@ -239,6 +311,10 @@ const formatSize = (bytes) => {
 .public-toggle input { margin: 0; }
 .delete-btn { color: #d13438; }
 .delete-btn:hover { background: #fde7e9; }
+.desc { font-size: 13px; color: var(--fluent-text-secondary); margin-bottom: var(--space-md); }
+.my-tags-list { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.my-tag-item { display: flex; align-items: center; gap: var(--space-sm); padding: 4px 8px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); }
+.tag-meta { font-size: 11px; color: var(--fluent-text-secondary); }
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-md); padding: var(--space-lg) 0; font-size: 13px; color: var(--fluent-text-secondary); }
 .empty-msg { text-align: center; padding: var(--space-xl); color: var(--fluent-text-secondary); }
 .form-group { margin-bottom: var(--space-lg); }

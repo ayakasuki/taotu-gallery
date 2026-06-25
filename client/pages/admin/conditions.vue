@@ -25,6 +25,10 @@
             </span>
           </div>
           <div class="cond-actions">
+            <label class="public-toggle" title="公共条件标签（所有用户可见）">
+              <input type="checkbox" :checked="cond.is_public" @change="togglePublic(cond)" />
+              <span>公共</span>
+            </label>
             <button class="fluent-btn fluent-btn-secondary" @click="openEdit(cond)">编辑</button>
             <button class="fluent-btn fluent-btn-secondary" @click="toggleCondition(cond)">
               {{ cond.is_enabled !== false ? '禁用' : '启用' }}
@@ -158,6 +162,13 @@ const openEdit = (cond) => {
   form.name = cond.name
   form.type = cond.type
   form.config = { ...defaultConfig(), ...(cond.config || {}) }
+  // 修复：cond.config.type 映射到 form.config.orientation
+  if (cond.type === 'orientation' && cond.config?.type) {
+    form.config.orientation = cond.config.type
+  }
+  if (cond.type === 'resolution' && cond.config?.min) {
+    form.config.minPixels = parseInt(cond.config.min) || cond.config.minPixels || 1080
+  }
   showModal.value = true
 }
 
@@ -206,6 +217,13 @@ const deleteCondition = async (cond) => {
   } catch (err) { alert('删除失败: ' + err.message) }
 }
 
+const togglePublic = async (cond) => {
+  try {
+    await api.put(`/api/admin/conditions/${cond.id}`, { is_public: !cond.is_public })
+    await loadConditions()
+  } catch (err) { alert('操作失败: ' + err.message) }
+}
+
 const runConditionTag = async () => {
   running.value = true
   try {
@@ -232,7 +250,9 @@ const runConditionTag = async () => {
 .cond-config { font-size: 13px; color: var(--fluent-text-secondary); }
 .cond-status { font-size: 11px; padding: 2px 8px; border-radius: 12px; }
 .cond-status.enabled { background: #e6f4ea; color: #107c10; }
-.cond-actions { display: flex; gap: 6px; }
+.cond-actions { display: flex; gap: 6px; align-items: center; }
+.public-toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; color: var(--fluent-text-secondary); }
+.public-toggle input { margin: 0; }
 .empty-msg { text-align: center; padding: var(--space-xl); color: var(--fluent-text-secondary); }
 .form-group { margin-bottom: var(--space-lg); }
 .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: var(--space-sm); }

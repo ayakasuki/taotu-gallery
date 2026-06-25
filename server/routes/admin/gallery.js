@@ -49,4 +49,40 @@ router.post('/scan', authMiddleware, async (req, res, next) => {
   }
 });
 
+// 扫描指定路径（支持指定相册和标签）
+router.post('/scan-path', authMiddleware, async (req, res, next) => {
+  try {
+    const { path: targetPath, recursive, albumId, albumName, tagIds, newTags } = req.body;
+    if (!targetPath) return res.status(400).json({ error: '请提供路径' });
+
+    const db = require('../../db');
+    let finalAlbumId = albumId || null;
+
+    // 如果指定了新相册名，创建相册
+    if (!finalAlbumId && albumName) {
+      const existing = await db('albums').where({ name: albumName }).first();
+      if (existing) {
+        finalAlbumId = existing.id;
+      } else {
+        const [id] = await db('albums').insert({
+          name: albumName,
+          user_id: req.user.id,
+          is_public: false
+        });
+        finalAlbumId = id;
+      }
+    }
+
+    const result = await galleryWatcher.scanSinglePath({
+      targetPath,
+      recursive: recursive !== false,
+      albumId: finalAlbumId,
+      tagIds: tagIds || [],
+      newTags: newTags || [],
+      userId: req.user.id
+    });
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -217,6 +217,114 @@ async function scanAndIndexAll() {
   return { added, skipped };
 }
 
+// 扫描指定路径（支持相册和标签）
+async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags, userId }) {
+  const db = require('../db');
+  const pathUtils = require('../utils/pathUtils');
+  const imageProcessor = require('../utils/imageProcessor');
+  const configService = require('./configService');
+
+  if (!fs.existsSync(targetPath)) {
+    throw new Error('路径不存在');
+  }
+
+  // 处理新标签：创建标签
+  let allTagIds = [...(tagIds || [])];
+  if (newTags && newTags.length > 0) {
+    const publicTags = await configService.readTags();
+    if (!publicTags.nextId) publicTags.nextId = 20;
+    const existingAll = [...(publicTags.combinable || []), ...(publicTags.nonCombinable || [])];
+    const maxId = existingAll.reduce((max, t) => Math.max(max, typeof t.id === 'number' ? t.id : 0), 0);
+    if (publicTags.nextId <= maxId) publicTags.nextId = maxId + 1;
+
+    for (const tagName of newTags) {
+      const existing = existingAll.find(t => t.name === tagName);
+      if (existing) {
+        allTagIds.push(existing.id);
+      } else {
+        const newId = publicTags.nextId++;
+        if (!publicTags.combinable) publicTags.combinable = [];
+        publicTags.combinable.push({ id: newId, name: tagName, display_name: tagName, combinable: true });
+        allTagIds.push(newId);
+      }
+    }
+    await configService.writeTags(publicTags);
+  }
+
+  // 处理相册
+  let finalAlbumId = albumId || null;
+
+  let added = 0;
+  let skipped = 0;
+
+  const scanFn = async (filePath) => {
+    const relativePath = pathUtils.toRelativePath(filePath);
+    const existing = await db('images').where({ path: relativePath }).first();
+    if (existing) { skipped++; return; }
+
+    try {
+      const meta = await imageProcessor.getImageMeta(filePath);
+      const fileSize = fs.statSync(filePath).size;
+      const hashPath = imageService.generateHashPath(path.basename(filePath));
+
+      const [imageId] = await db('images').insert({
+        filename: path.basename(filePath),
+        path: relativePath,
+        hash_path: hashPath,
+        width: meta.width,
+        height: meta.height,
+        size_bytes: fileSize,
+        mime_type: meta.mime_type,
+        avg_color: meta.avg_color,
+        orientation: meta.orientation,
+        upload_source: 'local',
+        album_id: finalAlbumId,
+        uploader_id: userId || null
+      });
+
+      // 打标签
+      if (allTagIds.length > 0) {
+        for (const tagId of allTagIds) {
+          try {
+            await db('image_tags').insert({
+              image_id: imageId,
+              tag_id: tagId,
+              source: 'manual'
+            }).onConflict(['image_id', 'tag_id']).ignore();
+          } catch {}
+        }
+      }
+
+      added++;
+    } catch (err) {
+      logger.error(`索引失败: ${filePath} - ${err.message}`);
+    }
+  };
+
+  if (recursive !== false) {
+    await scanDirectory(targetPath, scanFn);
+  } else {
+    const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (imageExts.includes(ext)) {
+          await scanFn(path.join(targetPath, entry.name));
+        }
+      }
+    }
+  }
+
+  // 更新相册图片计数
+  if (finalAlbumId) {
+    const [{ cnt }] = await db('images').where({ album_id: finalAlbumId }).count('* as cnt');
+    await db('albums').where({ id: finalAlbumId }).update({ image_count: cnt });
+  }
+
+  logger.info(`路径扫描完成: ${targetPath}, 新增 ${added}, 跳过 ${skipped}`);
+  return { added, skipped, albumId: finalAlbumId, tagIds: allTagIds };
+}
+
 // 递归扫描目录
 async function scanDirectory(dirPath, callback) {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -238,5 +346,6 @@ async function scanDirectory(dirPath, callback) {
 module.exports = {
   startWatching,
   stopWatching,
-  scanAndIndexAll
+  scanAndIndexAll,
+  scanSinglePath
 };

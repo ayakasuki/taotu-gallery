@@ -15,12 +15,15 @@
 
       <div class="tag-table">
         <div class="table-header">
-          <span>ID</span><span>名称</span><span>显示名</span><span>可组合</span><span>操作</span>
+          <span>ID</span><span>名称</span><span>显示名</span><span>公共</span><span>可组合</span><span>操作</span>
         </div>
         <div v-for="tag in allTags" :key="tag.id" class="table-row">
           <span>{{ tag.id }}</span>
           <span>{{ tag.name }}</span>
           <span>{{ tag.display_name }}</span>
+          <span>
+            <input type="checkbox" :checked="isTagPublic(tag)" @change="toggleTagPublic(tag, $event)" />
+          </span>
           <span>{{ tag.combinable ? '可组合' : '互斥' }}</span>
           <span class="row-actions">
             <button class="fluent-btn fluent-btn-secondary" @click="openEditTag(tag)">编辑</button>
@@ -131,9 +134,24 @@ import TagSelector from '~/components/tags/TagSelector.vue'
 
 definePageMeta({ layout: 'admin' })
 
-const { tags, fetchTags, allTags } = useTags()
+const { tags, fetchTags: fetchPublicTags, allTags: publicAllTags } = useTags()
 const api = useApi()
 const config = useRuntimeConfig()
+
+// 管理员专用：获取所有标签（含私有）
+const allTags = ref([])
+const fetchAdminTags = async () => {
+  try {
+    const data = await api.get('/api/admin/tags')
+    tags.value = data
+    allTags.value = [...(data.combinable || []), ...(data.nonCombinable || [])]
+  } catch (err) {
+    console.error('获取标签失败:', err)
+  }
+}
+
+// 覆盖 fetchTags 使用管理接口
+const fetchTags = fetchAdminTags
 
 const activeTab = ref('manage')
 const tabs = [
@@ -164,6 +182,10 @@ const openEditTag = (tag) => {
 
 const closeTagModal = () => { showTagModal.value = false; editingTag.value = null }
 
+const isTagPublic = (tag) => {
+  return tag.is_public !== false
+}
+
 const saveTag = async () => {
   try {
     const currentTags = JSON.parse(JSON.stringify(tags.value))
@@ -190,9 +212,13 @@ const saveTag = async () => {
       currentTags.combinable = all.filter(t => t.combinable !== false)
       currentTags.nonCombinable = all.filter(t => t.combinable === false)
     } else {
-      // 添加
-      if (!currentTags.nextId) currentTags.nextId = 1
-      const newTag = { id: currentTags.nextId++, name: tagForm.name, display_name: tagForm.display_name, combinable: tagForm.combinable, mutually_exclusive_with: tagForm.mutually_exclusive_with }
+      // 添加新标签 — 确保 ID 不与已有标签冲突
+      const allExisting = [...(currentTags.combinable || []), ...(currentTags.nonCombinable || [])];
+      const maxId = allExisting.reduce((max, t) => Math.max(max, typeof t.id === 'number' ? t.id : 0), 0);
+      const newId = Math.max(maxId + 1, currentTags.nextId || 1);
+      currentTags.nextId = newId + 1;
+
+      const newTag = { id: newId, name: tagForm.name, display_name: tagForm.display_name, combinable: tagForm.combinable, mutually_exclusive_with: tagForm.mutually_exclusive_with }
       if (tagForm.combinable) {
         if (!currentTags.combinable) currentTags.combinable = []
         currentTags.combinable.push(newTag)
@@ -208,20 +234,50 @@ const saveTag = async () => {
 }
 
 const deleteTag = async (tag) => {
-  if (!confirm(`确定删除标签 "${tag.display_name || tag.name}"？如果该标签关联了条件标签，条件标签也会被删除。`)) return
+  if (!confirm(`确定删除标签 "${tag.display_name || tag.name}"？`)) return
   try {
-    const currentTags = JSON.parse(JSON.stringify(tags.value))
-    currentTags.combinable = (currentTags.combinable || []).filter(t => t.id !== tag.id)
-    currentTags.nonCombinable = (currentTags.nonCombinable || []).filter(t => t.id !== tag.id)
-    await api.post('/api/admin/tags', currentTags)
+    if (tag.isUserTag || tag.isPublicUserTag) {
+      // 用户标签（可能已转公共）：先尝试从 user_tags 删除
+      const tagId = typeof tag.id === 'string' ? parseInt(tag.id.substring(1)) : tag.id
+      try {
+        await api.del(`/api/user-tags/${tagId}`)
+      } catch (e) {
+        // user_tags 里找不到（已转公共），从 tags.json 删除
+        const currentTags = JSON.parse(JSON.stringify(tags.value))
+        currentTags.combinable = (currentTags.combinable || []).filter(t => t.id !== tag.id)
+        currentTags.nonCombinable = (currentTags.nonCombinable || []).filter(t => t.id !== tag.id)
+        await api.post('/api/admin/tags', currentTags)
+      }
+    } else {
+      // 纯公共标签：从 tags.json 移除
+      const currentTags = JSON.parse(JSON.stringify(tags.value))
+      currentTags.combinable = (currentTags.combinable || []).filter(t => t.id !== tag.id)
+      currentTags.nonCombinable = (currentTags.nonCombinable || []).filter(t => t.id !== tag.id)
+      await api.post('/api/admin/tags', currentTags)
 
-    // 同步删除关联的条件标签
-    try {
-      await api.del(`/api/admin/conditions/${tag.id}`)
-    } catch {} // 可能没有关联条件，忽略错误
+      // 同步删除关联的条件标签
+      try {
+        await api.del(`/api/admin/conditions/${tag.id}`)
+      } catch {}
+    }
 
     await fetchTags()
   } catch (err) { alert('删除失败: ' + err.message) }
+}
+
+const toggleTagPublic = async (tag, event) => {
+  const isPublic = event.target.checked
+  try {
+    const tagId = typeof tag.id === 'string' ? parseInt(tag.id.substring(1)) : tag.id
+    await api.post('/api/admin/tag-convert/toggle', {
+      tagId,
+      isUserTag: !!tag.isUserTag
+    })
+    await fetchTags()
+  } catch (err) {
+    alert('操作失败: ' + (err.data?.error || err.message))
+    event.target.checked = !isPublic
+  }
 }
 
 // 人工标签
@@ -285,7 +341,7 @@ const saveTagConfig = async () => {
 }
 
 onMounted(async () => {
-  await fetchTags()
+  await fetchAdminTags()
   await loadManualImages()
   try {
     const aData = await api.get('/api/albums')

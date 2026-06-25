@@ -10,12 +10,13 @@
 
       <div class="user-table">
         <div class="table-header">
-          <span>用户名</span><span>邮箱</span><span>角色</span><span>最后登录</span><span>操作</span>
+          <span>用户名</span><span>邮箱</span><span>角色</span><span>存储用量</span><span>最后登录</span><span>操作</span>
         </div>
         <div v-for="u in users" :key="u.id" class="table-row">
           <span class="username">{{ u.username }}</span>
           <span>{{ u.email || '-' }}</span>
           <span><span class="role-badge" :class="u.role">{{ u.role === 'admin' ? '管理员' : '用户' }}</span></span>
+          <span>{{ formatSize(u.used_storage || 0) }}{{ u.storage_limit > 0 ? ' / ' + formatSize(u.storage_limit) : '' }}</span>
           <span>{{ u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : '从未登录' }}</span>
           <span class="row-actions">
             <button class="fluent-btn fluent-btn-secondary" @click="editUser(u)">编辑</button>
@@ -49,6 +50,14 @@
             <option value="admin">管理员</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>存储上限 (MB，0=使用全局默认)</label>
+          <input v-model.number="form.storageLimitMB" type="number" class="fluent-input" />
+        </div>
+        <div class="form-group">
+          <label>单图最大大小 (MB，0=使用全局默认)</label>
+          <input v-model.number="form.maxFileSizeMB" type="number" class="fluent-input" />
+        </div>
         <div class="modal-actions">
           <button class="fluent-btn fluent-btn-primary" @click="saveUser">保存</button>
           <button class="fluent-btn fluent-btn-secondary" @click="closeModal">取消</button>
@@ -65,7 +74,7 @@ const api = useApi()
 const users = ref([])
 const showAdd = ref(false)
 const editingUser = ref(null)
-const form = reactive({ username: '', password: '', email: '', role: 'user' })
+const form = reactive({ username: '', password: '', email: '', role: 'user', storageLimitMB: 0, maxFileSizeMB: 0 })
 
 onMounted(() => loadUsers())
 
@@ -76,33 +85,49 @@ const loadUsers = async () => {
   } catch {}
 }
 
+const formatSize = (bytes) => {
+  if (!bytes) return '0 B'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
+}
+
 const editUser = (u) => {
   editingUser.value = u
   form.username = u.username
   form.email = u.email || ''
   form.role = u.role
   form.password = ''
+  form.storageLimitMB = u.storage_limit ? Math.round(u.storage_limit / 1024 / 1024) : 0
+  form.maxFileSizeMB = u.max_file_size ? Math.round(u.max_file_size / 1024 / 1024) : 0
 }
 
 const closeModal = () => {
   showAdd.value = false
   editingUser.value = null
-  form.username = ''; form.password = ''; form.email = ''; form.role = 'user'
+  form.username = ''; form.password = ''; form.email = ''; form.role = 'user'; form.storageLimitMB = 0; form.maxFileSizeMB = 0
 }
 
 const saveUser = async () => {
   try {
     if (editingUser.value) {
-      await api.put(`/api/admin/users/${editingUser.value.id}`, { email: form.email, role: form.role })
+      await api.put(`/api/admin/users/${editingUser.value.id}`, {
+        email: form.email, role: form.role,
+        storage_limit: form.storageLimitMB * 1024 * 1024,
+        max_file_size: form.maxFileSizeMB * 1024 * 1024
+      })
     } else {
       if (!form.username || !form.password) return alert('请填写用户名和密码')
-      await api.post('/api/admin/users', { username: form.username, password: form.password, email: form.email, role: form.role })
+      await api.post('/api/admin/users', {
+        username: form.username, password: form.password, email: form.email, role: form.role,
+        storage_limit: form.storageLimitMB * 1024 * 1024,
+        max_file_size: form.maxFileSizeMB * 1024 * 1024
+      })
     }
     await loadUsers()
     closeModal()
-  } catch (err) {
-    alert('操作失败: ' + (err.data?.error || err.message))
-  }
+  } catch (err) { alert('操作失败: ' + (err.data?.error || err.message)) }
 }
 
 const deleteUser = async (u) => {
@@ -118,7 +143,7 @@ const deleteUser = async (u) => {
 .page-title { font-size: 24px; font-weight: 600; margin-bottom: var(--space-xl); }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); }
 .user-table { border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); overflow: hidden; }
-.table-header, .table-row { display: grid; grid-template-columns: 120px 150px 80px 120px 140px; padding: 10px 16px; align-items: center; }
+.table-header, .table-row { display: grid; grid-template-columns: 100px 130px 70px 140px 100px 120px; padding: 10px 16px; align-items: center; }
 .table-header { background: var(--fluent-hover); font-size: 13px; font-weight: 600; }
 .table-row { border-top: 1px solid var(--fluent-border); font-size: 13px; }
 .username { font-weight: 500; }

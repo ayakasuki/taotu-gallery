@@ -46,22 +46,18 @@ function validateNonCombinableConflict(tagIds, allTags) {
 }
 
 // 为图片设置标签（核心方法）
-async function setImageTags(imageId, tagIds, source, sourceDetail = null) {
-  const allTags = await getAllTags();
-
-  // 校验互斥
-  const validation = validateNonCombinableConflict(tagIds, allTags);
-  if (!validation.valid) {
-    throw { statusCode: 400, message: validation.error };
-  }
+async function setImageTags(imageId, tagIds, source, sourceDetail = null, userId = null) {
+  // 分离公共标签和用户标签
+  const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
+  const userTagIds = tagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
 
   // 如果是覆盖式，先删除该来源的旧标签
   if (source && source !== 'append') {
     await db('image_tags').where({ image_id: imageId, source }).del();
   }
 
-  // 插入新标签
-  for (const tagId of tagIds) {
+  // 插入公共标签
+  for (const tagId of publicTagIds) {
     try {
       await db('image_tags').insert({
         image_id: imageId,
@@ -70,8 +66,22 @@ async function setImageTags(imageId, tagIds, source, sourceDetail = null) {
         source_detail: sourceDetail
       }).onConflict(['image_id', 'tag_id']).ignore();
     } catch (err) {
-      // 忽略重复插入
       if (err.code !== 'ER_DUP_ENTRY') throw err;
+    }
+  }
+
+  // 插入用户标签
+  for (const userTagId of userTagIds) {
+    try {
+      await db('image_tags').insert({
+        image_id: imageId,
+        tag_id: 0,
+        source: 'manual',
+        user_tag_id: userTagId,
+        tag_user_id: userId
+      }).onConflict(['image_id', 'tag_id']).ignore();
+    } catch (err) {
+      logger.warn(`用户标签写入失败: ${err.message}`);
     }
   }
 }

@@ -38,19 +38,37 @@ async function writeTags(tags) {
   await syncTagsToDb(tags);
 }
 
-// 同步标签到数据库 tags 表
+// 同步标签到数据库 tags 表（增删改全量同步）
 async function syncTagsToDb(tags) {
   const db = require('../db');
   try {
     const allTags = [...(tags.combinable || []), ...(tags.nonCombinable || [])];
+    const jsonIds = allTags.map(t => t.id);
+
+    // 1. 获取数据库中现有的标签
+    const dbTags = await db('tags').select('id');
+    const dbIds = dbTags.map(t => t.id);
+
+    // 2. 删除数据库中有但 JSON 中没有的标签
+    const idsToDelete = dbIds.filter(id => !jsonIds.includes(id));
+    if (idsToDelete.length > 0) {
+      // 先清理关联的 image_tags
+      await db('image_tags').whereIn('tag_id', idsToDelete).del();
+      // 再删除标签
+      await db('tags').whereIn('id', idsToDelete).del();
+      console.log(`从数据库删除了 ${idsToDelete.length} 个过期标签: [${idsToDelete.join(',')}]`);
+    }
+
+    // 3. 更新或插入 JSON 中的标签
     for (const tag of allTags) {
-      const existing = await db('tags').where({ id: tag.id }).first();
+      const existing = dbIds.includes(tag.id);
       if (existing) {
         await db('tags').where({ id: tag.id }).update({
           name: tag.name,
           display_name: tag.display_name || tag.name,
           combinable: tag.combinable !== false,
-          mutually_exclusive_with: tag.mutually_exclusive_with || null
+          mutually_exclusive_with: tag.mutually_exclusive_with || null,
+          is_public: tag.is_public !== undefined ? !!tag.is_public : true
         });
       } else {
         await db('tags').insert({
@@ -59,7 +77,8 @@ async function syncTagsToDb(tags) {
           display_name: tag.display_name || tag.name,
           combinable: tag.combinable !== false,
           mutually_exclusive_with: tag.mutually_exclusive_with || null,
-          tag_type: tag.tag_type || 'manual'
+          tag_type: tag.tag_type || 'manual',
+          is_public: tag.is_public !== undefined ? !!tag.is_public : true
         }).onConflict('id').ignore();
       }
     }

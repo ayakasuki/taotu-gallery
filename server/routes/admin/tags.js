@@ -12,11 +12,45 @@ const tagFileWatcher = require('../../services/tagFileWatcher');
 
 const router = express.Router();
 
-// 获取标签配置
+// 获取标签配置（管理员：公共标签 + 自己的私有标签）
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
-    const tags = await configService.readTags();
-    res.json(tags);
+    const db = require('../../db');
+
+    // 从数据库读取公共标签 + 自己的私有标签
+    const dbTags = await db('tags').where(function() {
+      this.where({ is_public: true }).orWhereNull('is_public');
+    });
+    const combinable = [];
+    const nonCombinable = [];
+
+    for (const t of dbTags) {
+      const tag = {
+        id: t.id, name: t.name,
+        display_name: t.display_name || t.name,
+        combinable: !!t.combinable,
+        is_public: t.is_public !== false,
+        isPublicTag: true
+      };
+      if (tag.combinable) combinable.push(tag);
+      else nonCombinable.push(tag);
+    }
+
+    // 只包含当前用户自己的 user_tags
+    const userTags = await db('user_tags').where({ user_id: req.user.id });
+    for (const ut of userTags) {
+      const tag = {
+        id: `u${ut.id}`, name: ut.name,
+        display_name: ut.display_name || ut.name,
+        combinable: !!ut.combinable,
+        is_public: !!ut.is_public,
+        isUserTag: true
+      };
+      if (tag.combinable) combinable.push(tag);
+      else nonCombinable.push(tag);
+    }
+
+    res.json({ combinable, nonCombinable });
   } catch (err) {
     next(err);
   }
@@ -45,14 +79,13 @@ router.post('/run/manual', authMiddleware, async (req, res, next) => {
     const results = [];
 
     if (imageIds && imageIds.length > 0) {
-      const imgResults = await manualTagService.tagImages(imageIds, tagIds, overwrite);
+      const imgResults = await manualTagService.tagImages(imageIds, tagIds, overwrite, req.user.id);
       results.push(...imgResults);
     }
 
     if (albumIds && albumIds.length > 0) {
-      // 为相册内所有图片打标签
       for (const albumId of albumIds) {
-        const albumResults = await manualTagService.tagAlbumImages(albumId, tagIds, overwrite);
+        const albumResults = await manualTagService.tagAlbumImages(albumId, tagIds, overwrite, req.user.id);
         results.push(...albumResults);
       }
     }

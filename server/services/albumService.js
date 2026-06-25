@@ -57,10 +57,15 @@ async function getAlbums(options = {}) {
   const [{ count }] = await countQuery;
 
   for (const album of albums) {
+    const imageService = require('./imageService');
     if (album.cover_image_id) {
       album.cover_image = await db('images').where({ id: album.cover_image_id }).first();
     } else {
       album.cover_image = await db('images').where({ album_id: album.id }).first();
+    }
+    if (album.cover_image) {
+      const urls = imageService.buildImageUrls(album.cover_image);
+      Object.assign(album.cover_image, urls);
     }
     album.tags = await db('album_tags')
       .join('tags', 'album_tags.tag_id', 'tags.id')
@@ -78,24 +83,28 @@ async function getAlbumById(albumId) {
   const album = await db('albums').where({ id: albumId }).first();
   if (!album) return null;
 
+  const imageService = require('./imageService');
+
   // 获取封面
   if (album.cover_image_id) {
     album.cover_image = await db('images').where({ id: album.cover_image_id }).first();
+    if (album.cover_image) {
+      const urls = imageService.buildImageUrls(album.cover_image);
+      Object.assign(album.cover_image, urls);
+    }
   }
 
-  // 获取图片列表
+  // 获取图片列表（带 URL）
   album.images = await db('images')
     .where({ album_id: albumId })
     .orderBy('created_at', 'desc');
 
-  // 获取标签
-  album.tags = await db('album_tags')
-    .join('tags', 'album_tags.tag_id', 'tags.id')
-    .where('album_tags.album_id', albumId)
-    .select('tags.*', 'album_tags.source');
+  for (const image of album.images) {
+    const urls = imageService.buildImageUrls(image);
+    Object.assign(image, urls);
+  }
 
   album.image_count = album.images.length;
-
   return album;
 }
 
@@ -114,12 +123,13 @@ async function createAlbum(data) {
 
 // 更新相册
 async function updateAlbum(albumId, data) {
-  await db('albums').where({ id: albumId }).update({
-    name: data.name,
-    description: data.description,
-    cover_image_id: data.cover_image_id,
-    updated_at: db.fn.now()
-  });
+  const updates = { updated_at: db.fn.now() };
+  if (data.name !== undefined) updates.name = data.name;
+  if (data.description !== undefined) updates.description = data.description;
+  if (data.cover_image_id !== undefined) updates.cover_image_id = data.cover_image_id;
+  if (data.is_public !== undefined) updates.is_public = data.is_public;
+
+  await db('albums').where({ id: albumId }).update(updates);
   return getAlbumById(albumId);
 }
 
@@ -135,19 +145,35 @@ async function deleteAlbum(albumId) {
 }
 
 // 随机获取相册
-async function getRandomAlbums(count = 1, tagIds = null) {
+async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOnly = true) {
   let query = db('albums');
+
+  // 权限过滤
+  if (publicOnly) {
+    query = query.where({ is_public: true });
+  } else if (userId) {
+    query = query.where(function() {
+      this.where({ user_id: userId }).orWhere({ is_public: true });
+    });
+  }
+
   if (tagIds && tagIds.length > 0) {
     query = query.whereIn('id', function() {
       this.select('album_id').from('album_tags').whereIn('tag_id', tagIds);
     });
   }
+
   const albums = await query.orderByRaw('RAND()').limit(count);
 
+  const imageService = require('./imageService');
   for (const album of albums) {
     album.cover_image = album.cover_image_id
       ? await db('images').where({ id: album.cover_image_id }).first()
       : await db('images').where({ album_id: album.id }).first();
+    if (album.cover_image) {
+      const urls = imageService.buildImageUrls(album.cover_image);
+      Object.assign(album.cover_image, urls);
+    }
 
     album.tags = await db('album_tags')
       .join('tags', 'album_tags.tag_id', 'tags.id')

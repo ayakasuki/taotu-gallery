@@ -81,31 +81,60 @@ async function getImages(options = {}) {
   const offset = (page - 1) * limit;
   let query = db('images');
 
-  // 权限过滤
-  if (publicOnly) {
-    query = query.where({ is_public: true });
-  } else if (ownOnly && userId) {
-    query = query.where({ uploader_id: userId });
-  } else if (filterUserId) {
-    query = query.where({ uploader_id: filterUserId });
-  } else if (isAdmin) {
-    // 管理员默认看所有（不加过滤）
-  } else if (userId) {
-    query = query.where(function() {
-      this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
-    });
+  // 相册上下文权限：公共相册内图片可见（不改变图片本身的 is_public）
+  if (albumId) {
+    const album = await db('albums').where({ id: albumId }).first();
+    if (album && album.is_public) {
+      // 公共相册：只显示该相册内的图片，无需检查图片 is_public
+      query = query.where({ album_id: albumId });
+    } else if (album && userId && (album.user_id === userId || isAdmin)) {
+      // 自己的相册或管理员：显示相册内所有图片
+      query = query.where({ album_id: albumId });
+    } else if (album) {
+      // 非公共相册，非所有者：只返回公共图片
+      query = query.where({ album_id: albumId, is_public: true });
+    } else {
+      query = query.where({ album_id: albumId });
+    }
   } else {
-    query = query.where({ is_public: true });
+    // 非相册入口：按标准权限过滤
+    if (publicOnly) {
+      query = query.where({ is_public: true });
+    } else if (ownOnly && userId) {
+      query = query.where({ uploader_id: userId });
+    } else if (filterUserId) {
+      query = query.where({ uploader_id: filterUserId });
+    } else if (isAdmin) {
+      // 管理员默认看所有
+    } else if (userId) {
+      query = query.where(function() {
+        this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
+      });
+    } else {
+      query = query.where({ is_public: true });
+    }
   }
-
-  if (tagIds && tagIds.length > 0) {
-    query = query.whereIn('id', function() {
-      this.select('image_id').from('image_tags').whereIn('tag_id', tagIds);
-    });
-  }
-  if (albumId) query = query.where({ album_id: albumId });
   if (orientation) query = query.where({ orientation });
   if (search) query = query.where('filename', 'like', `%${search}%`);
+
+  // 标签过滤（在 countQuery 之前处理）
+  if (tagIds && tagIds.length > 0) {
+    const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
+    const userTagIds = tagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
+
+    query = query.whereIn('id', function() {
+      if (publicTagIds.length > 0 && userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').where(function() {
+          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
+            .orWhereIn('user_tag_id', userTagIds);
+        });
+      } else if (publicTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
+      } else if (userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
+      }
+    });
+  }
 
   const validSorts = ['created_at', 'filename', 'view_count', 'width', 'height'];
   const sortField = validSorts.includes(sort) ? sort : 'created_at';
@@ -114,34 +143,67 @@ async function getImages(options = {}) {
   const images = await query.orderBy(sortField, sortOrder).offset(offset).limit(limit);
 
   let countQuery = db('images').count('* as count');
-  if (publicOnly) {
-    countQuery = countQuery.where({ is_public: true });
-  } else if (ownOnly && userId) {
-    countQuery = countQuery.where({ uploader_id: userId });
-  } else if (filterUserId) {
-    countQuery = countQuery.where({ uploader_id: filterUserId });
-  } else if (isAdmin) {
-    // 管理员看所有
-  } else if (userId) {
-    countQuery = countQuery.where(function() {
-      this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
-    });
+  // 复制相同的权限过滤逻辑（含相册上下文）
+  if (albumId) {
+    const album = await db('albums').where({ id: albumId }).first();
+    if (album && album.is_public) {
+      countQuery = countQuery.where({ album_id: albumId });
+    } else if (album && userId && (album.user_id === userId || isAdmin)) {
+      countQuery = countQuery.where({ album_id: albumId });
+    } else if (album) {
+      countQuery = countQuery.where({ album_id: albumId, is_public: true });
+    } else {
+      countQuery = countQuery.where({ album_id: albumId });
+    }
   } else {
-    countQuery = countQuery.where({ is_public: true });
+    if (publicOnly) {
+      countQuery = countQuery.where({ is_public: true });
+    } else if (ownOnly && userId) {
+      countQuery = countQuery.where({ uploader_id: userId });
+    } else if (filterUserId) {
+      countQuery = countQuery.where({ uploader_id: filterUserId });
+    } else if (isAdmin) {
+      // 管理员看所有
+    } else if (userId) {
+      countQuery = countQuery.where(function() {
+        this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
+      });
+    } else {
+      countQuery = countQuery.where({ is_public: true });
+    }
   }
+  // countQuery 也需要同样的标签过滤
   if (tagIds && tagIds.length > 0) {
+    const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
+    const userTagIds = tagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
+
     countQuery = countQuery.whereIn('id', function() {
-      this.select('image_id').from('image_tags').whereIn('tag_id', tagIds);
+      if (publicTagIds.length > 0 && userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').where(function() {
+          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
+            .orWhereIn('user_tag_id', userTagIds);
+        });
+      } else if (publicTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
+      } else if (userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
+      }
     });
   }
   if (albumId) countQuery = countQuery.where({ album_id: albumId });
   const [{ count }] = await countQuery;
 
   for (const image of images) {
-    image.tags = await db('image_tags')
+    const publicTags = await db('image_tags')
       .join('tags', 'image_tags.tag_id', 'tags.id')
       .where('image_tags.image_id', image.id)
+      .whereNull('image_tags.user_tag_id')
       .select('tags.*', 'image_tags.source');
+    const userTags = await db('image_tags')
+      .join('user_tags', 'image_tags.user_tag_id', 'user_tags.id')
+      .where('image_tags.image_id', image.id)
+      .select('user_tags.*', db.raw("'user' as source"));
+    image.tags = [...publicTags, ...userTags];
     const urls = buildImageUrls(image);
     Object.assign(image, urls);
   }
@@ -183,16 +245,45 @@ async function getRandomImages(options = {}) {
   const { count = 1, tagIds, albumId, orientation, userId, publicOnly = false } = options;
 
   let query = db('images');
-  if (publicOnly) {
-    query = query.where({ is_public: true });
-  } else if (userId) {
-    query = query.where(function() {
-      this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
-    });
+
+  // 相册上下文权限
+  if (albumId) {
+    const album = await db('albums').where({ id: albumId }).first();
+    if (album && album.is_public) {
+      query = query.where({ album_id: albumId });
+    } else if (album && userId) {
+      query = query.where({ album_id: albumId });
+    } else if (album) {
+      query = query.where({ album_id: albumId, is_public: true });
+    } else {
+      query = query.where({ album_id: albumId });
+    }
+  } else {
+    if (publicOnly) {
+      query = query.where({ is_public: true });
+    } else if (userId) {
+      query = query.where(function() {
+        this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
+      });
+    } else {
+      query = query.where({ is_public: true });
+    }
   }
   if (tagIds && tagIds.length > 0) {
+    const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !id.startsWith('u')));
+    const userTagIds = tagIds.filter(id => typeof id === 'string' && id.startsWith('u')).map(id => parseInt(id.substring(1)));
+
     query = query.whereIn('id', function() {
-      this.select('image_id').from('image_tags').whereIn('tag_id', tagIds);
+      if (publicTagIds.length > 0 && userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').where(function() {
+          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
+            .orWhereIn('user_tag_id', userTagIds);
+        });
+      } else if (publicTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
+      } else if (userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
+      }
     });
   }
   if (albumId) query = query.where({ album_id: albumId });
@@ -201,10 +292,16 @@ async function getRandomImages(options = {}) {
   const images = await query.orderByRaw('RAND()').limit(count);
 
   for (const image of images) {
-    image.tags = await db('image_tags')
+    const publicTags = await db('image_tags')
       .join('tags', 'image_tags.tag_id', 'tags.id')
       .where('image_tags.image_id', image.id)
+      .whereNull('image_tags.user_tag_id')
       .select('tags.*', 'image_tags.source');
+    const userTags = await db('image_tags')
+      .join('user_tags', 'image_tags.user_tag_id', 'user_tags.id')
+      .where('image_tags.image_id', image.id)
+      .select('user_tags.*', db.raw("'user' as source"));
+    image.tags = [...publicTags, ...userTags];
     const urls = buildImageUrls(image);
     Object.assign(image, urls);
   }

@@ -63,11 +63,39 @@ const checkAuth = () => {
 
 onMounted(async () => {
   checkAuth()
-  // 获取站点名称（公开接口，无需登录）
+  // 获取站点配置（公开接口，无需登录）
   try {
-    const config = await api.get('/api/admin/site-config/public')
-    if (config.siteName) siteName.value = config.siteName
-    document.title = config.siteName || '桃图智库'
+    const siteConfig = await api.get('/api/admin/site-config/public')
+    if (siteConfig.siteName) {
+      siteName.value = siteConfig.siteName
+      document.title = siteConfig.siteName
+    }
+    // 应用背景图
+    if (siteConfig.background?.value) {
+      const blur = siteConfig.background.blur || 0
+      // 创建背景层
+      let bgLayer = document.getElementById('site-bg-layer')
+      if (!bgLayer) {
+        bgLayer = document.createElement('div')
+        bgLayer.id = 'site-bg-layer'
+        bgLayer.style.cssText = 'position:fixed;inset:0;z-index:-1;pointer-events:none;'
+        document.body.prepend(bgLayer)
+      }
+      bgLayer.style.backgroundImage = `url(${siteConfig.background.value})`
+      bgLayer.style.backgroundSize = 'cover'
+      bgLayer.style.backgroundPosition = 'center'
+      bgLayer.style.filter = blur > 0 ? `blur(${blur * 0.4}px)` : 'none'
+    }
+    // 应用网站图标
+    if (siteConfig.icon) {
+      let link = document.querySelector("link[rel~='icon']")
+      if (!link) {
+        link = document.createElement('link')
+        link.rel = 'icon'
+        document.head.appendChild(link)
+      }
+      link.href = siteConfig.icon
+    }
   } catch {}
   try { showConnectionBanner.value = !(await api.checkConnection()).connected } catch { showConnectionBanner.value = true }
 })

@@ -47,7 +47,7 @@ async function resolveUserId(req) {
 router.get('/', async (req, res, next) => {
   try {
     const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnlyParam, userId: targetUserId } = req.query;
-    const tagIds = tags ? tags.split(',').map(Number) : null;
+    const tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : null;
     const userId = await resolveUserId(req);
 
     let isAdmin = false;
@@ -82,7 +82,7 @@ router.get('/', async (req, res, next) => {
 router.get('/random', async (req, res, next) => {
   try {
     const { count, tags, album, orientation, pic } = req.query;
-    const tagIds = tags ? tags.split(',').map(Number) : null;
+    const tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : null;
     const requestedCount = parseInt(count) || 1;
     const useMedium = pic === 'md';
     const userId = await resolveUserId(req);

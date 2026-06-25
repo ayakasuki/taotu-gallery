@@ -2,7 +2,7 @@
 
 > 自托管图床 + 智能标签管理平台，支持 AI 标签扩展、条件自动标签、参数化 API、多用户隔离。
 
-v0.1.0 · [MIT License](LICENSE)
+v0.2.0 · [MIT License](LICENSE)
 
 ---
 
@@ -12,15 +12,19 @@ v0.1.0 · [MIT License](LICENSE)
 |------|------|
 | 图库展示 | 瀑布流 / 网格 / 静态 / 轮播四种模式，支持排序筛选 |
 | 标签系统 | 人工标签、条件自动标签、AI 标签（预留接口） |
-| 参数化 API | 按标签/相册/随机查询，支持 Token 认证 |
+| 用户标签 | 每个用户独立私有标签系统，可设为公共共享 |
+| 参数化 API | 按标签/相册/随机查询，支持 Token 认证（Header / URL `?tk=`） |
 | 嵌入代码 | 源地址/HTML/BBCode/Markdown × 缩略/中等/完整 = 12 种组合 |
-| 多用户 | 注册登录、用户隔离、公共/私有图片控制 |
-| 相册管理 | 创建/编辑/删除、公共相册、相册内图片管理 |
+| 多用户 | 注册登录、用户隔离、公共/私有图片控制、用户配额 |
+| 相册管理 | 创建/编辑/删除、公共相册、相册内图片管理、封面设置 |
 | 条件标签 | 路径正则/排除/分辨率/横竖图/横竖比，自动扫描匹配 |
-| 上传 | 文件上传、URL 上传、批量上传、新建标签 |
+| 上传 | 文件上传、URL 上传、批量上传、新建标签、中文文件名 |
+| 多选操作 | 图库页面多选图片、批量删除、批量移动到相册 |
 | 备份恢复 | 数据库 + 图片 + 配置打包备份，路径相对化恢复 |
 | 云同步 | WebDAV 同步标签/路径/配置文件 |
 | 统计 | API 调用量、上传活跃、用户活跃、热门图片 |
+| 网站外观 | 自定义背景图（支持模糊度调节）、网站 Icon 上传 |
+| 前端显示域名 | 支持 CDN / 公网域名配置，嵌入代码自动使用 |
 
 ---
 
@@ -29,12 +33,12 @@ v0.1.0 · [MIT License](LICENSE)
 | 层 | 技术 |
 |----|------|
 | 后端 | Node.js 18+ / Express / Knex.js / MySQL |
-| 前端 | Nuxt 3 / Vue 3 Composition API / PrimeVue 风格 Fluent Design |
+| 前端 | Nuxt 3 / Vue 3 Composition API / Fluent Design 风格 |
 | 文件监听 | chokidar |
-| 图片处理 | sharp |
+| 图片处理 | sharp（缩略图/中等图/颜色/分辨率） |
 | 认证 | JWT + bcryptjs |
 | 云同步 | WebDAV |
-| 部署 | PM2 |
+| 部署 | PM2（前后端同端口） |
 
 ---
 
@@ -49,8 +53,7 @@ v0.1.0 · [MIT License](LICENSE)
 ### 安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/your-username/taotu-gallery.git
+git clone https://github.com/ayakasuki/taotu-gallery.git
 cd taotu-gallery
 
 # 安装后端依赖
@@ -69,7 +72,7 @@ cp .env.example .env
 ```sql
 CREATE DATABASE gallery_index CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'gallery'@'localhost' IDENTIFIED BY 'your_password';
-GRANT SELECT, INSERT, UPDATE, DELETE, ALTER, LOCK TABLES ON gallery_index.* TO 'gallery'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE, ALTER, LOCK TABLES, CREATE ON gallery_index.* TO 'gallery'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
@@ -85,38 +88,25 @@ JWT_SECRET=your_random_secret_string
 PORT=7067
 ```
 
-### 初始化数据库
+### 初始化与启动
 
 ```bash
+# 数据库迁移
 npx knex migrate:latest
+
+# 创建默认管理员
 npx knex seed:run
-```
 
-默认管理员账号：`admin` / `admin123`（请登录后立即修改密码）
-
-### 构建前端
-
-```bash
+# 构建前端
 cd client && npx nuxt generate && cd ..
-```
 
-### 启动
-
-```bash
-# 开发模式
-npm run dev
-
-# 生产模式（PM2）
+# 启动
 pm2 start pm2/pm2.json
-# 或使用脚本
+# 或
 ./pm2/start.sh start
 ```
 
-访问 `http://localhost:7067`
-
-### 自定义端口
-
-编辑 `pm2/pm2.json`，修改 `apps[0].env.PORT` 即可。前后端共用同一端口，无需额外配置。
+默认管理员：`admin` / `admin123`（请登录后立即修改密码）
 
 ---
 
@@ -132,69 +122,59 @@ pm2 start pm2/pm2.json
 
 | 功能 | 说明 |
 |------|------|
-| 我的图库 | 查看自己上传的图片 |
-| 上传图片 | 文件上传 / URL 上传 |
+| 我的图库 | 查看自己上传的图片，支持多选批量操作 |
+| 上传图片 | 文件上传 / URL 上传，支持中文文件名 |
 | 图片管理 | 设置公共/私有、删除自己的图片 |
-| 相册管理 | 创建相册、管理自己的相册 |
+| 私有标签 | 创建和管理自己的私有标签 |
+| 相册管理 | 创建相册、管理自己的相册、设为公共 |
 | API Token | 生成自己的 Token 用于 API 调用 |
-| 仪表盘 | 个人统计、图片管理、Token 管理 |
-
-**普通用户不能：**
-- 访问管理后台
-- 查看/编辑/删除其他用户的图片
-- 选择标签上传（仅管理员可）
-- 管理条件标签和系统配置
+| 仪表盘 | 个人统计、图片管理、Token 管理、标签管理 |
 
 ### 管理员
 
 | 功能 | 说明 |
 |------|------|
 | 管理后台 | 完整的系统管理面板 |
-| 图片管理 | 查看所有图片，支持三分类筛选（全部/公共/我的/用户图库） |
-| 标签管理 | 创建/编辑/删除标签，人工标签 |
-| 条件标签 | 创建条件自动标签规则 |
-| 用户管理 | 创建/编辑/删除用户 |
-| 相册管理 | 管理所有相册 |
-| 网站配置 | 注册开关、HTTPS、前端显示域名 |
+| 图片管理 | 多选批量操作、三分类筛选（全部/公共/我的/用户图库） |
+| 标签管理 | 创建/编辑/删除标签、公共/私有切换、人工标签 |
+| 条件标签 | 5 种条件类型、专用表单配置、手动触发扫描 |
+| 用户管理 | 创建/编辑/删除用户、配额设置、彻底清理 |
+| 相册管理 | 管理所有相册、设置封面 |
+| 网站配置 | 注册开关、HTTPS、前端显示域名、背景图、Icon |
+| 自定义路径 | 外部图库导入、指定相册和标签、批量扫描 |
 | 备份恢复 | 系统级备份和恢复 |
 | 统计监控 | 全站数据统计 |
 
 ---
 
-## 前端页面说明
+## 标签系统
 
-### 公开页面
+### 标签类型
 
-| 路径 | 页面 | 说明 |
+| 类型 | 存储 | 说明 |
 |------|------|------|
-| `/` | 图库首页 | 公共图库/我的图库/用户图库切换，标签筛选 |
-| `/albums` | 相册列表 | 浏览公共相册，管理自己的相册 |
-| `/image/:id` | 图片详情 | 查看图片、嵌入代码、上传者信息 |
-| `/login` | 登录 | 用户登录 |
-| `/register` | 注册 | 用户注册（需管理员开放） |
-| `/upload` | 上传 | 文件上传、URL 上传 |
-| `/api-docs` | API 接口 | 动态生成 API URL、实时预览、调用文档 |
-| `/settings` | 设置 | 后端连接配置、前端显示域名 |
-| `/dashboard` | 仪表盘 | 我的图片、我的 Token、统计数据 |
+| 公共标签 | `tags` 表 + `tags.json` | 所有人可见 |
+| 用户私有标签 | `user_tags` 表 | 仅创建者可见 |
+| 条件标签 | `conditions` 表 + `conditions.json` | 自动匹配图片 |
+| AI 标签 | 预留接口 | 暂未启用 |
 
-### 管理后台 (`/admin`)
+### 标签权限
 
-| 路径 | 页面 | 说明 |
-|------|------|------|
-| `/admin` | 概览 | 统计卡片、快捷入口 |
-| `/admin/images` | 图片管理 | 多选批量操作、三分类筛选 |
-| `/admin/tags` | 标签设置 | 标签 CRUD、人工标签、通用配置 |
-| `/admin/conditions` | 条件标签 | 条件 CRUD、手动触发扫描 |
-| `/admin/models` | 模型管理 | AI 模型（桩，暂未启用） |
-| `/admin/paths` | 自定义路径 | 外部图库路径管理 |
-| `/admin/database` | 数据库 | 连接状态、配置信息 |
-| `/admin/gallery` | 图库设置 | 展示模式、上传配置 |
-| `/admin/api` | API 设置 | 全局 API Token 管理 |
-| `/admin/users` | 用户管理 | 用户 CRUD |
-| `/admin/site-config` | 网站配置 | 域名、注册、HTTPS |
-| `/admin/stats` | 统计监控 | API 调用、上传活跃、热门图片 |
-| `/admin/backup` | 备份恢复 | 创建/恢复备份 |
-| `/admin/cloud-sync` | 云同步 | WebDAV 配置 |
+- 管理员可将任何标签在公共/私有之间切换（ID 不变）
+- 普通用户只能在仪表盘管理自己的私有标签
+- 删除标签时同步清理数据库和配置文件
+
+### 条件标签
+
+| 条件类型 | 说明 | 配置示例 |
+|----------|------|----------|
+| 路径正则 | 路径包含指定文字 | `表情包`、`壁纸` |
+| 路径排除 | 路径不含指定文字 | `临时`、`test` |
+| 分辨率 | 横或竖边 ≥ 指定像素 | `1080`（即 1080p+） |
+| 横竖图 | 宽>高 或 高>宽 | `横图` / `竖图` |
+| 横竖比 | 接近 1:1（正方形） | 固定 0.95-1.05 |
+
+**执行时机：** 上传后立即执行 / 路径扫描后执行 / 条件创建后立即执行 / 定时扫描 / 手动触发
 
 ---
 
@@ -205,110 +185,85 @@ pm2 start pm2/pm2.json
 ```bash
 # 方式一：Authorization Header
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-     "https://your-domain.com/api/images/random?count=1"
+     "https://your-domain.com/api/images/random?count=1&pic=md"
 
 # 方式二：URL 参数
-curl "https://your-domain.com/api/images/random?count=1&tk=YOUR_TOKEN"
+curl "https://your-domain.com/api/images/random?count=1&pic=md&tk=YOUR_TOKEN"
 ```
 
 ### 主要端点
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/tags` | GET | 获取标签列表 |
-| `/api/images` | GET | 图片列表查询 |
-| `/api/images/random` | GET | 随机图片（返回图片二进制） |
-| `/api/images/:id` | GET | 图片详情 + 嵌入代码 |
-| `/api/albums` | GET | 相册列表 |
-| `/api/albums/random` | GET | 随机相册 |
-| `/api/embed/image` | GET | 图片嵌入（HTML/BBCode/Markdown） |
-| `/api/embed/album` | GET | 相册嵌入 |
-| `/api/upload` | POST | 上传图片（需登录） |
+| 端点 | 方法 | 认证 | 说明 |
+|------|------|------|------|
+| `/api/tags` | GET | 可选 | 标签列表（无 token 只返回公共标签） |
+| `/api/images` | GET | 可选 | 图片列表（无 token 只返回公共图片） |
+| `/api/images/random` | GET | 可选 | 随机图片（count=1 返回图片二进制） |
+| `/api/images/:id` | GET | 可选 | 图片详情 + 嵌入代码 |
+| `/api/albums` | GET | 可选 | 相册列表（无 token 只返回公共相册） |
+| `/api/albums/random` | GET | 可选 | 随机相册 |
+| `/api/embed/image` | GET | 可选 | 图片嵌入（HTML/BBCode/Markdown） |
+| `/api/embed/album` | GET | 可选 | 相册嵌入 |
+| `/api/upload` | POST | 必需 | 上传图片 |
+| `/api/user-tags` | GET | 必需 | 用户私有标签 |
 
 ### 随机图片参数
 
 | 参数 | 说明 |
 |------|------|
 | `count` | 返回数量，1 返回图片二进制，>1 返回 JSON |
-| `tags` | 标签 ID，逗号分隔 |
+| `tags` | 标签 ID，逗号分隔（支持 `u1` 用户标签） |
 | `album` | 相册 ID |
 | `pic` | `md` 返回中等尺寸图片（减少带宽） |
 | `tk` | API Token（URL 参数方式） |
 
-示例：`/api/images/random?tags=1,2&pic=md` — 返回符合条件标签的中等尺寸随机图片。
+### API 权限隔离
+
+| 端点 | 无 token | 有 token |
+|------|---------|---------|
+| 图片/相册/标签查询 | 只返回公共内容 | 自己的 + 公共的 |
+| 随机图片 + 指定公共相册 | 相册内图片可见 | 相册内图片可见 |
+| 上传 | 401 | 正常上传 |
 
 ---
 
-## 条件标签
+## 相册权限逻辑
 
-条件标签是一种自动标签机制。设置条件后，系统自动将符合条件的图片归类到对应标签。
-
-| 条件类型 | 说明 | 配置示例 |
-|----------|------|----------|
-| 路径正则 | 路径包含指定文字 | `表情包`、`壁纸` |
-| 路径排除 | 路径不含指定文字 | `临时`、`test` |
-| 分辨率 | 横或竖边 ≥ 指定像素 | `1080`（即 1080p+） |
-| 横竖图 | 宽>高 或 高>宽 | `横图` / `竖图` |
-| 横竖比 | 接近 1:1（正方形） | 固定 0.95-1.05 |
-
-**执行时机：**
-- 图片上传后立即执行
-- 路径扫描后自动执行
-- 条件创建/编辑后立即执行
-- 定时扫描（可配置间隔分钟数）
-- 手动触发（条件标签页"立即扫描所有图片"按钮）
+| 场景 | 图片 is_public | 相册 is_public | 入口 | 可见性 |
+|------|---------------|---------------|------|--------|
+| 公共图片 | ✅ | - | 图片列表 | ✅ 所有人 |
+| 私有图片 | ❌ | - | 图片列表 | 仅自己 |
+| 公共相册内私有图片 | ❌ | ✅ | 相册入口 | ✅ 所有人 |
+| 私有相册内图片 | - | ❌ | 相册入口 | 仅相册所有者 |
 
 ---
 
-## 后端可配置项（data/config/）
+## 用户配额
 
-| 文件 | 说明 |
+| 配置 | 说明 |
 |------|------|
-| `site.json` | 站点名、注册开关、前端显示域名、标签延迟分钟数、差异阈值 |
-| `tags.json` | 标签定义、可组合/不可组合、互斥关系 |
-| `paths.json` | 自定义外部图库路径 |
-| `conditions.json` | 条件标签配置 |
+| 全局默认存储上限 | 管理后台 → 网站配置 → 用户配额 |
+| 全局单图大小限制 | 管理后台 → 网站配置 → 用户配额 |
+| 单用户存储上限 | 用户管理 → 编辑用户 |
+| 单用户单图大小 | 用户管理 → 编辑用户 |
 
-### site.json 配置项
-
-```json
-{
-  "siteName": "桃图智库",
-  "publicDomain": "https://your-domain.com",
-  "registration": {
-    "enabled": false,
-    "emailVerification": false
-  },
-  "tagDelayMinutes": 5,
-  "tagDiffThreshold": 0.5,
-  "display": { "mode": "grid" },
-  "upload": { "showUrlAfterUpload": true }
-}
-```
-
-| 字段 | 说明 |
-|------|------|
-| `siteName` | 站点名称 |
-| `publicDomain` | 前端显示域名（嵌入代码和 API URL 使用此域名） |
-| `registration.enabled` | 是否开放注册 |
-| `tagDelayMinutes` | 标签/条件变化后延迟执行分钟数 |
-| `tagDiffThreshold` | 标签配置差异阈值（超过则全部重标签） |
+管理员不受配额限制。
 
 ---
 
-## 数据库表（12 张）
+## 数据库表（12 张 + 扩展）
 
 | 表 | 用途 |
 |----|------|
-| `images` | 图片信息、路径、哈希路径、公共标记 |
-| `albums` | 相册信息、公共标记、创建者 |
-| `tags` | 标签定义、可组合性、互斥关系 |
-| `image_tags` | 图片-标签关联（来源：manual/ai/condition） |
+| `images` | 图片信息、路径、哈希路径、公共标记、上传者 |
+| `albums` | 相册信息、公共标记、创建者、封面 |
+| `tags` | 标签定义、可组合性、互斥关系、公共标记 |
+| `user_tags` | 用户私有标签（user_id、is_public） |
+| `image_tags` | 图片-标签关联（支持 user_tag_id） |
 | `album_tags` | 相册-标签关联 |
 | `models` | AI 模型记录（桩，暂未启用） |
 | `conditions` | 条件标签配置 |
 | `api_tokens` | API Token（关联用户） |
-| `users` | 用户账号、角色 |
+| `users` | 用户账号、角色、配额 |
 | `upload_logs` | 上传日志 |
 | `api_logs` | API 调用日志 |
 | `site_metrics` | 网站统计指标 |
@@ -325,7 +280,27 @@ curl "https://your-domain.com/api/images/random?count=1&tk=YOUR_TOKEN"
 中等图: /thumb/2026-06-24/abc123def456.jpg?s=medium
 ```
 
-哈希路径在图片入库时自动生成，与本地文件路径无关。
+---
+
+## 自定义路径导入
+
+管理后台 → 自定义路径，支持：
+
+- 指定外部目录路径
+- 递归/非递归扫描
+- 指定相册（已有或新建）
+- 批量打标签（已有标签 + 新建标签）
+- 单路径扫描或全量扫描
+
+---
+
+## 网站外观
+
+管理后台 → 网站配置 → 网站外观：
+
+- 网站名称（动态显示，全站同步）
+- 网站图标（上传 Favicon）
+- 背景图（URL 或上传，支持 0-100% 模糊度滑块）
 
 ---
 
@@ -333,27 +308,28 @@ curl "https://your-domain.com/api/images/random?count=1&tk=YOUR_TOKEN"
 
 **备份内容：** 数据库 dump + 本地图库 + 自定义路径图片 + 配置文件
 
-**恢复流程：**
-1. 解压备份包
-2. 恢复配置文件
-3. 恢复数据库
-4. 恢复图片文件
-5. 路径相对化（绝对路径强制转相对路径）
-6. 路径可读性验证
-
-**核心规则：** 恢复时所有图片路径必须转为相对项目目录的路径，否则恢复后数据库图片路径不可读。
+**恢复核心规则：** 所有图片路径必须转为相对项目目录的路径，否则恢复后数据库图片路径不可读。
 
 ---
 
-## 部署建议
+## 部署
 
 ### PM2 一键部署
 
 ```bash
+# 编辑端口（默认 7067）
+vim pm2/pm2.json
+
+# 启动
 pm2 start pm2/pm2.json
+
+# 停止/重启/日志
+pm2 stop pm2/pm2.json
+pm2 restart pm2/pm2.json
+pm2 logs
 ```
 
-### 反向代理（Nginx）
+### Nginx 反向代理
 
 ```nginx
 server {
@@ -369,9 +345,9 @@ server {
 }
 ```
 
-### HTTPS / CDN
+### HTTPS
 
-在管理后台 → 网站配置 → 前端显示域名中设置公网域名，嵌入代码和 API URL 将自动使用该域名。
+管理后台 → 网站配置 → HTTPS/SSL，填入证书路径和密钥路径，重启服务生效。
 
 ---
 
@@ -381,8 +357,6 @@ server {
 
 接口位置：`server/services/aiTagService.js`
 
-所有 AI 相关方法返回 `{ success: false, reason: 'AI_NOT_ENABLED' }`，可按需接入外部 API。
-
 ---
 
 ## 开发
@@ -391,8 +365,8 @@ server {
 # 后端开发
 npm run dev  # 端口 7067
 
-# 前端开发
-cd client && npm run dev  # 端口 3002（独立开发时）
+# 前端开发（独立端口调试）
+cd client && npm run dev  # 端口 3002
 
 # 数据库迁移
 npx knex migrate:latest
