@@ -1,9 +1,5 @@
 <template>
   <div class="default-layout">
-    <div v-if="showConnectionBanner" class="connection-banner" @click="goToSettings">
-      <span>⚠️ 无法连接到后端服务，点击此处配置</span>
-    </div>
-
     <header class="site-header">
       <div class="header-inner">
         <NuxtLink to="/" class="logo">{{ siteName }}</NuxtLink>
@@ -24,7 +20,6 @@
 
           <template v-else>
             <NuxtLink to="/login" class="nav-link login-link">登录</NuxtLink>
-            <NuxtLink to="/settings" class="nav-link settings-link" title="设置">⚙</NuxtLink>
           </template>
         </nav>
       </div>
@@ -32,6 +27,7 @@
     <main class="main-content">
       <slot />
     </main>
+    <footer v-if="recordNumber" class="site-footer">{{ recordNumber }}</footer>
   </div>
 </template>
 
@@ -39,11 +35,11 @@
 const api = useApi()
 const router = useRouter()
 
-const showConnectionBanner = ref(false)
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
 const currentUser = ref(null)
 const siteName = ref('桃图智库')
+const recordNumber = ref('')
 
 const checkAuth = () => {
   if (!import.meta.client) return
@@ -70,6 +66,7 @@ onMounted(async () => {
       siteName.value = siteConfig.siteName
       document.title = siteConfig.siteName
     }
+    recordNumber.value = siteConfig.recordNumber || ''
     // 应用背景图
     if (siteConfig.background?.value) {
       const blur = siteConfig.background.blur || 0
@@ -97,7 +94,6 @@ onMounted(async () => {
       link.href = siteConfig.icon
     }
   } catch {}
-  try { showConnectionBanner.value = !(await api.checkConnection()).connected } catch { showConnectionBanner.value = true }
 })
 
 const route = useRoute()
@@ -108,12 +104,9 @@ const handleLogout = () => {
   isLoggedIn.value = false; isAdmin.value = false; currentUser.value = null
   router.push('/')
 }
-const goToSettings = () => router.push('/settings')
 </script>
 
 <style scoped>
-.connection-banner { background: #fff4ce; border-bottom: 1px solid #fce100; padding: 8px var(--space-lg); text-align: center; font-size: 13px; cursor: pointer; }
-.connection-banner:hover { background: #ffe800; }
 .site-header { background: var(--fluent-bg-card); border-bottom: 1px solid var(--fluent-border); box-shadow: var(--shadow-1); position: sticky; top: 0; z-index: 100; }
 .header-inner { max-width: 1400px; margin: 0 auto; padding: 0 var(--space-lg); height: 56px; display: flex; align-items: center; justify-content: space-between; }
 .logo { font-size: 18px; font-weight: 600; color: var(--fluent-text); }
@@ -124,10 +117,10 @@ const goToSettings = () => router.push('/settings')
 .admin-link { border: 1px solid var(--fluent-border); }
 .login-link { background: var(--fluent-blue); color: white; border-radius: var(--radius-sm); }
 .login-link:hover { background: var(--fluent-blue-hover); }
-.settings-link { font-size: 18px; padding: 6px 8px; }
 .user-menu { display: flex; align-items: center; gap: var(--space-sm); margin-left: var(--space-sm); }
 .username { font-size: 13px; color: var(--fluent-text-secondary); }
 .logout-btn { background: none; border: none; cursor: pointer; font-size: 13px; }
 .logout-btn:hover { color: #d13438; background: #fde7e9; }
-.main-content { min-height: calc(100vh - 56px); }
+.main-content { min-height: calc(100vh - 96px); }
+.site-footer { min-height: 40px; display: flex; align-items: center; justify-content: center; padding: 8px var(--space-lg); color: rgba(255,255,255,0.92); font-size: 13px; font-style: italic; transform: skewX(-8deg); text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,0.35); pointer-events: none; }
 </style>

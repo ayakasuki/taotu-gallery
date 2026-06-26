@@ -89,6 +89,36 @@
         <button class="fluent-btn fluent-btn-primary" @click="saveSiteConfig">保存</button>
       </div>
 
+
+
+      <!-- SMTP 邮件 -->
+      <div class="fluent-card">
+        <h3>SMTP 邮件</h3>
+        <div class="form-group"><label>SMTP 服务器</label><input v-model="form.smtpHost" class="fluent-input" placeholder="smtp.example.com" /></div>
+        <div class="form-row">
+          <div class="form-group"><label>端口</label><input v-model.number="form.smtpPort" type="number" class="fluent-input" /></div>
+          <div class="form-group checkbox-group"><label><input type="checkbox" v-model="form.smtpSecure" /> SSL/TLS</label></div>
+        </div>
+        <div class="form-group"><label>账号</label><input v-model="form.smtpUsername" class="fluent-input" placeholder="发件账号" /></div>
+        <div class="form-group"><label>密码/授权码</label><input v-model="form.smtpPassword" type="password" class="fluent-input" placeholder="留空则保存为空" autocomplete="new-password" /></div>
+        <div class="form-group"><label>发件人</label><input v-model="form.smtpFrom" class="fluent-input" placeholder="桃图智库 <noreply@example.com>" /></div>
+        <div class="button-row">
+          <button class="fluent-btn fluent-btn-primary" @click="saveSiteConfig">保存 SMTP</button>
+        </div>
+        <div class="test-mail">
+          <input v-model="form.smtpTestTo" class="fluent-input" placeholder="测试收件邮箱" />
+          <button class="fluent-btn" @click="testSmtp" :disabled="testingSmtp">{{ testingSmtp ? '发送中' : '发送测试' }}</button>
+        </div>
+      </div>
+
+      <!-- 备案号 -->
+      <div class="fluent-card">
+        <h3>备案号</h3>
+        <div class="form-group"><label>备案号</label><input v-model="form.recordNumber" class="fluent-input" placeholder="例如：粤ICP备xxxxxxxx号" /></div>
+        <p class="form-hint">填写后会显示在网站页脚。</p>
+        <button class="fluent-btn fluent-btn-primary" @click="saveSiteConfig">保存</button>
+      </div>
+
       <!-- HTTPS -->
       <div class="fluent-card">
         <h3>HTTPS/SSL</h3>
@@ -113,13 +143,16 @@ const form = reactive({
   registrationEnabled: false, emailVerification: false,
   httpsEnabled: false, certPath: '', keyPath: '',
   publicDomain: '',
+  recordNumber: '',
   bgUrl: '',
   bgBlur: 0,
   mediumWidth: 1500, mediumHeight: 1500,
-  defaultStorageLimit: 0, defaultMaxFileSize: 50
+  defaultStorageLimit: 0, defaultMaxFileSize: 50,
+  smtpHost: '', smtpPort: 465, smtpSecure: true, smtpUsername: '', smtpPassword: '', smtpFrom: '', smtpTestTo: ''
 })
 const msg = ref('')
 const iconPreview = ref('')
+const testingSmtp = ref(false)
 
 onMounted(async () => {
   try {
@@ -128,6 +161,7 @@ onMounted(async () => {
     form.registrationEnabled = data.registration?.enabled || false
     form.emailVerification = data.registration?.emailVerification || false
     form.publicDomain = data.publicDomain || ''
+    form.recordNumber = data.recordNumber || ''
     form.httpsEnabled = data.https?.enabled || false
     form.certPath = data.https?.certPath || ''
     form.keyPath = data.https?.keyPath || ''
@@ -137,6 +171,12 @@ onMounted(async () => {
     form.mediumHeight = data.mediumSize?.height || 1500
     form.defaultStorageLimit = data.defaultQuota?.storageLimit ? Math.round(data.defaultQuota.storageLimit / 1024 / 1024) : 0
     form.defaultMaxFileSize = data.defaultQuota?.maxFileSize || 50
+    form.smtpHost = data.smtp?.host || ''
+    form.smtpPort = data.smtp?.port || 465
+    form.smtpSecure = data.smtp?.secure !== undefined ? !!data.smtp.secure : true
+    form.smtpUsername = data.smtp?.username || ''
+    form.smtpPassword = data.smtp?.password || ''
+    form.smtpFrom = data.smtp?.from || ''
     if (data.icon) iconPreview.value = `${config.public.apiBase || ''}${data.icon}`
   } catch {}
 })
@@ -146,14 +186,56 @@ const saveSiteConfig = async () => {
     await api.put('/api/admin/site-config', {
       siteName: form.siteName,
       publicDomain: form.publicDomain,
+      recordNumber: form.recordNumber,
       registration: { enabled: form.registrationEnabled, emailVerification: form.emailVerification },
       https: { enabled: form.httpsEnabled, certPath: form.certPath, keyPath: form.keyPath },
       background: { type: form.bgUrl ? 'url' : 'none', value: form.bgUrl, blur: form.bgBlur },
       mediumSize: { width: form.mediumWidth, height: form.mediumHeight },
-      defaultQuota: { storageLimit: form.defaultStorageLimit * 1024 * 1024, maxFileSize: form.defaultMaxFileSize }
+      defaultQuota: { storageLimit: form.defaultStorageLimit * 1024 * 1024, maxFileSize: form.defaultMaxFileSize },
+      smtp: {
+        host: form.smtpHost,
+        port: form.smtpPort || 465,
+        secure: !!form.smtpSecure,
+        username: form.smtpUsername,
+        password: form.smtpPassword,
+        from: form.smtpFrom
+      }
     })
     msg.value = '配置已保存'
   } catch (err) { msg.value = '失败: ' + err.message }
+}
+
+
+const testSmtp = async () => {
+  if (!form.smtpTestTo) return alert('请输入测试收件邮箱')
+  testingSmtp.value = true
+  msg.value = ''
+  try {
+    await api.put('/api/admin/site-config', {
+      siteName: form.siteName,
+      publicDomain: form.publicDomain,
+      recordNumber: form.recordNumber,
+      registration: { enabled: form.registrationEnabled, emailVerification: form.emailVerification },
+      https: { enabled: form.httpsEnabled, certPath: form.certPath, keyPath: form.keyPath },
+      background: { type: form.bgUrl ? 'url' : 'none', value: form.bgUrl, blur: form.bgBlur },
+      mediumSize: { width: form.mediumWidth, height: form.mediumHeight },
+      defaultQuota: { storageLimit: form.defaultStorageLimit * 1024 * 1024, maxFileSize: form.defaultMaxFileSize },
+      smtp: {
+        host: form.smtpHost,
+        port: form.smtpPort || 465,
+        secure: !!form.smtpSecure,
+        username: form.smtpUsername,
+        password: form.smtpPassword,
+        from: form.smtpFrom
+      }
+    })
+    const res = await api.post('/api/admin/site-config/test-smtp', { to: form.smtpTestTo })
+    msg.value = res.message || '测试邮件已发送'
+  } catch (err) {
+    msg.value = '失败: ' + (err.data?.error || err.message)
+  } finally {
+    testingSmtp.value = false
+  }
 }
 
 const changePassword = async () => {
@@ -194,6 +276,12 @@ const handleBgUpload = async (e) => {
 .page-title { font-size: 24px; font-weight: 600; margin-bottom: var(--space-xl); }
 .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-lg); }
 .form-group { margin-bottom: var(--space-lg); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
+.checkbox-group { display: flex; align-items: flex-end; }
+.button-row { display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); }
+.test-mail { display: flex; gap: var(--space-sm); align-items: center; }
+.test-mail .fluent-input { flex: 1; min-width: 0; }
+.test-mail .fluent-btn { white-space: nowrap; }
 .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: var(--space-sm); }
 .fluent-input { width: 100%; padding: 8px 12px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 14px; box-sizing: border-box; }
 .form-hint { font-size: 12px; color: var(--fluent-text-secondary); margin-top: var(--space-xs); }

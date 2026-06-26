@@ -39,6 +39,8 @@ async function readSiteConfig() {
       tagDelayMinutes: config.tagDelayMinutes || 5,
       tagDiffThreshold: config.tagDiffThreshold || 0.5,
       publicDomain: config.publicDomain || '',
+      recordNumber: config.recordNumber || '',
+      smtp: config.smtp || { host: '', port: 465, secure: true, username: '', password: '', from: '' },
       https: config.https || { enabled: false },
       background: config.background || { type: 'none', value: '' },
       mediumSize: config.mediumSize || { width: 1500, height: 1500 },
@@ -119,80 +121,87 @@ function normalizeTagsForWrite(tags) {
   const incomingTags = [...(tags.combinable || []), ...(tags.nonCombinable || [])]
     .filter(tag => tag && !tag.isSystemTag && !tag.isPublicUserTag && tag.name);
   const validIds = new Set(incomingTags.map(tag => mutualIdKey(tag.id)));
-  const rawTags = incomingTags
-    .filter(tag => !tag.isUserTag)
-    .filter(tag => Number.isInteger(Number(tag.id)) && tag.name);
 
-  const byId = new Map();
+  const byKey = new Map();
   const adjacency = new Map();
-  for (const tag of rawTags) {
-    const id = Number(tag.id);
-    byId.set(id, {
+
+  for (const tag of incomingTags) {
+    const isUserTag = tag.isUserTag || (typeof tag.id === 'string' && /^u\d+$/i.test(tag.id));
+    const key = mutualIdKey(tag.id);
+    const id = isUserTag ? parseInt(String(tag.id).replace(/^u/i, '')) : Number(tag.id);
+    if (!Number.isInteger(id)) continue;
+
+    byKey.set(key, {
       ...tag,
       id,
-      mutuallyExclusiveIds: parseMutualIds(tag.mutually_exclusive_with).filter(mid => String(mid) !== String(id))
+      key,
+      isUserTag,
+      mutuallyExclusiveIds: parseMutualIds(tag.mutually_exclusive_with).filter(mid => mutualIdKey(mid) !== key)
     });
-    adjacency.set(id, new Set());
+    adjacency.set(key, new Set());
   }
 
-  for (const tag of byId.values()) {
+  for (const tag of byKey.values()) {
     tag.mutuallyExclusiveIds = tag.mutuallyExclusiveIds.filter(id => validIds.has(mutualIdKey(id)));
     for (const targetId of tag.mutuallyExclusiveIds) {
-      if (typeof targetId !== 'number' || !byId.has(targetId)) continue;
-      adjacency.get(tag.id).add(targetId);
-      adjacency.get(targetId).add(tag.id);
+      const targetKey = mutualIdKey(targetId);
+      if (!byKey.has(targetKey)) continue;
+      adjacency.get(tag.key).add(targetKey);
+      adjacency.get(targetKey).add(tag.key);
     }
   }
 
   const visited = new Set();
-  for (const tag of byId.values()) {
-    if (visited.has(tag.id)) continue;
+  for (const tag of byKey.values()) {
+    if (visited.has(tag.key)) continue;
 
-    const stack = [tag.id];
+    const stack = [tag.key];
     const component = [];
-    visited.add(tag.id);
+    visited.add(tag.key);
 
     while (stack.length > 0) {
-      const currentId = stack.pop();
-      component.push(currentId);
-      for (const nextId of adjacency.get(currentId) || []) {
-        if (visited.has(nextId)) continue;
-        visited.add(nextId);
-        stack.push(nextId);
+      const currentKey = stack.pop();
+      component.push(currentKey);
+      for (const nextKey of adjacency.get(currentKey) || []) {
+        if (visited.has(nextKey)) continue;
+        visited.add(nextKey);
+        stack.push(nextKey);
       }
     }
 
-    const externalIds = new Set();
-    for (const memberId of component) {
-      for (const targetId of byId.get(memberId).mutuallyExclusiveIds) {
-        if (typeof targetId === 'string') externalIds.add(targetId);
-      }
-    }
+    const sortedComponent = [...component].sort((a, b) => {
+      const aUser = a.startsWith('u');
+      const bUser = b.startsWith('u');
+      if (aUser !== bUser) return aUser ? 1 : -1;
+      return parseInt(a.replace(/^u/, '')) - parseInt(b.replace(/^u/, ''));
+    });
 
-    const sortedComponent = [...component].sort((a, b) => a - b);
-    const sortedExternalIds = [...externalIds].sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
-    for (const memberId of component) {
-      const member = byId.get(memberId);
-      const nextIds = [
-        ...sortedComponent.filter(id => id !== memberId),
-        ...sortedExternalIds
-      ];
+    for (const memberKey of component) {
+      const member = byKey.get(memberKey);
+      const nextIds = sortedComponent
+        .filter(key => key !== memberKey)
+        .map(key => key.startsWith('u') ? key : Number(key));
       member.mutuallyExclusiveIds = nextIds;
       if (nextIds.length > 0) member.combinable = false;
     }
   }
 
-  return [...byId.values()].map(tag => ({
+  const normalized = [...byKey.values()].map(tag => ({
     ...tag,
     mutually_exclusive_with: stringifyMutualIds(tag.mutuallyExclusiveIds)
   }));
+
+  return {
+    publicTags: normalized.filter(tag => !tag.isUserTag),
+    userTags: normalized.filter(tag => tag.isUserTag)
+  };
 }
 
-async function writeTags(tags) {
-  const allTags = normalizeTagsForWrite(tags);
+async function writeTags(tags, options = {}) {
+  const { publicTags, userTags } = normalizeTagsForWrite(tags);
 
   // 只更新或插入，不删除（删除通过显式 API 操作）
-  for (const tag of allTags) {
+  for (const tag of publicTags) {
     await db('tags').insert({
       id: tag.id,
       name: tag.name,
@@ -209,6 +218,17 @@ async function writeTags(tags) {
       is_public: tag.is_public !== undefined ? !!tag.is_public : true
     });
   }
+
+  for (const tag of userTags) {
+    const query = db('user_tags').where({ id: tag.id });
+    if (options.userId) query.andWhere({ user_id: options.userId });
+    await query.update({
+        display_name: tag.display_name || tag.name,
+        combinable: tag.combinable !== false,
+        mutually_exclusive_with: tag.mutually_exclusive_with || null
+      });
+  }
+
   logger.info('标签已同步到数据库');
 }
 

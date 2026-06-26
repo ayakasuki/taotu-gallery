@@ -9,6 +9,13 @@ const router = express.Router();
 
 const uploadsDir = path.resolve(__dirname, '../../../data/uploads');
 
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  next();
+}
+
 // 公开站点信息（无需登录）
 router.get('/public', async (req, res, next) => {
   try {
@@ -16,7 +23,8 @@ router.get('/public', async (req, res, next) => {
     res.json({
       siteName: siteConfig.siteName || '桃图智库',
       publicDomain: siteConfig.publicDomain || '',
-      registration: siteConfig.registration || { enabled: false },
+      recordNumber: siteConfig.recordNumber || '',
+      registration: siteConfig.registration || { enabled: false, emailVerification: false },
       background: siteConfig.background || { type: 'none', value: '' },
       icon: siteConfig.icon || null,
       mediumSize: siteConfig.mediumSize || { width: 1500, height: 1500 }
@@ -25,7 +33,7 @@ router.get('/public', async (req, res, next) => {
 });
 
 // 获取完整网站配置（需登录）
-router.get('/', authMiddleware, async (req, res, next) => {
+router.get('/', authMiddleware, requireAdmin, async (req, res, next) => {
   try {
     const siteConfig = await configService.readSiteConfig();
     res.json(siteConfig);
@@ -33,7 +41,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
 });
 
 // 更新网站配置
-router.put('/', authMiddleware, async (req, res, next) => {
+router.put('/', authMiddleware, requireAdmin, async (req, res, next) => {
   try {
     const siteConfig = await configService.readSiteConfig();
     const updated = { ...siteConfig, ...req.body };
@@ -42,8 +50,19 @@ router.put('/', authMiddleware, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// 发送 SMTP 测试邮件
+router.post('/test-smtp', authMiddleware, requireAdmin, async (req, res, next) => {
+  try {
+    const { to } = req.body;
+    if (!to) return res.status(400).json({ error: '请输入测试收件邮箱' });
+    const mailService = require('../../services/mailService');
+    await mailService.testSmtp(to);
+    res.json({ message: '测试邮件已发送' });
+  } catch (err) { next(err); }
+});
+
 // 上传网站图标
-router.post('/upload-icon', authMiddleware, multer({ dest: path.join(uploadsDir, 'tmp') }).single('file'), async (req, res, next) => {
+router.post('/upload-icon', authMiddleware, requireAdmin, multer({ dest: path.join(uploadsDir, 'tmp') }).single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: '请选择文件' });
     const ext = path.extname(req.file.originalname) || '.ico';
@@ -59,7 +78,7 @@ router.post('/upload-icon', authMiddleware, multer({ dest: path.join(uploadsDir,
 });
 
 // 上传背景图
-router.post('/upload-bg', authMiddleware, multer({ dest: path.join(uploadsDir, 'tmp') }).single('file'), async (req, res, next) => {
+router.post('/upload-bg', authMiddleware, requireAdmin, multer({ dest: path.join(uploadsDir, 'tmp') }).single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: '请选择文件' });
     const ext = path.extname(req.file.originalname);

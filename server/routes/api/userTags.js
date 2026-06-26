@@ -7,6 +7,88 @@ const db = require('../../db');
 
 const router = express.Router();
 
+function parseMutualIds(value, { requireUserPrefix = false } = {}) {
+  if (value === null || value === undefined || value === '') return [];
+  const values = Array.isArray(value) ? value : String(value).split(/[,，.。\s]+/);
+  return values
+    .map(part => String(part).trim())
+    .filter(Boolean)
+    .map(part => {
+      if (/^u\d+$/i.test(part)) return parseInt(part.slice(1));
+      if (requireUserPrefix) {
+        const err = new Error('互斥私有标签必须使用 u 前缀 ID');
+        err.statusCode = 400;
+        throw err;
+      }
+      return /^\d+$/.test(part) ? parseInt(part) : null;
+    })
+    .filter(Number.isInteger);
+}
+
+function stringifyIds(ids) {
+  const unique = [...new Set(ids.filter(Number.isInteger))].sort((a, b) => a - b);
+  return unique.length > 0 ? unique.map(id => `u${id}`).join(',') : null;
+}
+
+async function syncOwnedMutualGroup(userId, sourceId, mutualIds, sourceCombinable = true) {
+  const ownedRows = await db('user_tags').where({ user_id: userId }).select('id', 'combinable', 'mutually_exclusive_with');
+  const ownedIds = new Set(ownedRows.map(row => row.id));
+  if (!ownedIds.has(sourceId)) {
+    const err = new Error('标签不存在');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const validTargetIds = [...new Set(mutualIds)].filter(id => id !== sourceId && ownedIds.has(id));
+  if (validTargetIds.length !== [...new Set(mutualIds)].filter(id => id !== sourceId).length) {
+    const err = new Error('只能选择自己的私有标签作为互斥标签');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const ownedById = new Map(ownedRows.map(row => [row.id, row]));
+  const byId = new Map(ownedRows.map(row => [row.id, new Set(parseMutualIds(row.mutually_exclusive_with).filter(id => ownedIds.has(id) && id !== row.id))]));
+  byId.set(sourceId, new Set(validTargetIds));
+
+  for (const [id, ids] of byId.entries()) {
+    ids.delete(sourceId);
+    if (validTargetIds.length > 0 && validTargetIds.includes(id)) ids.add(sourceId);
+  }
+
+  const adjacency = new Map([...ownedIds].map(id => [id, new Set()]));
+  for (const [id, ids] of byId.entries()) {
+    for (const targetId of ids) {
+      if (!ownedIds.has(targetId)) continue;
+      adjacency.get(id).add(targetId);
+      adjacency.get(targetId).add(id);
+    }
+  }
+
+  const visited = new Set();
+  for (const id of ownedIds) {
+    if (visited.has(id)) continue;
+    const stack = [id];
+    const component = [];
+    visited.add(id);
+    while (stack.length > 0) {
+      const current = stack.pop();
+      component.push(current);
+      for (const next of adjacency.get(current) || []) {
+        if (visited.has(next)) continue;
+        visited.add(next);
+        stack.push(next);
+      }
+    }
+    for (const memberId of component) {
+      const nextIds = component.filter(id => id !== memberId);
+      await db('user_tags').where({ id: memberId, user_id: userId }).update({
+        combinable: nextIds.length > 0 ? false : (memberId === sourceId ? sourceCombinable !== false : !!ownedById.get(memberId)?.combinable),
+        mutually_exclusive_with: stringifyIds(nextIds)
+      });
+    }
+  }
+}
+
 // 获取当前用户的私有标签
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
@@ -18,7 +100,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
 // 创建私有标签
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
-    const { name, display_name, combinable } = req.body;
+    const { name, display_name, combinable, mutually_exclusive_with } = req.body;
     if (!name) return res.status(400).json({ error: '标签名不能为空' });
 
     const [id] = await db('user_tags').insert({
@@ -26,9 +108,13 @@ router.post('/', authMiddleware, async (req, res, next) => {
       name,
       display_name: display_name || name,
       combinable: combinable !== false,
-      is_public: false
+      is_public: false,
+      mutually_exclusive_with: null
     });
-    res.json({ id, name, display_name: display_name || name, combinable: combinable !== false });
+    const mutualIds = parseMutualIds(mutually_exclusive_with, { requireUserPrefix: true });
+    if (mutualIds.length > 0) await syncOwnedMutualGroup(req.user.id, id, mutualIds, combinable !== false);
+    const saved = await db('user_tags').where({ id, user_id: req.user.id }).first();
+    res.json({ id, name, display_name: display_name || name, combinable: !!saved.combinable, mutually_exclusive_with: saved.mutually_exclusive_with });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: '标签名已存在' });
     next(err);
@@ -118,6 +204,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
       display_name: req.body.display_name || tag.display_name,
       combinable: req.body.combinable !== undefined ? req.body.combinable : tag.combinable
     });
+    await syncOwnedMutualGroup(req.user.id, parseInt(req.params.id), parseMutualIds(req.body.mutually_exclusive_with, { requireUserPrefix: true }), req.body.combinable !== undefined ? req.body.combinable : tag.combinable);
     res.json({ message: '已更新' });
   } catch (err) { next(err); }
 });
@@ -136,6 +223,16 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
 
     // 删除关联的 image_tags 记录
     await db('image_tags').where({ user_tag_id: req.params.id }).del();
+
+    const ownerRows = await db('user_tags').where({ user_id: tag.user_id }).select('id', 'combinable', 'mutually_exclusive_with');
+    for (const row of ownerRows) {
+      if (row.id === tag.id) continue;
+      const nextIds = parseMutualIds(row.mutually_exclusive_with).filter(id => id !== tag.id);
+      await db('user_tags').where({ id: row.id }).update({
+        mutually_exclusive_with: stringifyIds(nextIds),
+        combinable: nextIds.length > 0 ? false : !!row.combinable
+      });
+    }
 
     await db('user_tags').where({ id: req.params.id }).del();
     res.json({ message: '已删除' });

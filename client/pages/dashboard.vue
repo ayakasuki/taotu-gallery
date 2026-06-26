@@ -109,14 +109,20 @@
           <div v-if="tagTab === 'manage'" class="fluent-card management-panel">
             <div class="section-header">
               <h3>我的私有标签</h3>
-              <button class="fluent-btn fluent-btn-primary" @click="openTagCreate">新建标签</button>
+              <div class="section-actions">
+                <button v-if="selectedPrivateTagIds.length > 0 && user?.role === 'admin'" class="fluent-btn fluent-btn-secondary" @click="setSelectedPrivateTagsPublic">设为公共</button>
+                <button v-if="selectedPrivateTagIds.length > 0" class="fluent-btn fluent-btn-secondary delete-btn" @click="deleteSelectedPrivateTags">删除</button>
+                <button class="fluent-btn fluent-btn-primary" @click="openTagCreate">新建标签</button>
+              </div>
             </div>
             <div class="tag-table">
-              <div class="private-table-header"><span>名称</span><span>显示名</span><span>可组合</span><span>操作</span></div>
+              <div class="private-table-header"><span><input type="checkbox" :checked="allPrivateTagsSelected" @change="toggleSelectAllPrivateTags" /></span><span>名称</span><span>显示名</span><span>可组合</span><span>互斥标签</span><span>操作</span></div>
               <div v-for="tag in myTags" :key="tag.id" class="private-table-row">
+                <span><input type="checkbox" :checked="selectedPrivateTagIds.includes(tag.id)" @change="togglePrivateTagSelect(tag.id)" /></span>
                 <span>{{ tag.name }}</span>
                 <span>{{ tag.display_name || tag.name }}</span>
                 <span>{{ tag.combinable ? '是' : '否' }}</span>
+                <span class="mutual-summary">{{ formatMutualNames(tag.mutually_exclusive_with) || '-' }}</span>
                 <span class="row-actions compact-actions">
                   <button class="fluent-btn fluent-btn-secondary" @click="openTagEdit(tag)">编辑</button>
                   <button class="fluent-btn fluent-btn-secondary delete-btn" @click="deleteMyTag(tag)">删除</button>
@@ -188,11 +194,24 @@
 
         <section v-if="activeSection === 'users'" class="panel-section">
           <div class="content-header"><h2>用户</h2></div>
-          <div class="fluent-card management-panel account-panel" v-if="user">
-            <div class="account-row"><span>用户名</span><strong>{{ user.username }}</strong></div>
-            <div class="account-row"><span>角色</span><strong>{{ user.role === 'admin' ? '管理员' : '用户' }}</strong></div>
-            <div class="account-row"><span>我的图片</span><strong>{{ myStats.images || 0 }} 张</strong></div>
-            <div class="account-row"><span>私有标签</span><strong>{{ myTags.length }} 个</strong></div>
+          <div class="account-grid" v-if="user">
+            <div class="fluent-card management-panel account-panel">
+              <h3>账号信息</h3>
+              <div class="account-row"><span>用户名</span><strong>{{ user.username }}</strong></div>
+              <div class="account-row"><span>绑定邮箱</span><strong>{{ user.email || '未绑定' }}</strong></div>
+              <div class="account-row"><span>角色</span><strong>{{ user.role === 'admin' ? '管理员' : '用户' }}</strong></div>
+              <div class="account-row"><span>我的图片</span><strong>{{ myStats.images || 0 }} 张</strong></div>
+              <div class="account-row"><span>私有标签</span><strong>{{ myTags.length }} 个</strong></div>
+            </div>
+            <div class="fluent-card management-panel account-panel">
+              <h3>更改密码</h3>
+              <div class="form-group"><label>旧密码</label><input v-model="passwordForm.oldPassword" type="password" class="fluent-input" placeholder="请输入旧密码" /></div>
+              <div class="form-group"><label>新密码</label><input v-model="passwordForm.newPassword" type="password" class="fluent-input" placeholder="请输入新密码" /></div>
+              <div class="form-group"><label>重复新密码</label><input v-model="passwordForm.confirmPassword" type="password" class="fluent-input" placeholder="再次输入新密码" @keyup.enter="changeOwnPassword" /></div>
+              <button class="fluent-btn fluent-btn-primary password-btn" :disabled="!canChangePassword || passwordChanging" @click="changeOwnPassword">{{ passwordChanging ? '修改中...' : '更改密码' }}</button>
+              <p v-if="passwordError" class="error-msg account-msg">{{ passwordError }}</p>
+              <p v-if="passwordMessage" class="result-msg account-msg">{{ passwordMessage }}</p>
+            </div>
           </div>
         </section>
 
@@ -208,6 +227,20 @@
         <div class="form-group"><label>标签名称</label><input v-model="tagForm.name" class="fluent-input" :disabled="!!editingTag" placeholder="例如：风景、人物" /></div>
         <div class="form-group"><label>显示名称</label><input v-model="tagForm.display_name" class="fluent-input" placeholder="页面展示名称" /></div>
         <div class="form-group inline-check"><label><input type="checkbox" v-model="tagForm.combinable" /> 可组合标签</label></div>
+        <div class="form-group">
+          <label>互斥私有标签</label>
+          <div class="mutual-picker">
+            <button
+              v-for="tag in mutualTagOptions"
+              :key="tag.id"
+              type="button"
+              class="mutual-chip"
+              :class="{ selected: tagForm.mutualIds.includes(tag.id) }"
+              @click="toggleMutualTag(tag.id)"
+            >{{ tag.display_name || tag.name }}</button>
+            <span v-if="mutualTagOptions.length === 0" class="empty-inline">暂无其它私有标签</span>
+          </div>
+        </div>
         <div class="modal-actions"><button class="fluent-btn fluent-btn-primary" @click="saveMyTag">保存</button><button class="fluent-btn fluent-btn-secondary" @click="closeTagModal">取消</button></div>
       </div>
     </div>
@@ -251,9 +284,10 @@ const showTokenModal = ref(false)
 const tokenLabel = ref('')
 const newTokenValue = ref('')
 const myTags = ref([])
+const selectedPrivateTagIds = ref([])
 const showTagModal = ref(false)
 const editingTag = ref(null)
-const tagForm = reactive({ name: '', display_name: '', combinable: true })
+const tagForm = reactive({ name: '', display_name: '', combinable: true, mutualIds: [] })
 const editingImage = ref(null)
 const editTagIds = ref([])
 const manualImages = ref([])
@@ -267,6 +301,10 @@ const manualTagIds = ref([])
 const manualOverwrite = ref(false)
 const manualLoading = ref(false)
 const manualResult = ref('')
+const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const passwordChanging = ref(false)
+const passwordMessage = ref('')
+const passwordError = ref('')
 
 const navItems = [
   { key: 'overview', label: '统计', icon: '▦' },
@@ -279,13 +317,38 @@ const navItems = [
 
 const userInitial = computed(() => (user.value?.username || 'U').slice(0, 1).toUpperCase())
 const privateTagOptions = computed(() => {
-  const mapped = myTags.value.map(tag => ({ id: 'u' + tag.id, name: tag.name, display_name: tag.display_name || tag.name, combinable: !!tag.combinable, isUserTag: true }))
+  const mapped = myTags.value.map(tag => ({ id: 'u' + tag.id, name: tag.name, display_name: tag.display_name || tag.name, combinable: !!tag.combinable, mutually_exclusive_with: tag.mutually_exclusive_with, isUserTag: true }))
   return { combinable: mapped.filter(tag => tag.combinable !== false), nonCombinable: mapped.filter(tag => tag.combinable === false) }
 })
 const manualActionText = computed(() => {
   if (manualOverwrite.value && manualTagIds.value.length === 0) return '清空 ' + manualSelected.value.length + ' 张图片的私有标签'
   return '立即标签 ' + manualSelected.value.length + ' 张图片'
 })
+const canChangePassword = computed(() => {
+  return !!passwordForm.oldPassword && !!passwordForm.newPassword && !!passwordForm.confirmPassword && passwordForm.newPassword === passwordForm.confirmPassword
+})
+
+const parseUserMutualIds = (value) => {
+  if (!value) return []
+  return String(value)
+    .split(/[,，.。\s]+/)
+    .map(id => id.trim())
+    .filter(Boolean)
+    .map(id => /^u\d+$/i.test(id) ? parseInt(id.slice(1)) : (/^\d+$/.test(id) ? Number(id) : null))
+    .filter(id => Number.isInteger(id))
+}
+const mutualTagOptions = computed(() => myTags.value.filter(tag => tag.id !== editingTag.value?.id))
+const allPrivateTagsSelected = computed(() => myTags.value.length > 0 && myTags.value.every(tag => selectedPrivateTagIds.value.includes(tag.id)))
+const formatMutualNames = (value) => {
+  const ids = parseUserMutualIds(value)
+  return ids.map(id => myTags.value.find(tag => tag.id === id)).filter(Boolean).map(tag => tag.display_name || tag.name).join('、')
+}
+const toggleMutualTag = (id) => {
+  const idx = tagForm.mutualIds.indexOf(id)
+  if (idx >= 0) tagForm.mutualIds.splice(idx, 1)
+  else tagForm.mutualIds.push(id)
+  if (tagForm.mutualIds.length > 0) tagForm.combinable = false
+}
 
 onMounted(async () => {
   const token = localStorage.getItem('jwt_token')
@@ -332,18 +395,55 @@ const loadTokens = async () => {
   try { const data = await api.get('/api/admin/api/tokens'); myTokens.value = data.tokens || [] } catch {}
 }
 const loadMyTags = async () => {
-  try { const data = await api.get('/api/user-tags'); myTags.value = data.tags || [] } catch {}
+  try {
+    const data = await api.get('/api/user-tags')
+    myTags.value = data.tags || []
+    selectedPrivateTagIds.value = selectedPrivateTagIds.value.filter(id => myTags.value.some(tag => tag.id === id))
+  } catch {}
 }
 
-const openTagCreate = () => { editingTag.value = null; tagForm.name = ''; tagForm.display_name = ''; tagForm.combinable = true; showTagModal.value = true }
-const openTagEdit = (tag) => { editingTag.value = tag; tagForm.name = tag.name; tagForm.display_name = tag.display_name || tag.name; tagForm.combinable = tag.combinable !== false; showTagModal.value = true }
-const closeTagModal = () => { showTagModal.value = false; editingTag.value = null }
+
+const togglePrivateTagSelect = (id) => {
+  const idx = selectedPrivateTagIds.value.indexOf(id)
+  if (idx >= 0) selectedPrivateTagIds.value.splice(idx, 1)
+  else selectedPrivateTagIds.value.push(id)
+}
+
+const toggleSelectAllPrivateTags = () => {
+  if (allPrivateTagsSelected.value) selectedPrivateTagIds.value = []
+  else selectedPrivateTagIds.value = myTags.value.map(tag => tag.id)
+}
+
+const deleteSelectedPrivateTags = async () => {
+  if (selectedPrivateTagIds.value.length === 0) return
+  if (!confirm('确定删除选中的 ' + selectedPrivateTagIds.value.length + ' 个私有标签？关联的图片标签也会被清除。')) return
+  try {
+    for (const id of selectedPrivateTagIds.value) await api.del('/api/user-tags/' + id)
+    selectedPrivateTagIds.value = []
+    await loadMyTags(); await loadMyImages(myPage.value); await loadManualImages(manualPage.value)
+  } catch (err) { alert('批量删除失败: ' + (err.data?.error || err.message)) }
+}
+
+const setSelectedPrivateTagsPublic = async () => {
+  if (user.value?.role !== 'admin' || selectedPrivateTagIds.value.length === 0) return
+  try {
+    for (const id of selectedPrivateTagIds.value) {
+      await api.post('/api/admin/tag-convert/toggle', { tagId: id, isUserTag: true, is_public: true })
+    }
+    selectedPrivateTagIds.value = []
+    await loadMyTags()
+  } catch (err) { alert('批量设为公共失败: ' + (err.data?.error || err.message)) }
+}
+
+const openTagCreate = () => { editingTag.value = null; tagForm.name = ''; tagForm.display_name = ''; tagForm.combinable = true; tagForm.mutualIds = []; showTagModal.value = true }
+const openTagEdit = (tag) => { editingTag.value = tag; tagForm.name = tag.name; tagForm.display_name = tag.display_name || tag.name; tagForm.combinable = tag.combinable !== false; tagForm.mutualIds = parseUserMutualIds(tag.mutually_exclusive_with).filter(id => id !== tag.id); showTagModal.value = true }
+const closeTagModal = () => { showTagModal.value = false; editingTag.value = null; tagForm.mutualIds = [] }
 
 const saveMyTag = async () => {
   if (!tagForm.name.trim()) return alert('请输入标签名')
   try {
-    if (editingTag.value) await api.put('/api/user-tags/' + editingTag.value.id, { display_name: tagForm.display_name.trim() || tagForm.name.trim(), combinable: tagForm.combinable })
-    else await api.post('/api/user-tags', { name: tagForm.name.trim(), display_name: tagForm.display_name.trim() || tagForm.name.trim(), combinable: tagForm.combinable })
+    if (editingTag.value) await api.put('/api/user-tags/' + editingTag.value.id, { display_name: tagForm.display_name.trim() || tagForm.name.trim(), combinable: tagForm.combinable, mutually_exclusive_with: tagForm.mutualIds.map(id => 'u' + id).join(',') })
+    else await api.post('/api/user-tags', { name: tagForm.name.trim(), display_name: tagForm.display_name.trim() || tagForm.name.trim(), combinable: tagForm.combinable, mutually_exclusive_with: tagForm.mutualIds.map(id => 'u' + id).join(',') })
     closeTagModal(); await loadMyTags()
   } catch (err) { alert('保存失败: ' + (err.data?.error || err.message)) }
 }
@@ -410,6 +510,37 @@ const deleteMyImage = async (img) => {
   if (!confirm('确定删除图片 "' + img.filename + '"？')) return
   try { await api.del('/api/admin/images/' + img.id); await loadMyImages(myPage.value); await loadManualImages(manualPage.value) } catch (err) { alert('删除失败: ' + (err.data?.error || err.message)) }
 }
+
+const changeOwnPassword = async () => {
+  passwordError.value = ''
+  passwordMessage.value = ''
+  if (!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+    passwordError.value = '请完整填写旧密码和新密码'
+    return
+  }
+  if (passwordForm.newPassword.length < 6) {
+    passwordError.value = '新密码至少6位'
+    return
+  }
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    passwordError.value = '两次新密码不一致'
+    return
+  }
+
+  passwordChanging.value = true
+  try {
+    await api.post('/api/admin/auth/change-password', { oldPassword: passwordForm.oldPassword, newPassword: passwordForm.newPassword })
+    passwordMessage.value = '密码修改成功'
+    passwordForm.oldPassword = ''
+    passwordForm.newPassword = ''
+    passwordForm.confirmPassword = ''
+  } catch (err) {
+    passwordError.value = err.data?.error || err.message || '密码修改失败'
+  } finally {
+    passwordChanging.value = false
+  }
+}
+
 const createToken = async () => { try { const data = await api.post('/api/admin/api/tokens', { label: tokenLabel.value, user_id: user.value?.id }); newTokenValue.value = data.token; tokenLabel.value = ''; showTokenModal.value = false; await loadTokens() } catch (err) { alert('创建失败: ' + err.message) } }
 const deleteToken = async (id) => { if (!confirm('确定删除此 Token？')) return; try { await api.del('/api/admin/api/tokens/' + id); await loadTokens() } catch { alert('删除失败') } }
 const copyToken = async () => { try { await navigator.clipboard.writeText(newTokenValue.value); alert('已复制') } catch {} }
@@ -445,7 +576,8 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString() : '-'
 .action-icon { font-size: 20px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: var(--fluent-blue-light); color: var(--fluent-blue); border-radius: var(--radius-sm); font-weight: 700; }
 .action-label { font-size: 14px; font-weight: 500; }
 .management-panel { padding: var(--space-lg); }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); gap: var(--space-md); }
+.section-actions { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
 .section-header h3 { font-size: 17px; font-weight: 600; margin: 0; }
 .image-toolbar, .manual-filters { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; margin-bottom: var(--space-lg); }
 .source-pill { padding: 6px 12px; border-radius: var(--radius-sm); background: var(--fluent-blue-light); color: var(--fluent-blue); font-size: 12px; font-weight: 600; }
@@ -468,7 +600,7 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString() : '-'
 .row-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .tag-mini { font-size: 11px; padding: 1px 6px; background: var(--fluent-blue-light); color: var(--fluent-blue); border-radius: 8px; }
 .row-actions { display: flex; gap: 6px; align-items: center; }
-.compact-actions { justify-content: flex-end; }
+.compact-actions { justify-content: flex-end; white-space: nowrap; }
 .public-toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--fluent-text-secondary); cursor: pointer; }
 .public-toggle input { margin: 0; }
 .delete-btn { color: #d13438; }
@@ -480,9 +612,14 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString() : '-'
 .tab-btn { padding: 8px 18px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; }
 .tab-btn.active { background: white; box-shadow: var(--shadow-1); font-weight: 600; }
 .tag-table { border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); overflow: hidden; }
-.private-table-header, .private-table-row { display: grid; grid-template-columns: 1fr 1fr 90px 160px; gap: var(--space-sm); padding: 9px 14px; align-items: center; }
+.private-table-header, .private-table-row { display: grid; grid-template-columns: 34px 1fr 1fr 90px 1.2fr 160px; gap: var(--space-sm); padding: 9px 14px; align-items: center; }
 .private-table-header { background: var(--fluent-hover); font-size: 13px; font-weight: 600; }
 .private-table-row { border-top: 1px solid var(--fluent-border); font-size: 13px; }
+.mutual-summary { color: var(--fluent-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mutual-picker { display: flex; flex-wrap: wrap; gap: 6px; padding: var(--space-sm); border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); background: var(--fluent-hover); }
+.mutual-chip { padding: 4px 10px; border: 1px solid var(--fluent-border); border-radius: 12px; background: white; font-size: 12px; cursor: pointer; }
+.mutual-chip.selected { background: var(--fluent-blue); border-color: var(--fluent-blue); color: white; }
+.empty-inline { font-size: 12px; color: var(--fluent-text-secondary); }
 .manual-grid { display: grid; grid-template-columns: repeat(auto-fill, 216px); gap: var(--space-md); align-items: start; }
 .manual-card { width: 216px; cursor: pointer; border: 2px solid transparent; border-radius: var(--radius-sm); padding: var(--space-sm); transition: all var(--transition-fast); box-sizing: border-box; }
 .manual-card:hover { border-color: var(--fluent-border); }
@@ -498,9 +635,14 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString() : '-'
 .token-list { display: flex; flex-direction: column; gap: var(--space-sm); }
 .token-item, .album-row { display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) 0; border-bottom: 1px solid var(--fluent-border); }
 .token-info, .album-row > div { display: flex; flex-direction: column; gap: 3px; }
-.account-panel { max-width: 560px; }
+.account-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: var(--space-lg); }
+.account-panel h3 { font-size: 17px; font-weight: 600; margin: 0 0 var(--space-lg); }
 .account-row { display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) 0; border-bottom: 1px solid var(--fluent-border); font-size: 14px; }
 .account-row span { color: var(--fluent-text-secondary); }
+.password-btn { width: 100%; }
+.password-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.account-msg { margin-top: var(--space-md); margin-bottom: 0; }
+.error-msg { color: #d13438; font-size: 13px; }
 .token-label { font-weight: 500; font-size: 14px; }
 .token-date, .album-row span { font-size: 12px; color: var(--fluent-text-secondary); }
 .new-token-box { margin-top: var(--space-lg); padding: var(--space-md); background: #fff4ce; border-radius: var(--radius-sm); }
@@ -524,6 +666,7 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString() : '-'
   .row-actions { flex-wrap: wrap; justify-content: flex-end; }
   .manual-grid { grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); }
   .manual-card { justify-self: center; }
+  .account-grid { grid-template-columns: 1fr; }
   .modal, .wide-modal { width: min(92vw, 560px); }
 }
 </style>

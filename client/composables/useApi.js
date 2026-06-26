@@ -5,15 +5,7 @@
 export function useApi() {
   const config = useRuntimeConfig()
 
-  const getApiBase = () => {
-    if (import.meta.client) {
-      // 优先使用用户在设置页配置的地址
-      const saved = localStorage.getItem('backend_url')
-      if (saved) return saved.replace(/\/+$/, '')
-    }
-    // 空字符串 = 相对路径（前后端同端口）
-    return config.public.apiBase || ''
-  }
+  const getApiBase = () => config.public.apiBase || ''
 
   const getToken = () => {
     if (import.meta.client) {
@@ -35,12 +27,10 @@ export function useApi() {
       headers['Authorization'] = `Bearer ${apiToken}`
     }
 
-    const response = await $fetch(`${apiBase}${url}`, {
+    return $fetch(`${apiBase}${url}`, {
       ...options,
       headers
     })
-
-    return response
   }
 
   const checkConnection = async () => {
@@ -49,17 +39,9 @@ export function useApi() {
       await $fetch(`${apiBase}/api/tags`, { signal: AbortSignal.timeout(5000) })
       return { connected: true, url: apiBase || window.location.origin }
     } catch (err) {
-      return { connected: false, url: apiBase, error: err.message }
+      return { connected: false, url: getApiBase(), error: err.message }
     }
   }
-
-  const setBackendUrl = (url) => {
-    if (import.meta.client) {
-      localStorage.setItem('backend_url', url.replace(/\/+$/, ''))
-    }
-  }
-
-  const getBackendUrl = () => getApiBase()
 
   return {
     get: (url, params) => request(url, { method: 'GET', params }),
@@ -67,8 +49,6 @@ export function useApi() {
     put: (url, body) => request(url, { method: 'PUT', body }),
     del: (url) => request(url, { method: 'DELETE' }),
     request,
-    checkConnection,
-    setBackendUrl,
-    getBackendUrl
+    checkConnection
   }
 }

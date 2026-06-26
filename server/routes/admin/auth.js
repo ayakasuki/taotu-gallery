@@ -4,10 +4,131 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('../../db');
 const authMiddleware = require('../../middleware/auth');
+const configService = require('../../services/configService');
+const redisService = require('../../services/redisService');
+const mailService = require('../../services/mailService');
 
 const router = express.Router();
+
+const CAPTCHA_TTL_SECONDS = 120;
+const EMAIL_CODE_TTL_SECONDS = 120;
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function randomCode(length = 5) {
+  let code = '';
+  for (let i = 0; i < length; i += 1) {
+    code += CODE_CHARS[crypto.randomInt(0, CODE_CHARS.length)];
+  }
+  return code;
+}
+
+function randomEmailCode() {
+  const digits = '23456789';
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const parts = [
+    digits[crypto.randomInt(0, digits.length)],
+    digits[crypto.randomInt(0, digits.length)],
+    letters[crypto.randomInt(0, letters.length)],
+    letters[crypto.randomInt(0, letters.length)],
+    letters[crypto.randomInt(0, letters.length)]
+  ];
+  for (let i = parts.length - 1; i > 0; i -= 1) {
+    const j = crypto.randomInt(0, i + 1);
+    [parts[i], parts[j]] = [parts[j], parts[i]];
+  }
+  return parts.join('');
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function maskEmail(email) {
+  const [name, domain] = String(email || '').split('@');
+  if (!name || !domain) return '';
+  const visible = name.length <= 2 ? name.slice(0, 1) : name.slice(0, 2);
+  return visible + '***@' + domain;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  }[ch]));
+}
+
+function buildCaptchaSvg(code) {
+  const width = 160;
+  const height = 52;
+  const chars = code.split('');
+  const noise = Array.from({ length: 8 }, () => {
+    const x1 = crypto.randomInt(0, width);
+    const y1 = crypto.randomInt(0, height);
+    const x2 = crypto.randomInt(0, width);
+    const y2 = crypto.randomInt(0, height);
+    return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#8a8a8a" stroke-width="1" opacity="0.45" />';
+  }).join('');
+  const text = chars.map((char, index) => {
+    const x = 18 + index * 26 + crypto.randomInt(-3, 4);
+    const y = 34 + crypto.randomInt(-5, 6);
+    const rotate = crypto.randomInt(-18, 19);
+    return '<text x="' + x + '" y="' + y + '" transform="rotate(' + rotate + ' ' + x + ' ' + y + ')" font-size="28" font-family="Arial, Helvetica, sans-serif" font-weight="700" fill="#111">' + escapeHtml(char) + '</text>';
+  }).join('');
+
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '"><rect width="100%" height="100%" fill="#fff"/><rect x="0.5" y="0.5" width="159" height="51" fill="none" stroke="#d1d1d1"/>' + noise + text + '</svg>';
+}
+
+async function verifyCaptcha(captchaId, captchaCode) {
+  if (!captchaId || !captchaCode) {
+    const err = new Error('请填写人机验证码');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const key = 'captcha:' + captchaId;
+  const saved = await redisService.get(key);
+  if (!saved) {
+    const err = new Error('人机验证码已过期，请刷新后重试');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await redisService.del(key);
+  if (String(saved).toLowerCase() !== String(captchaCode).trim().toLowerCase()) {
+    const err = new Error('人机验证码错误');
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
+async function verifyEmailCode(email, emailCode) {
+  if (!emailCode) {
+    const err = new Error('请输入邮箱验证码');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const key = 'register:email:' + normalizedEmail;
+  const saved = await redisService.get(key);
+  if (!saved) {
+    const err = new Error('邮箱验证码已过期，请重新发送');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (String(saved).toLowerCase() !== String(emailCode).trim().toLowerCase()) {
+    const err = new Error('邮箱验证码错误');
+    err.statusCode = 400;
+    throw err;
+  }
+  await redisService.del(key);
+}
 
 // 登录（管理员和普通用户通用）
 router.post('/login', async (req, res, next) => {
@@ -44,32 +165,103 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
+// 图片人机验证码
+router.get('/captcha', async (req, res, next) => {
+  try {
+    const code = randomCode(5);
+    const captchaId = crypto.randomUUID();
+    await redisService.setEx('captcha:' + captchaId, CAPTCHA_TTL_SECONDS, code.toLowerCase());
+    res.json({ captchaId, svg: buildCaptchaSvg(code), ttl: CAPTCHA_TTL_SECONDS });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 发送注册邮箱验证码
+router.post('/register-code', async (req, res, next) => {
+  try {
+    const { email, captchaId, captchaCode } = req.body;
+    const siteConfig = await configService.readSiteConfig();
+    if (!siteConfig.registration?.enabled) {
+      return res.status(403).json({ error: '注册功能未开放' });
+    }
+    if (!siteConfig.registration?.emailVerification) {
+      return res.status(400).json({ error: '当前未启用邮箱验证' });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: '请输入有效邮箱' });
+    }
+
+    const existingEmail = await db('users').where({ email: normalizedEmail }).first();
+    if (existingEmail) {
+      return res.status(409).json({ error: '邮箱已被使用' });
+    }
+
+    await verifyCaptcha(captchaId, captchaCode);
+
+    const code = randomEmailCode();
+    const emailCodeKey = 'register:email:' + normalizedEmail;
+    await redisService.setEx(emailCodeKey, EMAIL_CODE_TTL_SECONDS, code.toLowerCase());
+    try {
+      await mailService.sendVerificationCode(normalizedEmail, code);
+    } catch (err) {
+      await redisService.del(emailCodeKey);
+      throw err;
+    }
+
+    res.json({ message: '验证码已发送', ttl: EMAIL_CODE_TTL_SECONDS });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 注册（普通用户）
 router.post('/register', async (req, res, next) => {
   try {
-    const { username, password, email } = req.body;
+    const { username, password, email, emailCode, captchaId, captchaCode } = req.body;
+    const normalizedEmail = normalizeEmail(email);
+
     if (!username || !password) {
       return res.status(400).json({ error: '请输入用户名和密码' });
     }
 
-    // 检查是否开放注册
-    const configService = require('../../services/configService');
     const siteConfig = await configService.readSiteConfig();
     if (!siteConfig.registration?.enabled) {
       return res.status(403).json({ error: '注册功能未开放' });
     }
 
-    // 检查用户名是否已存在
+    await verifyCaptcha(captchaId, captchaCode);
+
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: '请输入有效邮箱' });
+    }
+
+    if (siteConfig.registration?.emailVerification) {
+      if (!normalizedEmail) {
+        return res.status(400).json({ error: '请输入有效邮箱' });
+      }
+      await verifyEmailCode(normalizedEmail, emailCode);
+    }
+
     const existing = await db('users').where({ username }).first();
     if (existing) {
       return res.status(409).json({ error: '用户名已存在' });
+    }
+
+    if (normalizedEmail) {
+      const existingEmail = await db('users').where({ email: normalizedEmail }).first();
+      if (existingEmail) {
+        return res.status(409).json({ error: '邮箱已被使用' });
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const [id] = await db('users').insert({
       username,
       password_hash: passwordHash,
-      email,
+      email: normalizedEmail || null,
       role: 'user'
     });
 
@@ -79,7 +271,87 @@ router.post('/register', async (req, res, next) => {
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id, username, role: 'user', email } });
+    res.json({ token, user: { id, username, role: 'user', email: normalizedEmail || null } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+// 发送忘记密码邮箱验证码
+router.post('/forgot-password-code', async (req, res, next) => {
+  try {
+    const { username, captchaId, captchaCode } = req.body;
+    if (!username) {
+      return res.status(400).json({ error: '请输入用户名' });
+    }
+
+    await verifyCaptcha(captchaId, captchaCode);
+
+    const user = await db('users').where({ username }).select('id', 'email').first();
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+    const normalizedEmail = normalizeEmail(user.email);
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: '该账号未绑定有效邮箱，请联系管理员' });
+    }
+
+    const code = randomEmailCode();
+    const resetKey = 'reset:password:' + user.id;
+    await redisService.setEx(resetKey, EMAIL_CODE_TTL_SECONDS, code.toLowerCase());
+    try {
+      await mailService.sendPasswordResetCode(normalizedEmail, code);
+    } catch (err) {
+      await redisService.del(resetKey);
+      throw err;
+    }
+
+    res.json({ message: '验证码已发送到绑定邮箱', maskedEmail: maskEmail(normalizedEmail), ttl: EMAIL_CODE_TTL_SECONDS });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 忘记密码重置
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { username, emailCode, captchaId, captchaCode, newPassword } = req.body;
+    if (!username || !newPassword) {
+      return res.status(400).json({ error: '请输入用户名和新密码' });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ error: '密码至少6位' });
+    }
+    if (!emailCode) {
+      return res.status(400).json({ error: '请输入邮箱验证码' });
+    }
+
+    await verifyCaptcha(captchaId, captchaCode);
+
+    const user = await db('users').where({ username }).select('id', 'email').first();
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+    const normalizedEmail = normalizeEmail(user.email);
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: '该账号未绑定有效邮箱，请联系管理员' });
+    }
+
+    const resetKey = 'reset:password:' + user.id;
+    const saved = await redisService.get(resetKey);
+    if (!saved) {
+      return res.status(400).json({ error: '邮箱验证码已过期，请重新发送' });
+    }
+    if (String(saved).toLowerCase() !== String(emailCode).trim().toLowerCase()) {
+      return res.status(400).json({ error: '邮箱验证码错误' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await db('users').where({ id: user.id }).update({ password_hash: passwordHash });
+    await redisService.del(resetKey);
+
+    res.json({ message: '密码已重置，请使用新密码登录' });
   } catch (err) {
     next(err);
   }

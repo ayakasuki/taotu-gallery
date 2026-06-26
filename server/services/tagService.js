@@ -165,20 +165,20 @@ async function getAlbumTags(albumId) {
 }
 
 // 同步标签配置（对比差异，执行部分或全部重标签）
-async function syncTagConfig(newTags) {
+async function syncTagConfig(newTags, options = {}) {
   const oldTags = await configService.readTags();
   const threshold = config.tagDiffThreshold;
 
   if (isDiffExcessive(oldTags, newTags, threshold)) {
     logger.warn('标签配置差异过大，需要全部重新标签');
-    await configService.writeTags(newTags);
+    await configService.writeTags(newTags, options);
     return { action: 'full-retag', message: '配置差异过大，需全部重新标签' };
   }
 
   const diff = computeTagDiff(oldTags, newTags);
   logger.info(`标签差异: 新增 ${diff.added.length}, 修改 ${diff.modified.length}, 删除 ${diff.removed.length}`);
 
-  await configService.writeTags(newTags);
+  await configService.writeTags(newTags, options);
 
   if (diff.added.length > 0 || diff.modified.length > 0) {
     return {

@@ -67,6 +67,7 @@ router.get('/', async (req, res, next) => {
           id: `u${ut.id}`, name: ut.name,
           display_name: ut.display_name || ut.name,
           combinable: !!ut.combinable,
+          mutually_exclusive_with: ut.mutually_exclusive_with,
           isUserTag: true, isPublicUserTag: true
         };
         if (tag.combinable) combinable.push(tag);
@@ -84,6 +85,7 @@ router.get('/', async (req, res, next) => {
             id: `u${ut.id}`, name: ut.name,
             display_name: ut.display_name || ut.name,
             combinable: !!ut.combinable,
+            mutually_exclusive_with: ut.mutually_exclusive_with,
             isUserTag: true, isPublicUserTag: false
           };
           if (tag.combinable) combinable.push(tag);

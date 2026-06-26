@@ -10,24 +10,29 @@
     <div v-if="activeTab === 'manage'" class="tab-content fluent-card">
       <div class="section-header">
         <h3>标签列表</h3>
-        <button class="fluent-btn fluent-btn-primary" @click="openAddTag">添加标签</button>
+        <div class="section-actions">
+          <button v-if="selectedTagIds.length > 0" class="fluent-btn fluent-btn-secondary" @click="setSelectedTagsPublic">设为公共</button>
+          <button v-if="selectedTagIds.length > 0" class="fluent-btn fluent-btn-secondary delete-btn" @click="deleteSelectedTags">删除</button>
+          <button class="fluent-btn fluent-btn-primary" @click="openAddTag">添加标签</button>
+        </div>
       </div>
 
       <div class="tag-table">
         <div class="table-header">
-          <span>ID</span><span>名称</span><span>显示名</span><span>公共</span><span>可组合</span><span>操作</span>
+          <span><input type="checkbox" :checked="allSelectableTagsSelected" @change="toggleSelectAllTags" /></span><span>ID</span><span>名称</span><span>显示名</span><span>公共</span><span>可组合</span><span>操作</span>
         </div>
         <div v-for="tag in allTags" :key="tag.id" class="table-row">
+          <span><input type="checkbox" :checked="selectedTagIds.includes(tagKey(tag))" :disabled="tag.isSystemTag" @change="toggleTagSelect(tag)" /></span>
           <span>{{ tag.id }}</span>
           <span>{{ tag.name }}</span>
           <span>{{ tag.display_name }}</span>
           <span>
-            <input type="checkbox" :checked="isTagPublic(tag)" @change="toggleTagPublic(tag, $event)" />
+            <input type="checkbox" :checked="isTagPublic(tag)" :disabled="tag.isSystemTag" @change="toggleTagPublic(tag, $event)" />
           </span>
           <span>{{ tag.combinable ? '可组合' : '互斥' }}</span>
           <span class="row-actions">
             <button class="fluent-btn fluent-btn-secondary" @click="openEditTag(tag)">编辑</button>
-            <button class="fluent-btn fluent-btn-secondary" @click="deleteTag(tag)">删除</button>
+            <button class="fluent-btn fluent-btn-secondary" :disabled="tag.isSystemTag" @click="deleteTag(tag)">删除</button>
           </span>
         </div>
         <div v-if="allTags.length === 0" class="empty-msg">暂无标签</div>
@@ -230,6 +235,7 @@ const fetchAdminTags = async () => {
     const data = await api.get('/api/admin/tags')
     tags.value = data
     allTags.value = [...(data.combinable || []), ...(data.nonCombinable || [])]
+    selectedTagIds.value = selectedTagIds.value.filter(id => allTags.value.some(tag => tagKey(tag) === id && !tag.isSystemTag))
   } catch (err) {
     console.error('获取标签失败:', err)
   }
@@ -249,6 +255,61 @@ const tabs = [
 const showTagModal = ref(false)
 const editingTag = ref(null)
 const tagForm = reactive({ name: '', display_name: '', combinable: true, mutually_exclusive_with: '' })
+const selectedTagIds = ref([])
+
+
+const tagKey = (tag) => String(tag.id)
+const selectableTags = computed(() => allTags.value.filter(tag => !tag.isSystemTag))
+const allSelectableTagsSelected = computed(() => selectableTags.value.length > 0 && selectableTags.value.every(tag => selectedTagIds.value.includes(tagKey(tag))))
+
+const toggleTagSelect = (tag) => {
+  if (tag.isSystemTag) return
+  const id = tagKey(tag)
+  const idx = selectedTagIds.value.indexOf(id)
+  if (idx >= 0) selectedTagIds.value.splice(idx, 1)
+  else selectedTagIds.value.push(id)
+}
+
+const toggleSelectAllTags = () => {
+  if (allSelectableTagsSelected.value) selectedTagIds.value = []
+  else selectedTagIds.value = selectableTags.value.map(tag => tagKey(tag))
+}
+
+const selectedTagObjects = () => selectedTagIds.value
+  .map(id => allTags.value.find(tag => tagKey(tag) === id))
+  .filter(Boolean)
+
+const setSelectedTagsPublic = async () => {
+  const selected = selectedTagObjects()
+  if (selected.length === 0) return
+  try {
+    for (const tag of selected) {
+      const tagId = typeof tag.id === 'string' && tag.id.startsWith('u') ? parseInt(tag.id.substring(1)) : tag.id
+      await api.post('/api/admin/tag-convert/toggle', { tagId, isUserTag: !!tag.isUserTag, is_public: true })
+    }
+    selectedTagIds.value = []
+    await fetchTags()
+  } catch (err) { alert('批量设为公共失败: ' + (err.data?.error || err.message)) }
+}
+
+const deleteSelectedTags = async () => {
+  const selected = selectedTagObjects()
+  if (selected.length === 0) return
+  if (!confirm('确定删除选中的 ' + selected.length + ' 个标签？关联的图片标签也会被清除。')) return
+  try {
+    for (const tag of selected) {
+      if (tag.isSystemTag) continue
+      if (tag.isUserTag || tag.isPublicUserTag) {
+        const tagId = typeof tag.id === 'string' ? parseInt(tag.id.substring(1)) : tag.id
+        await api.del('/api/user-tags/' + tagId)
+      } else {
+        await api.del('/api/admin/tags/' + tag.id)
+      }
+    }
+    selectedTagIds.value = []
+    await fetchTags()
+  } catch (err) { alert('批量删除失败: ' + (err.data?.error || err.message)) }
+}
 
 const openAddTag = () => {
   editingTag.value = null
@@ -302,60 +363,61 @@ const normalizeMutualList = (value, selfId, validIds) => {
 }
 
 const applyMutualPairs = (all, tagId) => {
-  const publicTags = all.filter(tag => typeof tag.id === 'number')
-  const byId = new Map(publicTags.map(tag => [tag.id, tag]))
+  const tagNodes = all.filter(tag => typeof tag.id === 'number' || tag.isUserTag || /^u\d+$/i.test(String(tag.id)))
+  const byKey = new Map(tagNodes.map(tag => [mutualIdKey(tag.id), tag]))
   const validIds = new Set(all.map(tag => mutualIdKey(tag.id)))
-  const editedTag = byId.get(tagId)
+  const editedKey = mutualIdKey(tagId)
+  const editedTag = byKey.get(editedKey)
 
   if (editedTag && editedTag.combinable !== false && normalizeMutualList(editedTag.mutually_exclusive_with, editedTag.id, validIds).length === 0) {
-    for (const tag of publicTags) {
-      if (tag.id === editedTag.id) continue
+    for (const tag of tagNodes) {
+      if (mutualIdKey(tag.id) === editedKey) continue
       tag.mutually_exclusive_with = stringifyMutualInput(
         normalizeMutualList(tag.mutually_exclusive_with, tag.id, validIds)
-          .filter(id => mutualIdKey(id) !== mutualIdKey(editedTag.id))
+          .filter(id => mutualIdKey(id) !== editedKey)
       )
     }
   }
 
-  const adjacency = new Map(publicTags.map(tag => [tag.id, new Set()]))
-  for (const tag of publicTags) {
+  const adjacency = new Map(tagNodes.map(tag => [mutualIdKey(tag.id), new Set()]))
+  for (const tag of tagNodes) {
+    const key = mutualIdKey(tag.id)
     tag.mutualIds = normalizeMutualList(tag.mutually_exclusive_with, tag.id, validIds)
     for (const targetId of tag.mutualIds) {
-      if (typeof targetId !== 'number' || !byId.has(targetId)) continue
-      adjacency.get(tag.id).add(targetId)
-      adjacency.get(targetId).add(tag.id)
+      const targetKey = mutualIdKey(targetId)
+      if (!byKey.has(targetKey)) continue
+      adjacency.get(key).add(targetKey)
+      adjacency.get(targetKey).add(key)
     }
   }
 
   const visited = new Set()
-  for (const tag of publicTags) {
-    if (visited.has(tag.id)) continue
-    const stack = [tag.id]
+  for (const tag of tagNodes) {
+    const startKey = mutualIdKey(tag.id)
+    if (visited.has(startKey)) continue
+    const stack = [startKey]
     const component = []
-    visited.add(tag.id)
+    visited.add(startKey)
 
     while (stack.length > 0) {
-      const currentId = stack.pop()
-      component.push(currentId)
-      for (const nextId of adjacency.get(currentId) || []) {
-        if (visited.has(nextId)) continue
-        visited.add(nextId)
-        stack.push(nextId)
+      const currentKey = stack.pop()
+      component.push(currentKey)
+      for (const nextKey of adjacency.get(currentKey) || []) {
+        if (visited.has(nextKey)) continue
+        visited.add(nextKey)
+        stack.push(nextKey)
       }
     }
 
-    const userTargets = new Set()
-    for (const memberId of component) {
-      for (const targetId of byId.get(memberId).mutualIds) {
-        if (typeof targetId === 'string') userTargets.add(targetId)
-      }
-    }
-
-    const sortedComponent = [...component].sort((a, b) => a - b)
-    const sortedUserTargets = [...userTargets].sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)))
-    for (const memberId of component) {
-      const tag = byId.get(memberId)
-      const nextIds = [...sortedComponent.filter(id => id !== memberId), ...sortedUserTargets]
+    const sortedComponent = [...component].sort((a, b) => {
+      const au = a.startsWith('u')
+      const bu = b.startsWith('u')
+      if (au !== bu) return au ? 1 : -1
+      return parseInt(a.replace(/^u/, '')) - parseInt(b.replace(/^u/, ''))
+    })
+    for (const memberKey of component) {
+      const tag = byKey.get(memberKey)
+      const nextIds = sortedComponent.filter(key => key !== memberKey).map(key => key.startsWith('u') ? key : Number(key))
       tag.mutually_exclusive_with = stringifyMutualInput(nextIds)
       if (nextIds.length > 0) tag.combinable = false
       delete tag.mutualIds
@@ -646,12 +708,14 @@ const deleteSubgroup = async (group, sg) => {
 .tab-btn { padding: 8px 20px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; transition: all var(--transition-fast); }
 .tab-btn.active { background: white; box-shadow: var(--shadow-1); font-weight: 500; }
 .tab-content { padding: var(--space-lg); }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); gap: var(--space-md); }
+.section-actions { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
 .tag-table { border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); overflow: hidden; }
-.table-header, .table-row { display: grid; grid-template-columns: 60px 120px 120px 80px 140px; padding: 8px 16px; align-items: center; }
+.table-header, .table-row { display: grid; grid-template-columns: 34px 70px minmax(120px, 1fr) minmax(120px, 1fr) 80px 110px 150px; gap: var(--space-sm); padding: 8px 16px; align-items: center; }
 .table-header { background: var(--fluent-hover); font-size: 13px; font-weight: 600; }
 .table-row { border-top: 1px solid var(--fluent-border); font-size: 13px; }
-.row-actions { display: flex; gap: 6px; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+.delete-btn { color: #d13438; }
 .empty-msg { text-align: center; padding: var(--space-xl); color: var(--fluent-text-secondary); }
 .desc { color: var(--fluent-text-secondary); margin-bottom: var(--space-lg); }
 .manual-filters { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-lg); flex-wrap: wrap; }

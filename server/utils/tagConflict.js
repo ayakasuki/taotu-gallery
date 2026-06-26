@@ -52,14 +52,14 @@ async function validateTagFilterConflict(tagIds) {
     ? await db('tags').whereIn('id', [...new Set(publicIds)]).select('id', 'name', 'display_name', 'mutually_exclusive_with')
     : [];
   const userTags = userTagIds.length > 0
-    ? await db('user_tags').whereIn('id', [...new Set(userTagIds)]).select('id', 'name', 'display_name')
+    ? await db('user_tags').whereIn('id', [...new Set(userTagIds)]).select('id', 'name', 'display_name', 'mutually_exclusive_with')
     : [];
 
   const labelMap = new Map();
   for (const tag of publicTags) labelMap.set(tagIdKey(tag.id), tagLabel(tag, tag.id));
   for (const tag of userTags) labelMap.set(`u${tag.id}`, tagLabel(tag, `u${tag.id}`));
 
-  for (const tag of publicTags) {
+  for (const tag of [...publicTags, ...userTags.map(tag => ({ ...tag, id: `u${tag.id}` }))]) {
     const sourceKey = tagIdKey(tag.id);
     for (const targetId of parseMutualIds(tag.mutually_exclusive_with)) {
       const targetKey = tagIdKey(targetId);

@@ -18,10 +18,22 @@ const SYSTEM_TAGS = [
   { id: '__tagged', name: 'system_tagged', display_name: '已标签', combinable: true, isSystemTag: true }
 ];
 
+async function requireAdmin(req, res) {
+  const db = require('../../db');
+  const user = await db('users').where({ id: req.user.id }).first();
+  if (user?.role !== 'admin') {
+    res.status(403).json({ error: '仅管理员可操作' });
+    return null;
+  }
+  return user;
+}
+
 // 获取标签配置（管理员：公共标签 + 自己的私有标签）
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
     const db = require('../../db');
+    const adminUser = await requireAdmin(req, res);
+    if (!adminUser) return;
 
     // 从数据库读取所有标签（管理员看全部，含私有）
     const dbTags = await db('tags').select('*');
@@ -48,6 +60,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
         id: `u${ut.id}`, name: ut.name,
         display_name: ut.display_name || ut.name,
         combinable: !!ut.combinable,
+        mutually_exclusive_with: ut.mutually_exclusive_with,
         is_public: !!ut.is_public,
         isUserTag: true
       };
@@ -64,8 +77,10 @@ router.get('/', authMiddleware, async (req, res, next) => {
 // 更新标签配置
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
+    const adminUser = await requireAdmin(req, res);
+    if (!adminUser) return;
     const newTags = req.body;
-    const result = await tagService.syncTagConfig(newTags);
+    const result = await tagService.syncTagConfig(newTags, { userId: req.user.id });
     res.json(result);
   } catch (err) {
     if (err.code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' || err.code === 'WARN_DATA_TRUNCATED') {
@@ -78,6 +93,8 @@ router.post('/', authMiddleware, async (req, res, next) => {
 // 删除标签（直接从数据库删除）
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
+    const adminUser = await requireAdmin(req, res);
+    if (!adminUser) return;
     if (String(req.params.id).startsWith('__')) {
       return res.status(400).json({ error: '系统标签不可删除' });
     }

@@ -19,7 +19,9 @@
 | 前端 | Nuxt 3 / Vue 3 Composition API / PrimeVue 风格 Fluent Design |
 | 文件监听 | chokidar |
 | 图片处理 | sharp（缩略图/颜色/分辨率） |
-| 认证 | JWT + bcryptjs |
+| 认证 | JWT + bcryptjs + Redis 验证码 |
+| 邮件 | nodemailer（SMTP 测试、注册验证码、忘记密码验证码） |
+| 缓存/验证码 | redis（图片验证码、邮箱验证码 TTL） |
 | 云同步 | WebDAV |
 | 备份 | archiver / unzipper |
 
@@ -42,6 +44,11 @@
 15. **上传返回公网 URL** — 上传成功返回和嵌入代码必须使用 `imageService.getPublicBaseUrl()`，不能写死 `localhost`。
 16. **横竖图条件互斥** — 横图、竖图、正方图自动判定三选一；宽高比接近 `0.9-1.1` 或 `1:1` 归为正方图。
 17. **自定义路径只以数据库为准** — `custom_paths` 表是持久化来源，不回退写 JSON；刷新页面后必须从数据库恢复条目。
+18. **用户私有标签互斥权限隔离** — `user_tags` 有 `combinable` 和 `mutually_exclusive_with` 字段；普通用户只能配置自己拥有的私有标签互斥，API 禁止绑定管理员或其他用户标签。
+19. **验证码依赖 Redis** — 图片验证码、注册邮箱验证码、忘记密码验证码均写 Redis，TTL 120 秒；邮箱验证码必须是 2 个数字 + 3 个英文乱序。
+20. **SMTP 配置在数据库** — `site_config.smtp` 存 SMTP，测试邮件/注册邮件/忘记密码邮件统一走 `mailService.js`。
+21. **前台不能自定义后端地址** — 已删除 `/settings` 和 connection-check 插件；前后端连接由部署与后台维护，不再允许用户在前台写 backend_url。
+22. **备案号在 site_config** — `recordNumber` 由网站配置保存，公开配置接口返回，默认布局页脚展示。
 
 ## 项目结构
 
@@ -82,7 +89,7 @@
 | `images` | 图片信息、路径、哈希路径、公共标记、上传者 |
 | `albums` | 相册信息、公共标记、创建者、封面 |
 | `tags` | 标签定义、可组合性、互斥关系、公共标记 |
-| `user_tags` | 用户私有标签（user_id、is_public） |
+| `user_tags` | 用户私有标签（user_id、is_public、combinable、mutually_exclusive_with） |
 | `image_tags` | 图片-标签关联（支持 user_tag_id） |
 | `album_tags` | 相册-标签关联 |
 | `models` | AI 模型记录（桩，暂未启用） |
@@ -119,11 +126,19 @@ pm2 logs                     # 查看日志
 
 Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开发计划.md`。
 
-## 当前实现状态（v0.2.1）
+## 当前实现状态（v0.2.2）
 
 - 普通用户仪表盘已改为子菜单结构，图片管理/标签设置为普通用户权限裁剪版。普通用户没有批量导入和系统设置入口。
+- 仪表盘用户页显示绑定邮箱，并提供旧密码 + 新密码 + 重复新密码的改密卡片。
+- 登录页支持忘记密码弹窗：用户名 + 图片验证码发送绑定邮箱验证码，再用邮箱验证码 + 新图片验证码重置密码。
+- 注册页读取公开站点配置；开放注册后显示表单，支持图片验证码和可选邮箱验证码。
+- SMTP、公开域名、备案号、注册开关等全部写入 `site_config`，网站页脚显示备案号。
+- Redis 用于图片验证码、注册验证码、忘记密码验证码；邮箱验证码是 2 个数字 + 3 个英文乱序，120 秒过期。
+- 前台 `/settings` 和自定义后端 API 地址逻辑已删除，`useApi` 只使用部署配置/相对路径。
 - 图片管理支持图库来源、相册、文件名、标签筛选；管理员后台图片编辑区分平台标签与图片所属用户私有标签。
 - 用户上传可创建并立即应用自己的私有标签；个人图片编辑允许空选择保存，表示清空自己的私有标签。
+- 用户私有标签支持可组合/互斥字段；普通用户只能管理自己的私有标签互斥，管理员后台不能被绕过关联其他用户私有标签。
+- 标签管理支持多选批量操作：管理员后台可批量设公共/删除；仪表盘可批量删除，管理员自己的仪表盘可批量设公共。
 - `/api/tags` 必须返回 `mutually_exclusive_with`，否则图库/API 页无法禁用互斥标签。
 - `TagSelector.vue`、`TagGroupSelector.vue`、`TagGroupSelectorFlat.vue` 都需要支持多互斥 ID；修改其中一个时要检查另外两个。
 - `server/utils/tagConflict.js` 是 API 查询参数互斥校验的公共入口。新增标签筛选 API 时优先复用它。
@@ -135,6 +150,10 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 
 ```bash
 node --check server/services/configService.js
+node --check server/services/mailService.js
+node --check server/services/redisService.js
+node --check server/routes/admin/auth.js
+node --check server/routes/admin/tagConvert.js
 node --check server/routes/api/images.js
 node --check server/routes/api/embed.js
 node --check server/routes/internal/images.js
