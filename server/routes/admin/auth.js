@@ -25,21 +25,27 @@ function randomCode(length = 5) {
   return code;
 }
 
+function pickChars(source, count) {
+  return Array.from({ length: count }, () => source[crypto.randomInt(0, source.length)]);
+}
+
+function shuffleParts(parts) {
+  const shuffled = [...parts];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = crypto.randomInt(0, i + 1);
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function randomEmailCode() {
   const digits = '23456789';
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const parts = [
-    digits[crypto.randomInt(0, digits.length)],
-    digits[crypto.randomInt(0, digits.length)],
-    letters[crypto.randomInt(0, letters.length)],
-    letters[crypto.randomInt(0, letters.length)],
-    letters[crypto.randomInt(0, letters.length)]
+    ...pickChars(digits, 2),
+    ...pickChars(letters, 3)
   ];
-  for (let i = parts.length - 1; i > 0; i -= 1) {
-    const j = crypto.randomInt(0, i + 1);
-    [parts[i], parts[j]] = [parts[j], parts[i]];
-  }
-  return parts.join('');
+  return shuffleParts(parts).join('');
 }
 
 function normalizeEmail(email) {
