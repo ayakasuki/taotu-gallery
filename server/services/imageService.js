@@ -7,6 +7,12 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const logger = require('../config/logger');
+const configService = require('./configService');
+
+const SYSTEM_TAG_IDS = {
+  untagged: '__untagged',
+  tagged: '__tagged'
+};
 
 // 生成 16 位哈希
 function generateHash() {
@@ -24,16 +30,14 @@ function generateHashPath(originalFilename) {
 // 获取公开 URL（基于域名配置）
 let cachedPublicDomain = null;
 let domainCacheTime = 0;
-function getPublicBaseUrl() {
+async function getPublicBaseUrl() {
   const now = Date.now();
   // 缓存 60 秒
   if (cachedPublicDomain && now - domainCacheTime < 60000) {
     return cachedPublicDomain;
   }
   try {
-    const siteConfig = JSON.parse(fs.readFileSync(
-      path.resolve(__dirname, '../../data/config/site.json'), 'utf-8'
-    ));
+    const siteConfig = await configService.readSiteConfig();
     if (siteConfig.publicDomain) {
       cachedPublicDomain = siteConfig.publicDomain.replace(/\/+$/, '');
       domainCacheTime = now;
@@ -67,6 +71,49 @@ function buildImageUrls(image) {
     thumb_url: `/thumb/${image.hash_path.replace(/^image\//, '')}?s=thumb`,
     medium_url: `/thumb/${image.hash_path.replace(/^image\//, '')}?s=medium`
   };
+}
+
+function splitTagFilters(tagIds) {
+  const ids = tagIds || [];
+  const systemTagIds = ids.filter(id => id === SYSTEM_TAG_IDS.untagged || id === SYSTEM_TAG_IDS.tagged);
+  const normalTagIds = ids.filter(id => id !== SYSTEM_TAG_IDS.untagged && id !== SYSTEM_TAG_IDS.tagged);
+  return { systemTagIds, normalTagIds };
+}
+
+function applyTagFilters(query, tagIds) {
+  const { systemTagIds, normalTagIds } = splitTagFilters(tagIds);
+
+  if (systemTagIds.includes(SYSTEM_TAG_IDS.untagged)) {
+    query = query.whereNotExists(function() {
+      this.select('*').from('image_tags').whereRaw('image_tags.image_id = images.id');
+    });
+  }
+
+  if (systemTagIds.includes(SYSTEM_TAG_IDS.tagged)) {
+    query = query.whereExists(function() {
+      this.select('*').from('image_tags').whereRaw('image_tags.image_id = images.id');
+    });
+  }
+
+  if (normalTagIds.length > 0) {
+    const publicTagIds = normalTagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
+    const userTagIds = normalTagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
+
+    query = query.whereIn('id', function() {
+      if (publicTagIds.length > 0 && userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').where(function() {
+          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
+            .orWhereIn('user_tag_id', userTagIds);
+        });
+      } else if (publicTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
+      } else if (userTagIds.length > 0) {
+        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
+      }
+    });
+  }
+
+  return query;
 }
 
 // 查询图片列表
@@ -115,27 +162,14 @@ async function getImages(options = {}) {
       query = query.where({ is_public: true });
     }
   }
+  if (albumId) {
+    if (ownOnly && userId) query = query.where({ uploader_id: userId });
+    else if (filterUserId) query = query.where({ uploader_id: filterUserId });
+  }
   if (orientation) query = query.where({ orientation });
   if (search) query = query.where('filename', 'like', `%${search}%`);
 
-  // 标签过滤（在 countQuery 之前处理）
-  if (tagIds && tagIds.length > 0) {
-    const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
-    const userTagIds = tagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
-
-    query = query.whereIn('id', function() {
-      if (publicTagIds.length > 0 && userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').where(function() {
-          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
-            .orWhereIn('user_tag_id', userTagIds);
-        });
-      } else if (publicTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
-      } else if (userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
-      }
-    });
-  }
+  query = applyTagFilters(query, tagIds);
 
   const validSorts = ['created_at', 'filename', 'view_count', 'width', 'height'];
   const sortField = validSorts.includes(sort) ? sort : 'created_at';
@@ -173,25 +207,11 @@ async function getImages(options = {}) {
       countQuery = countQuery.where({ is_public: true });
     }
   }
-  // countQuery 也需要同样的标签过滤
-  if (tagIds && tagIds.length > 0) {
-    const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
-    const userTagIds = tagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
-
-    countQuery = countQuery.whereIn('id', function() {
-      if (publicTagIds.length > 0 && userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').where(function() {
-          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
-            .orWhereIn('user_tag_id', userTagIds);
-        });
-      } else if (publicTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
-      } else if (userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
-      }
-    });
+  if (albumId) {
+    if (ownOnly && userId) countQuery = countQuery.where({ uploader_id: userId });
+    else if (filterUserId) countQuery = countQuery.where({ uploader_id: filterUserId });
   }
-  if (albumId) countQuery = countQuery.where({ album_id: albumId });
+  countQuery = applyTagFilters(countQuery, tagIds);
   const [{ count }] = await countQuery;
 
   for (const image of images) {
@@ -238,7 +258,7 @@ async function getImageById(imageId, internal = false) {
   const urls = buildImageUrls(image);
   Object.assign(image, urls);
 
-  const baseUrl = getPublicBaseUrl();
+  const baseUrl = await getPublicBaseUrl();
   image.embed_codes = generateEmbedCodes(baseUrl, image);
 
   // 对外 API 隐藏真实路径
@@ -279,23 +299,7 @@ async function getRandomImages(options = {}) {
       query = query.where({ is_public: true });
     }
   }
-  if (tagIds && tagIds.length > 0) {
-    const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !id.startsWith('u')));
-    const userTagIds = tagIds.filter(id => typeof id === 'string' && id.startsWith('u')).map(id => parseInt(id.substring(1)));
-
-    query = query.whereIn('id', function() {
-      if (publicTagIds.length > 0 && userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').where(function() {
-          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
-            .orWhereIn('user_tag_id', userTagIds);
-        });
-      } else if (publicTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
-      } else if (userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
-      }
-    });
-  }
+  query = applyTagFilters(query, tagIds);
   if (albumId) query = query.where({ album_id: albumId });
   if (orientation) query = query.where({ orientation });
 
@@ -367,5 +371,6 @@ module.exports = {
   generateEmbedCodes,
   generateHashPath,
   backfillHashPaths,
-  getPublicBaseUrl
+  getPublicBaseUrl,
+  SYSTEM_TAG_IDS
 };

@@ -19,6 +19,19 @@ router.get('/', authMiddleware, async (req, res) => {
   res.json({ users });
 });
 
+// 获取指定用户的私有标签（管理员编辑用户图片时使用）
+router.get('/:id/tags', authMiddleware, async (req, res) => {
+  const currentUser = await db('users').where({ id: req.user.id }).first();
+  const targetUserId = parseInt(req.params.id);
+  if (currentUser?.role !== 'admin' && targetUserId !== req.user.id) {
+    return res.status(403).json({ error: '无权查看此用户标签' });
+  }
+  const tags = await db('user_tags')
+    .where({ user_id: targetUserId })
+    .select('id', 'user_id', 'name', 'display_name', 'combinable', 'is_public', 'created_at');
+  res.json({ tags });
+});
+
 // 创建用户
 router.post('/', authMiddleware, async (req, res, next) => {
   try {

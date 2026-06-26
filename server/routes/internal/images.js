@@ -6,6 +6,7 @@ const express = require('express');
 const authMiddleware = require('../../middleware/auth');
 const db = require('../../db');
 const imageService = require('../../services/imageService');
+const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConflict');
 
 const router = express.Router();
 
@@ -25,7 +26,8 @@ function optionalAuth(req, res, next) {
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
     const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnly, userId: targetUserId } = req.query;
-    const tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : null;
+    const tagIds = parseTagIds(tags);
+    await assertNoTagFilterConflict(tagIds);
     const userId = req.user?.id || null;
     const isAdmin = req.user?.role === 'admin';
 
@@ -50,7 +52,8 @@ router.get('/', optionalAuth, async (req, res, next) => {
 router.get('/random', optionalAuth, async (req, res, next) => {
   try {
     const { count, tags, album, orientation } = req.query;
-    const tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : null;
+    const tagIds = parseTagIds(tags);
+    await assertNoTagFilterConflict(tagIds);
     const userId = req.user?.id || null;
     const images = await imageService.getRandomImages({
       count: parseInt(count) || 1, tagIds,

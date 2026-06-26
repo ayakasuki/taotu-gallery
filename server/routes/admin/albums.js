@@ -11,7 +11,7 @@ const router = express.Router();
 // 获取相册列表
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
-    const { page, limit, sort, order, tags } = req.query;
+    const { page, limit, sort, order, tags, mine, public: publicOnly, userId: targetUserId } = req.query;
     const tagIds = tags ? tags.split(',').map(Number) : null;
     const user = await db('users').where({ id: req.user.id }).first();
     const isAdmin = user?.role === 'admin';
@@ -21,8 +21,10 @@ router.get('/', authMiddleware, async (req, res, next) => {
       limit: parseInt(limit) || 20,
       sort, order, tagIds,
       userId: req.user.id,
-      ownOnly: !isAdmin,
-      isAdmin
+      publicOnly: publicOnly === 'true',
+      ownOnly: mine === 'true' || !isAdmin,
+      isAdmin,
+      filterUserId: targetUserId ? parseInt(targetUserId) : null
     });
     res.json(result);
   } catch (err) {

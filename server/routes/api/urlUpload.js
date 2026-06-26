@@ -85,12 +85,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
       const matchedConditions = await conditionTagService.tagImageByConditions(imageId);
       if (matchedConditions.length > 0) {
         for (const cond of matchedConditions) {
-          await db('image_tags').insert({
-            image_id: imageId,
-            tag_id: cond.id,
-            source: 'condition',
-            source_detail: `condition_${cond.id}`
-          }).onConflict(['image_id', 'tag_id']).ignore();
+          await conditionTagService.insertConditionTag(imageId, cond);
         }
         logger.info(`URL上传条件标签: ${filename} 匹配 ${matchedConditions.length} 个条件`);
       }
@@ -99,6 +94,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
     }
 
     const urls = imageService.buildImageUrls({ hash_path: hashPath });
+    const baseUrl = await imageService.getPublicBaseUrl();
     logger.info(`URL上传成功: ${url} -> ${hashPath}`);
 
     res.json({
@@ -106,7 +102,10 @@ router.post('/', authMiddleware, async (req, res, next) => {
       id: imageId,
       filename,
       hash_path: hashPath,
-      url: urls.url
+      url: urls.url,
+      source_url: baseUrl + urls.url,
+      thumb_url: baseUrl + urls.thumb_url,
+      medium_url: baseUrl + urls.medium_url
     });
   } catch (err) {
     logger.error(`URL上传失败: ${err.message}`);

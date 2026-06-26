@@ -7,16 +7,20 @@ const logger = require('../config/logger');
 
 // 获取相册列表
 async function getAlbums(options = {}) {
-  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false } = options;
+  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null } = options;
   const offset = (page - 1) * limit;
 
   let query = db('albums');
 
   // 权限过滤
-  if (publicOnly) {
+  if (filterUserId) {
+    query = query.where({ user_id: filterUserId });
+  } else if (publicOnly) {
     query = query.where({ is_public: true });
   } else if (ownOnly && userId) {
     query = query.where({ user_id: userId });
+  } else if (isAdmin) {
+    // 管理员可管理全部相册
   } else if (userId) {
     query = query.where(function() {
       this.where({ user_id: userId }).orWhere({ is_public: true }).orWhereNull('user_id');
@@ -38,10 +42,14 @@ async function getAlbums(options = {}) {
   const albums = await query.orderBy(sortField, sortOrder).offset(offset).limit(limit);
 
   let countQuery = db('albums').count('* as count');
-  if (publicOnly) {
+  if (filterUserId) {
+    countQuery = countQuery.where({ user_id: filterUserId });
+  } else if (publicOnly) {
     countQuery = countQuery.where({ is_public: true });
   } else if (ownOnly && userId) {
     countQuery = countQuery.where({ user_id: userId });
+  } else if (isAdmin) {
+    // 管理员统计全部相册
   } else if (userId) {
     countQuery = countQuery.where(function() {
       this.where({ user_id: userId }).orWhere({ is_public: true }).orWhereNull('user_id');

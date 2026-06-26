@@ -125,11 +125,11 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
       try {
         await db('image_tags').insert({
           image_id: imageId,
-          tag_id: 0,
+          tag_id: -userTagId,
           source: 'manual',
           user_tag_id: userTagId,
           tag_user_id: userId
-        });
+        }).onConflict(['image_id', 'tag_id']).ignore();
       } catch (err) {
         logger.warn(`用户标签写入失败: ${err.message}`);
       }
@@ -142,12 +142,7 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     const matchedConditions = await conditionTagService.tagImageByConditions(imageId);
     if (matchedConditions.length > 0) {
       for (const cond of matchedConditions) {
-        await db('image_tags').insert({
-          image_id: imageId,
-          tag_id: cond.id,
-          source: 'condition',
-          source_detail: `condition_${cond.id}`
-        }).onConflict(['image_id', 'tag_id']).ignore();
+        await conditionTagService.insertConditionTag(imageId, cond);
       }
       logger.info(`新图片条件标签: ${file.originalname} 匹配 ${matchedConditions.length} 个条件`);
     }
@@ -193,6 +188,7 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
   logger.info(`上传成功: ${file.originalname} -> ${hashPath}`);
 
   const urls = imageService.buildImageUrls({ hash_path: hashPath });
+  const baseUrl = await imageService.getPublicBaseUrl();
 
   return {
     id: imageId,
@@ -202,7 +198,10 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     width: meta.width,
     height: meta.height,
     size: file.size,
-    url: urls.url
+    url: urls.url,
+    source_url: baseUrl + urls.url,
+    thumb_url: baseUrl + urls.thumb_url,
+    medium_url: baseUrl + urls.medium_url
   };
 }
 

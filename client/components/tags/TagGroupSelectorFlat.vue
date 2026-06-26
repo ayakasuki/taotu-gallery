@@ -5,7 +5,7 @@
       <label class="section-label">主分组</label>
       <div class="chip-list">
         <span v-for="g in groups" :key="g.id" class="tag-chip group-chip"
-          :class="{ selected: selectedGroupIds.includes(g.id) }"
+          :class="{ selected: selectedGroupIds.includes(g.id), disabled: isGroupDisabled(g.id) }"
           @click="toggleGroup(g.id)">
           {{ g.name }}
         </span>
@@ -142,7 +142,10 @@ const hasSelection = computed(() => {
 })
 
 // 主分组切换
+const isGroupDisabled = (id) => !props.selectedGroupIds.includes(id) && wouldConflictWithSelection(collectGroupTagIds(id))
+
 const toggleGroup = (id) => {
+  if (isGroupDisabled(id)) return
   const newIds = [...props.selectedGroupIds]
   const idx = newIds.indexOf(id)
   if (idx >= 0) newIds.splice(idx, 1)
@@ -151,7 +154,7 @@ const toggleGroup = (id) => {
 }
 
 // 子分组切换
-const isSubgroupDisabled = (sg) => coveredSids.value.has(sg.sid)
+const isSubgroupDisabled = (sg) => !props.selectedSids.includes(sg.sid) && (coveredSids.value.has(sg.sid) || wouldConflictWithSelection(collectSubgroupTagIds(sg.sid)))
 
 const toggleSubgroup = (sg) => {
   if (isSubgroupDisabled(sg)) return
@@ -166,8 +169,54 @@ const removeSid = (sid) => {
   emit('update:selectedSids', props.selectedSids.filter(s => s !== sid))
 }
 
+const parseMutualIds = (value) => {
+  if (!value) return []
+  return String(value)
+    .split(/[,，.。\s]+/)
+    .map(id => id.trim())
+    .filter(Boolean)
+    .map(id => /^u\d+$/i.test(id) ? `u${parseInt(id.slice(1))}` : (/^\d+$/.test(id) ? Number(id) : null))
+    .filter(id => id !== null)
+}
+
+const mutualIdKey = (id) => /^u\d+$/i.test(String(id)) ? `u${parseInt(String(id).slice(1))}` : String(id)
+const activeTagIds = computed(() => [...new Set([...props.selectedTagIds, ...coveredTagIds.value])])
+const activeTagKeys = computed(() => new Set(activeTagIds.value.map(mutualIdKey)))
+const selectedKeys = computed(() => new Set(props.selectedTagIds.map(mutualIdKey)))
+
+const hasMutualConflict = (tag, activeKeys = activeTagKeys.value) => {
+  return parseMutualIds(tag.mutually_exclusive_with).some(id => activeKeys.has(mutualIdKey(id)))
+}
+
+const collectGroupTagIds = (groupId) => {
+  const g = groups.value.find(g => g.id === groupId)
+  if (!g) return []
+  const ids = [...(g.tagIds || [])]
+  for (const sg of (g.subgroups || [])) ids.push(...(sg.tagIds || []))
+  return [...new Set(ids)]
+}
+
+const collectSubgroupTagIds = (sid) => {
+  const ids = []
+  for (const g of groups.value) {
+    const sg = (g.subgroups || []).find(s => s.sid === sid)
+    if (sg) ids.push(...(sg.tagIds || []))
+  }
+  return [...new Set(ids)]
+}
+
+const wouldConflictWithSelection = (ids) => {
+  const nextKeys = new Set(activeTagKeys.value)
+  for (const id of ids) {
+    const tag = allTags.value.find(t => t.id === id)
+    if (tag && hasMutualConflict(tag, nextKeys) && !selectedKeys.value.has(mutualIdKey(id)) && !coveredTagIds.value.has(id)) return true
+    nextKeys.add(mutualIdKey(id))
+  }
+  return false
+}
+
 // 标签切换
-const isTagDisabled = (tag) => coveredTagIds.value.has(tag.id)
+const isTagDisabled = (tag) => coveredTagIds.value.has(tag.id) || (hasMutualConflict(tag) && !selectedKeys.value.has(mutualIdKey(tag.id)))
 
 const toggleTag = (tag) => {
   if (isTagDisabled(tag)) return

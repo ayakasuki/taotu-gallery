@@ -8,6 +8,16 @@
 const db = require('../db');
 const logger = require('../config/logger');
 
+function parseJsonField(value, fallback = []) {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (Array.isArray(value) || typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 // ========== 网站配置 ==========
 
 async function readSiteConfig() {
@@ -79,8 +89,107 @@ async function readTags() {
   }
 }
 
+function parseMutualIds(value) {
+  if (value === null || value === undefined || value === '') return [];
+  const values = Array.isArray(value) ? value : String(value).split(/[,，.。\s]+/);
+  return values
+    .map(part => String(part).trim())
+    .filter(Boolean)
+    .map(part => /^u\d+$/i.test(part) ? 'u' + parseInt(part.slice(1)) : (/^\d+$/.test(part) ? parseInt(part) : null))
+    .filter(id => id !== null);
+}
+
+function mutualIdKey(id) {
+  return typeof id === 'string' && /^u\d+$/i.test(id) ? `u${parseInt(id.slice(1))}` : String(Number(id));
+}
+
+function stringifyMutualIds(ids) {
+  const unique = [];
+  const seen = new Set();
+  for (const id of ids) {
+    const normalized = typeof id === 'string' && /^u\d+$/i.test(id) ? 'u' + parseInt(id.slice(1)) : (Number.isInteger(id) ? id : null);
+    if (normalized === null || seen.has(String(normalized))) continue;
+    seen.add(String(normalized));
+    unique.push(normalized);
+  }
+  return unique.length > 0 ? unique.join(',') : null;
+}
+
+function normalizeTagsForWrite(tags) {
+  const incomingTags = [...(tags.combinable || []), ...(tags.nonCombinable || [])]
+    .filter(tag => tag && !tag.isSystemTag && !tag.isPublicUserTag && tag.name);
+  const validIds = new Set(incomingTags.map(tag => mutualIdKey(tag.id)));
+  const rawTags = incomingTags
+    .filter(tag => !tag.isUserTag)
+    .filter(tag => Number.isInteger(Number(tag.id)) && tag.name);
+
+  const byId = new Map();
+  const adjacency = new Map();
+  for (const tag of rawTags) {
+    const id = Number(tag.id);
+    byId.set(id, {
+      ...tag,
+      id,
+      mutuallyExclusiveIds: parseMutualIds(tag.mutually_exclusive_with).filter(mid => String(mid) !== String(id))
+    });
+    adjacency.set(id, new Set());
+  }
+
+  for (const tag of byId.values()) {
+    tag.mutuallyExclusiveIds = tag.mutuallyExclusiveIds.filter(id => validIds.has(mutualIdKey(id)));
+    for (const targetId of tag.mutuallyExclusiveIds) {
+      if (typeof targetId !== 'number' || !byId.has(targetId)) continue;
+      adjacency.get(tag.id).add(targetId);
+      adjacency.get(targetId).add(tag.id);
+    }
+  }
+
+  const visited = new Set();
+  for (const tag of byId.values()) {
+    if (visited.has(tag.id)) continue;
+
+    const stack = [tag.id];
+    const component = [];
+    visited.add(tag.id);
+
+    while (stack.length > 0) {
+      const currentId = stack.pop();
+      component.push(currentId);
+      for (const nextId of adjacency.get(currentId) || []) {
+        if (visited.has(nextId)) continue;
+        visited.add(nextId);
+        stack.push(nextId);
+      }
+    }
+
+    const externalIds = new Set();
+    for (const memberId of component) {
+      for (const targetId of byId.get(memberId).mutuallyExclusiveIds) {
+        if (typeof targetId === 'string') externalIds.add(targetId);
+      }
+    }
+
+    const sortedComponent = [...component].sort((a, b) => a - b);
+    const sortedExternalIds = [...externalIds].sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+    for (const memberId of component) {
+      const member = byId.get(memberId);
+      const nextIds = [
+        ...sortedComponent.filter(id => id !== memberId),
+        ...sortedExternalIds
+      ];
+      member.mutuallyExclusiveIds = nextIds;
+      if (nextIds.length > 0) member.combinable = false;
+    }
+  }
+
+  return [...byId.values()].map(tag => ({
+    ...tag,
+    mutually_exclusive_with: stringifyMutualIds(tag.mutuallyExclusiveIds)
+  }));
+}
+
 async function writeTags(tags) {
-  const allTags = [...(tags.combinable || []), ...(tags.nonCombinable || [])];
+  const allTags = normalizeTagsForWrite(tags);
 
   // 只更新或插入，不删除（删除通过显式 API 操作）
   for (const tag of allTags) {
@@ -117,8 +226,8 @@ async function readPaths() {
         albumMode: cp.album_mode || 'none',
         albumId: cp.album_id,
         albumName: cp.album_name,
-        tagIds: cp.tag_ids ? JSON.parse(cp.tag_ids) : [],
-        newTagNames: cp.new_tag_names ? JSON.parse(cp.new_tag_names) : []
+        tagIds: parseJsonField(cp.tag_ids, []),
+        newTagNames: parseJsonField(cp.new_tag_names, [])
       }))
     };
   } catch (err) {

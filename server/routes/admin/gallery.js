@@ -81,6 +81,23 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
       newTags: newTags || [],
       userId: req.user.id
     });
+
+    const pathsConfig = await configService.readPaths();
+    const existingPaths = pathsConfig.customPaths || [];
+    const existingIndex = existingPaths.findIndex(cp => cp.path === targetPath);
+    const savedPath = {
+      path: targetPath,
+      recursive: recursive !== false,
+      albumMode: albumName ? 'new' : (finalAlbumId ? 'existing' : 'none'),
+      albumId: finalAlbumId,
+      albumName: albumName || null,
+      tagIds: tagIds || [],
+      newTagNames: newTags || []
+    };
+    if (existingIndex >= 0) existingPaths[existingIndex] = { ...existingPaths[existingIndex], ...savedPath };
+    else existingPaths.push(savedPath);
+    await configService.writePaths({ galleryPaths: [], customPaths: existingPaths });
+
     res.json(result);
   } catch (err) { next(err); }
 });

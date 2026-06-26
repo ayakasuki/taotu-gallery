@@ -121,9 +121,32 @@ const getFilteredTagIds = (tagIds) => (tagIds || []).filter(id => allTags.value.
 const getCombinableTags = (tagIds) => getFilteredTagIds(tagIds).map(id => allTags.value.find(t => t.id === id)).filter(Boolean).filter(t => t.combinable !== false)
 const getNonCombinableTags = (tagIds) => getFilteredTagIds(tagIds).map(id => allTags.value.find(t => t.id === id)).filter(Boolean).filter(t => t.combinable === false)
 const isSelected = (id) => props.selectedTagIds.includes(id)
-const isDisabled = (tag) => tag.mutually_exclusive_with && props.selectedTagIds.includes(tag.mutually_exclusive_with) && !isSelected(tag.id)
+
+const parseMutualIds = (value) => {
+  if (!value) return []
+  return String(value)
+    .split(/[,，.。\s]+/)
+    .map(id => id.trim())
+    .filter(Boolean)
+    .map(id => /^u\d+$/i.test(id) ? `u${parseInt(id.slice(1))}` : (/^\d+$/.test(id) ? Number(id) : null))
+    .filter(id => id !== null)
+}
+
+const mutualIdKey = (id) => /^u\d+$/i.test(String(id)) ? `u${parseInt(String(id).slice(1))}` : String(id)
+const selectedKeys = computed(() => new Set(props.selectedTagIds.map(mutualIdKey)))
+const hasMutualConflict = (tag, keys = selectedKeys.value) => parseMutualIds(tag.mutually_exclusive_with).some(id => keys.has(mutualIdKey(id)))
+const isDisabled = (tag) => hasMutualConflict(tag) && !isSelected(tag.id)
+
+const addSelectableTag = (nextIds, nextKeys, id) => {
+  const tag = allTags.value.find(t => t.id === id)
+  if (!tag || (hasMutualConflict(tag, nextKeys) && !nextKeys.has(mutualIdKey(id)))) return
+  if (!nextIds.includes(id)) nextIds.push(id)
+  nextKeys.add(mutualIdKey(id))
+}
 
 const toggle = (id) => {
+  const tag = allTags.value.find(t => t.id === id)
+  if (tag && isDisabled(tag)) return
   const newIds = [...props.selectedTagIds]
   const idx = newIds.indexOf(id)
   if (idx >= 0) newIds.splice(idx, 1)
@@ -138,8 +161,8 @@ const handleNonCombinable = (tag) => {
   if (idx >= 0) {
     newIds.splice(idx, 1)
   } else {
-    if (tag.mutually_exclusive_with) {
-      const midx = newIds.indexOf(tag.mutually_exclusive_with)
+    for (const mutualId of parseMutualIds(tag.mutually_exclusive_with)) {
+      const midx = newIds.findIndex(id => mutualIdKey(id) === mutualIdKey(mutualId))
       if (midx >= 0) newIds.splice(midx, 1)
     }
     newIds.push(tag.id)
@@ -165,7 +188,10 @@ const toggleGroup = (groupId) => {
   if (isGroupSelected(groupId)) {
     emit('update:selectedTagIds', props.selectedTagIds.filter(id => !groupTagIds.includes(id)))
   } else {
-    emit('update:selectedTagIds', [...new Set([...props.selectedTagIds, ...groupTagIds])])
+    const nextIds = [...props.selectedTagIds]
+    const nextKeys = new Set(nextIds.map(mutualIdKey))
+    for (const id of groupTagIds) addSelectableTag(nextIds, nextKeys, id)
+    emit('update:selectedTagIds', nextIds)
   }
 }
 
@@ -179,7 +205,10 @@ const toggleSubgroup = (sg) => {
   if (isSubgroupSelected(sg)) {
     emit('update:selectedTagIds', props.selectedTagIds.filter(id => !sgTagIds.includes(id)))
   } else {
-    emit('update:selectedTagIds', [...new Set([...props.selectedTagIds, ...sgTagIds])])
+    const nextIds = [...props.selectedTagIds]
+    const nextKeys = new Set(nextIds.map(mutualIdKey))
+    for (const id of sgTagIds) addSelectableTag(nextIds, nextKeys, id)
+    emit('update:selectedTagIds', nextIds)
   }
 }
 

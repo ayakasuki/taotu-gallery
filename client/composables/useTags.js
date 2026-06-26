@@ -23,6 +23,18 @@ export function useTags() {
     return [...(tags.value.combinable || []), ...(tags.value.nonCombinable || [])]
   })
 
+  const parseMutualIds = (value) => {
+    if (!value) return []
+    return String(value)
+      .split(/[,，.。\s]+/)
+      .map(id => id.trim())
+      .filter(Boolean)
+      .map(id => /^u\d+$/i.test(id) ? `u${parseInt(id.slice(1))}` : (/^\d+$/.test(id) ? Number(id) : null))
+      .filter(id => id !== null)
+  }
+
+  const mutualIdKey = (id) => /^u\d+$/i.test(String(id)) ? `u${parseInt(String(id).slice(1))}` : String(id)
+
   // 切换标签选择（处理互斥逻辑）
   const toggleTag = (tagId) => {
     const tag = allTags.value.find(t => t.id === tagId)
@@ -35,7 +47,8 @@ export function useTags() {
     } else {
       // 不可组合标签互斥检查
       if (!tag.combinable && tag.mutually_exclusive_with) {
-        selectedTagIds.value = selectedTagIds.value.filter(id => id !== tag.mutually_exclusive_with)
+        const mutualKeys = new Set(parseMutualIds(tag.mutually_exclusive_with).map(mutualIdKey))
+        selectedTagIds.value = selectedTagIds.value.filter(id => !mutualKeys.has(mutualIdKey(id)))
       }
       selectedTagIds.value = [...selectedTagIds.value, tagId]
     }

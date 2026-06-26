@@ -25,13 +25,87 @@ router.post('/', authMiddleware, async (req, res, next) => {
       user_id: req.user.id,
       name,
       display_name: display_name || name,
-      combinable: combinable !== false
+      combinable: combinable !== false,
+      is_public: false
     });
     res.json({ id, name, display_name: display_name || name, combinable: combinable !== false });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: '标签名已存在' });
     next(err);
   }
+});
+
+// 批量管理当前用户图片上的私有标签
+router.post('/apply', authMiddleware, async (req, res, next) => {
+  try {
+    const { imageIds, tagIds = [], mode = 'add' } = req.body;
+    if (!Array.isArray(imageIds) || imageIds.length === 0) {
+      return res.status(400).json({ error: '请选择图片' });
+    }
+
+    const uniqueImageIds = [...new Set(imageIds.map(id => parseInt(id)).filter(Boolean))];
+    const rawTagIds = Array.isArray(tagIds) ? tagIds : [];
+    const userTagIds = rawTagIds
+      .map(id => typeof id === 'string' && id.startsWith('u') ? parseInt(id.substring(1)) : parseInt(id))
+      .filter(Boolean);
+
+    const ownedCountRow = await db('images')
+      .whereIn('id', uniqueImageIds)
+      .andWhere({ uploader_id: req.user.id })
+      .count('* as count')
+      .first();
+    if (Number(ownedCountRow.count) !== uniqueImageIds.length) {
+      return res.status(403).json({ error: '只能管理自己的图片' });
+    }
+
+    let validTagIds = [];
+    if (userTagIds.length > 0) {
+      const ownedTags = await db('user_tags')
+        .where({ user_id: req.user.id })
+        .whereIn('id', [...new Set(userTagIds)])
+        .select('id');
+      validTagIds = ownedTags.map(tag => tag.id);
+      if (validTagIds.length !== new Set(userTagIds).size) {
+        return res.status(403).json({ error: '包含无权使用的私有标签' });
+      }
+    }
+
+    if ((mode === 'add' || mode === 'remove') && validTagIds.length === 0) {
+      return res.status(400).json({ error: '请选择私有标签' });
+    }
+
+    if (mode === 'replace' || mode === 'clear') {
+      await db('image_tags')
+        .whereIn('image_id', uniqueImageIds)
+        .andWhere({ tag_user_id: req.user.id })
+        .whereNotNull('user_tag_id')
+        .del();
+    }
+
+    if (mode === 'remove') {
+      await db('image_tags')
+        .whereIn('image_id', uniqueImageIds)
+        .whereIn('user_tag_id', validTagIds)
+        .andWhere({ tag_user_id: req.user.id })
+        .del();
+    }
+
+    if (mode === 'add' || mode === 'replace') {
+      for (const imageId of uniqueImageIds) {
+        for (const tagId of validTagIds) {
+          await db('image_tags').insert({
+            image_id: imageId,
+            tag_id: -tagId,
+            source: 'manual',
+            user_tag_id: tagId,
+            tag_user_id: req.user.id
+          }).onConflict(['image_id', 'tag_id']).ignore();
+        }
+      }
+    }
+
+    res.json({ message: '私有标签已更新', imageCount: uniqueImageIds.length, tagCount: validTagIds.length, mode });
+  } catch (err) { next(err); }
 });
 
 // 更新私有标签

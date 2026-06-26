@@ -25,7 +25,7 @@
             <span class="path-meta">
               {{ cp.recursive ? '递归子目录' : '仅当前目录' }}
               <span v-if="cp.albumName"> · 相册: {{ cp.albumName }}</span>
-              <span v-if="cp.tagNames && cp.tagNames.length > 0"> · 标签: {{ cp.tagNames.join(', ') }}</span>
+              <span v-if="getPathTagNames(cp).length > 0"> · 标签: {{ getPathTagNames(cp).join(', ') }}</span>
             </span>
           </div>
           <div class="path-actions">
@@ -158,6 +158,13 @@ const loadTags = async () => {
     const data = await api.get('/api/admin/tags')
     allTags.value = [...(data.combinable || []), ...(data.nonCombinable || [])]
   } catch {}
+}
+
+const getPathTagNames = (cp) => {
+  const selectedNames = allTags.value
+    .filter(t => (cp.tagIds || []).includes(t.id))
+    .map(t => t.display_name || t.name)
+  return selectedNames.concat(cp.newTagNames || cp.tagNames || [])
 }
 
 const addNewTagToPath = () => {

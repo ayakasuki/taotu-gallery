@@ -23,6 +23,13 @@ router.get('/', async (req, res, next) => {
     const userId = user?.id || null;
     const isAdmin = user?.role === 'admin';
     const groupData = await configService.readTagGroups();
+    const systemGroup = {
+      id: '__system',
+      name: '系统分组',
+      system: true,
+      tagIds: ['__untagged', '__tagged'],
+      subgroups: []
+    };
 
     // 获取可见标签 ID 集合
     let visibleTagIds;
@@ -70,7 +77,7 @@ router.get('/', async (req, res, next) => {
       }))
     }));
 
-    res.json({ groups: filteredGroups });
+    res.json({ groups: [systemGroup, ...filteredGroups] });
   } catch (err) { next(err); }
 });
 

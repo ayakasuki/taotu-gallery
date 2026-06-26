@@ -54,12 +54,18 @@ const allTags = computed(() => {
 
 const isSelected = (tagId) => props.selectedTagIds.includes(tagId)
 
+const getMutualIds = (tag) => {
+  if (!tag.mutually_exclusive_with) return []
+  return String(tag.mutually_exclusive_with)
+    .split(/[,，.。\s]+/)
+    .map(id => id.trim())
+    .filter(Boolean)
+    .map(id => /^u\d+$/i.test(id) ? 'u' + parseInt(id.slice(1)) : (/^\d+$/.test(id) ? Number(id) : null))
+    .filter(id => id !== null)
+}
+
 const isDisabled = (tag) => {
-  // 如果互斥标签已被选中，则禁用此标签
-  if (tag.mutually_exclusive_with) {
-    return props.selectedTagIds.includes(tag.mutually_exclusive_with) && !isSelected(tag.id)
-  }
-  return false
+  return getMutualIds(tag).some(id => props.selectedTagIds.includes(id)) && !isSelected(tag.id)
 }
 
 const toggleTag = (tagId) => {
@@ -84,8 +90,8 @@ const handleNonCombinableClick = (tag) => {
     newSelection.splice(idx, 1)
   } else {
     // 选择时移除互斥标签
-    if (tag.mutually_exclusive_with) {
-      const conflictIdx = newSelection.indexOf(tag.mutually_exclusive_with)
+    for (const mutualId of getMutualIds(tag)) {
+      const conflictIdx = newSelection.indexOf(mutualId)
       if (conflictIdx >= 0) newSelection.splice(conflictIdx, 1)
     }
     newSelection.push(tag.id)

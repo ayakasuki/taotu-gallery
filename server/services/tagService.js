@@ -26,20 +26,31 @@ async function getTagByName(name) {
   return allTags.find(t => t.name === name);
 }
 
+function parseMutualIds(value) {
+  if (value === null || value === undefined || value === '') return [];
+  const values = Array.isArray(value) ? value : String(value).split(/[,，.。\s]+/);
+  return values
+    .map(part => String(part).trim())
+    .filter(Boolean)
+    .map(part => /^u\d+$/i.test(part) ? 'u' + parseInt(part.slice(1)) : (/^\d+$/.test(part) ? parseInt(part) : null))
+    .filter(id => id !== null);
+}
+
 // 校验不可组合标签冲突
 function validateNonCombinableConflict(tagIds, allTags) {
   const selectedTags = tagIds.map(id => allTags.find(t => t.id === id)).filter(Boolean);
+  const selectedIds = new Set(selectedTags.map(tag => tag.id));
   const nonCombinable = selectedTags.filter(t => !t.combinable);
 
-  for (let i = 0; i < nonCombinable.length; i++) {
-    for (let j = i + 1; j < nonCombinable.length; j++) {
-      if (nonCombinable[i].mutually_exclusive_with === nonCombinable[j].id) {
-        return {
-          valid: false,
-          error: `标签 "${nonCombinable[i].name}" 与 "${nonCombinable[j].name}" 互斥，不可同时选择`,
-          conflictTags: [nonCombinable[i], nonCombinable[j]]
-        };
-      }
+  for (const tag of nonCombinable) {
+    const conflictId = parseMutualIds(tag.mutually_exclusive_with).find(id => selectedIds.has(id));
+    if (conflictId) {
+      const conflictTag = selectedTags.find(t => t.id === conflictId);
+      return {
+        valid: false,
+        error: "标签 \"" + tag.name + "\" 与 \"" + (conflictTag?.name || conflictId) + "\" 互斥，不可同时选择",
+        conflictTags: [tag, conflictTag].filter(Boolean)
+      };
     }
   }
   return { valid: true };
@@ -51,9 +62,24 @@ async function setImageTags(imageId, tagIds, source, sourceDetail = null, userId
   const publicTagIds = tagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
   const userTagIds = tagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
 
-  // 如果是覆盖式，先删除该来源的旧标签
+  // 如果是覆盖式，先删除该来源的旧标签。人工标签里公共标签和用户私有标签分开维护，避免管理员保存公共标签时误删用户私有标签。
   if (source && source !== 'append') {
-    await db('image_tags').where({ image_id: imageId, source }).del();
+    if (source === 'manual') {
+      if (publicTagIds.length > 0 || userTagIds.length === 0) {
+        await db('image_tags')
+          .where({ image_id: imageId, source })
+          .whereNull('user_tag_id')
+          .del();
+      }
+      if (userTagIds.length > 0 && userId) {
+        await db('image_tags')
+          .where({ image_id: imageId, source, tag_user_id: userId })
+          .whereNotNull('user_tag_id')
+          .del();
+      }
+    } else {
+      await db('image_tags').where({ image_id: imageId, source }).del();
+    }
   }
 
   // 插入公共标签
@@ -75,7 +101,7 @@ async function setImageTags(imageId, tagIds, source, sourceDetail = null, userId
     try {
       await db('image_tags').insert({
         image_id: imageId,
-        tag_id: 0,
+        tag_id: -userTagId,
         source: 'manual',
         user_tag_id: userTagId,
         tag_user_id: userId
@@ -170,6 +196,7 @@ module.exports = {
   getTagById,
   getTagByName,
   validateNonCombinableConflict,
+  parseMutualIds,
   setImageTags,
   setAlbumTags,
   deleteTagsBySource,

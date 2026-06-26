@@ -6,6 +6,34 @@
 const db = require('../db');
 const configService = require('./configService');
 const logger = require('../config/logger');
+const { calculateOrientation } = require('../utils/imageProcessor');
+
+function parseConditionConfig(condition) {
+  if (!condition.config) return {};
+  if (typeof condition.config === 'object') return condition.config;
+  try { return JSON.parse(condition.config); } catch { return {}; }
+}
+
+function normalizeCondition(condition) {
+  return { ...condition, config: parseConditionConfig(condition) };
+}
+
+function resolveConditionTagName(condition) {
+  return `cond_${condition.type}_${condition.name}`;
+}
+
+async function insertConditionTag(imageId, condition) {
+  const tagName = resolveConditionTagName(condition);
+  const tag = await db('tags').where({ name: tagName }).first();
+  if (!tag) return false;
+  await db('image_tags').insert({
+    image_id: imageId,
+    tag_id: tag.id,
+    source: 'condition',
+    source_detail: `condition_${condition.id}`
+  }).onConflict(['image_id', 'tag_id']).ignore();
+  return true;
+}
 
 // 条件类型处理器
 const conditionHandlers = {
@@ -30,18 +58,18 @@ const conditionHandlers = {
     return image.width >= minPixels || image.height >= minPixels;
   },
 
-  // 横竖图条件
+  // 横竖正方图条件：按像素重新计算，0.9-1.1 视为正方图，三者严格互斥
   orientation: (image, condition) => {
-    if (!image.orientation) return false;
-    return image.orientation === condition.config.type;
+    if (!image.width || !image.height) return false;
+    return calculateOrientation(image.width, image.height) === condition.config.type;
   },
 
   // 横竖比条件（锁定为 1:1，筛选正方形）
   aspect_ratio: (image, condition) => {
     if (!image.width || !image.height) return false;
     const ratio = image.width / image.height;
-    const min = condition.config.min || 0.95;
-    const max = condition.config.max || 1.05;
+    const min = condition.config.min || 0.9;
+    const max = condition.config.max || 1.1;
     return ratio >= min && ratio <= max;
   },
 
@@ -55,7 +83,7 @@ async function tagImageByConditions(imageId, conditionIds = null) {
   if (!image) return [];
 
   let conditions = await configService.readConditions();
-  conditions = conditions.filter(c => c.is_enabled !== false);
+  conditions = conditions.map(normalizeCondition).filter(c => c.is_enabled !== false);
 
   if (conditionIds) {
     conditions = conditions.filter(c => conditionIds.includes(c.id));
@@ -104,17 +132,7 @@ async function tagImagesByConditions(imageIds = null, conditionIds = null, overw
     if (matchedConditions.length > 0) {
       for (const cond of matchedConditions) {
         try {
-          // 查找条件对应的标签 ID（在 tags 表中）
-          const tagName = `cond_${cond.type}_${cond.name}`;
-          const tag = await db('tags').where({ name: tagName }).first();
-          if (tag) {
-            await db('image_tags').insert({
-              image_id: image.id,
-              tag_id: tag.id,
-              source: 'condition',
-              source_detail: `condition_${cond.id}`
-            }).onConflict(['image_id', 'tag_id']).ignore();
-          }
+          await insertConditionTag(image.id, cond);
         } catch (err) {
           // 忽略重复
         }
@@ -138,5 +156,7 @@ module.exports = {
   tagImageByConditions,
   tagImagesByConditions,
   deleteAllConditionTags,
-  conditionHandlers
+  conditionHandlers,
+  insertConditionTag,
+  calculateOrientation
 };

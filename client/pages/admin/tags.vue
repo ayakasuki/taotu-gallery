@@ -48,9 +48,9 @@
           <div class="form-group">
             <label><input type="checkbox" v-model="tagForm.combinable" /> 可组合标签（取消勾选则为互斥标签）</label>
           </div>
-          <div class="form-group" v-if="!tagForm.combinable">
-            <label>互斥标签 ID（选填）</label>
-            <input v-model.number="tagForm.mutually_exclusive_with" type="number" class="fluent-input" placeholder="与之互斥的标签 ID" />
+          <div class="form-group">
+            <label>互斥标签 ID（选填，多个用英文逗号分隔）</label>
+            <input v-model="tagForm.mutually_exclusive_with" class="fluent-input" placeholder="例如：12,18" />
           </div>
           <div class="modal-actions">
             <button class="fluent-btn fluent-btn-primary" @click="saveTag">保存</button>
@@ -66,13 +66,23 @@
       <p class="desc">选择图片后，为它们批量打标签</p>
 
       <!-- 筛选工具栏 -->
-      <div class="toolbar">
-        <select v-model="manualSort" class="fluent-select" @change="loadManualImages">
+      <div class="manual-filters">
+        <div class="source-toggle">
+          <button class="source-btn" :class="{ active: manualSource === 'all' }" @click="switchManualSource('all')">全部</button>
+          <button class="source-btn" :class="{ active: manualSource === 'public' }" @click="switchManualSource('public')">公共图库</button>
+          <button class="source-btn" :class="{ active: manualSource === 'mine' }" @click="switchManualSource('mine')">我的图库</button>
+          <button class="source-btn" :class="{ active: manualSource === 'user' }" @click="switchManualSource('user')">用户图库</button>
+        </div>
+        <select v-if="manualSource === 'user'" v-model="manualUserId" class="fluent-select" @change="reloadManualContext">
+          <option :value="null">选择用户</option>
+          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
+        </select>
+        <select v-model="manualSort" class="fluent-select" @change="loadManualImages()">
           <option value="created_at">最新</option>
           <option value="view_count">最热门</option>
         </select>
-        <select v-model="manualAlbum" class="fluent-select" @change="loadManualImages">
-          <option :value="null">全部相册</option>
+        <select v-model="manualAlbum" class="fluent-select album-filter" @change="loadManualImages()">
+          <option :value="null">{{ albumPlaceholder }}</option>
           <option v-for="a in albums" :key="a.id" :value="a.id">{{ a.name }}</option>
         </select>
         <span class="selected-count">已选 {{ manualSelected.length }} 张</span>
@@ -238,11 +248,11 @@ const tabs = [
 // 标签管理
 const showTagModal = ref(false)
 const editingTag = ref(null)
-const tagForm = reactive({ name: '', display_name: '', combinable: true, mutually_exclusive_with: null })
+const tagForm = reactive({ name: '', display_name: '', combinable: true, mutually_exclusive_with: '' })
 
 const openAddTag = () => {
   editingTag.value = null
-  tagForm.name = ''; tagForm.display_name = ''; tagForm.combinable = true; tagForm.mutually_exclusive_with = null
+  tagForm.name = ''; tagForm.display_name = ''; tagForm.combinable = true; tagForm.mutually_exclusive_with = ''
   showTagModal.value = true
 }
 
@@ -251,7 +261,7 @@ const openEditTag = (tag) => {
   tagForm.name = tag.name
   tagForm.display_name = tag.display_name || ''
   tagForm.combinable = tag.combinable !== false
-  tagForm.mutually_exclusive_with = tag.mutually_exclusive_with || null
+  tagForm.mutually_exclusive_with = tag.mutually_exclusive_with || ''
   showTagModal.value = true
 }
 
@@ -261,51 +271,139 @@ const isTagPublic = (tag) => {
   return !!tag.is_public
 }
 
+const parseMutualInput = (value) => {
+  if (!value) return []
+  return String(value)
+    .split(/[,，.。\s]+/)
+    .map(id => id.trim())
+    .filter(Boolean)
+    .map(id => /^u\d+$/i.test(id) ? 'u' + parseInt(id.slice(1)) : (/^\d+$/.test(id) ? Number(id) : null))
+    .filter(id => id !== null)
+}
+
+const mutualIdKey = (id) => /^u\d+$/i.test(String(id)) ? `u${parseInt(String(id).slice(1))}` : String(Number(id))
+
+const stringifyMutualInput = (ids) => {
+  const seen = new Set()
+  const normalized = []
+  for (const id of ids) {
+    const value = /^u\d+$/i.test(String(id)) ? `u${parseInt(String(id).slice(1))}` : Number(id)
+    if ((typeof value === 'number' && !Number.isInteger(value)) || seen.has(String(value))) continue
+    seen.add(String(value))
+    normalized.push(value)
+  }
+  return normalized.join(',')
+}
+
+const normalizeMutualList = (value, selfId, validIds) => {
+  const selfKey = mutualIdKey(selfId)
+  return parseMutualInput(value)
+    .filter(id => mutualIdKey(id) !== selfKey && validIds.has(mutualIdKey(id)))
+}
+
+const applyMutualPairs = (all, tagId) => {
+  const publicTags = all.filter(tag => typeof tag.id === 'number')
+  const byId = new Map(publicTags.map(tag => [tag.id, tag]))
+  const validIds = new Set(all.map(tag => mutualIdKey(tag.id)))
+  const editedTag = byId.get(tagId)
+
+  if (editedTag && editedTag.combinable !== false && normalizeMutualList(editedTag.mutually_exclusive_with, editedTag.id, validIds).length === 0) {
+    for (const tag of publicTags) {
+      if (tag.id === editedTag.id) continue
+      tag.mutually_exclusive_with = stringifyMutualInput(
+        normalizeMutualList(tag.mutually_exclusive_with, tag.id, validIds)
+          .filter(id => mutualIdKey(id) !== mutualIdKey(editedTag.id))
+      )
+    }
+  }
+
+  const adjacency = new Map(publicTags.map(tag => [tag.id, new Set()]))
+  for (const tag of publicTags) {
+    tag.mutualIds = normalizeMutualList(tag.mutually_exclusive_with, tag.id, validIds)
+    for (const targetId of tag.mutualIds) {
+      if (typeof targetId !== 'number' || !byId.has(targetId)) continue
+      adjacency.get(tag.id).add(targetId)
+      adjacency.get(targetId).add(tag.id)
+    }
+  }
+
+  const visited = new Set()
+  for (const tag of publicTags) {
+    if (visited.has(tag.id)) continue
+    const stack = [tag.id]
+    const component = []
+    visited.add(tag.id)
+
+    while (stack.length > 0) {
+      const currentId = stack.pop()
+      component.push(currentId)
+      for (const nextId of adjacency.get(currentId) || []) {
+        if (visited.has(nextId)) continue
+        visited.add(nextId)
+        stack.push(nextId)
+      }
+    }
+
+    const userTargets = new Set()
+    for (const memberId of component) {
+      for (const targetId of byId.get(memberId).mutualIds) {
+        if (typeof targetId === 'string') userTargets.add(targetId)
+      }
+    }
+
+    const sortedComponent = [...component].sort((a, b) => a - b)
+    const sortedUserTargets = [...userTargets].sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)))
+    for (const memberId of component) {
+      const tag = byId.get(memberId)
+      const nextIds = [...sortedComponent.filter(id => id !== memberId), ...sortedUserTargets]
+      tag.mutually_exclusive_with = stringifyMutualInput(nextIds)
+      if (nextIds.length > 0) tag.combinable = false
+      delete tag.mutualIds
+    }
+  }
+
+  for (const tag of all) {
+    if (tag.mutualIds) delete tag.mutualIds
+  }
+}
+
+const isTagUsableForMutual = (tag) => tag && !tag.isSystemTag && !tag.isPublicUserTag && (typeof tag.id === 'number' || tag.isUserTag)
+
 const saveTag = async () => {
   try {
     const currentTags = JSON.parse(JSON.stringify(tags.value))
+    currentTags.combinable = (currentTags.combinable || []).filter(isTagUsableForMutual)
+    currentTags.nonCombinable = (currentTags.nonCombinable || []).filter(isTagUsableForMutual)
+    let savedTagId = editingTag.value?.id || null
+
     if (editingTag.value) {
-      // 编辑：在对应数组中找到并更新
-      const list = currentTags.combinable || []
-      const ncList = currentTags.nonCombinable || []
-      let found = list.find(t => t.id === editingTag.value.id)
+      const all = [...currentTags.combinable, ...currentTags.nonCombinable]
+      const found = all.find(t => t.id === editingTag.value.id)
       if (found) {
         found.display_name = tagForm.display_name
         found.combinable = tagForm.combinable
         found.mutually_exclusive_with = tagForm.mutually_exclusive_with
-      } else {
-        found = ncList.find(t => t.id === editingTag.value.id)
-        if (found) {
-          found.display_name = tagForm.display_name
-          found.combinable = tagForm.combinable
-          found.mutually_exclusive_with = tagForm.mutually_exclusive_with
-        }
       }
-      // 如果可组合性变了，需要移动到不同数组
-      // 简化处理：重新分类
-      const all = [...(currentTags.combinable || []), ...(currentTags.nonCombinable || [])]
+      applyMutualPairs(all, savedTagId)
       currentTags.combinable = all.filter(t => t.combinable !== false)
       currentTags.nonCombinable = all.filter(t => t.combinable === false)
     } else {
-      // 添加新标签 — 确保 ID 不与已有标签冲突
-      const allExisting = [...(currentTags.combinable || []), ...(currentTags.nonCombinable || [])];
-      const maxId = allExisting.reduce((max, t) => Math.max(max, typeof t.id === 'number' ? t.id : 0), 0);
-      const newId = Math.max(maxId + 1, currentTags.nextId || 1);
-      currentTags.nextId = newId + 1;
-
-      const newTag = { id: newId, name: tagForm.name, display_name: tagForm.display_name, combinable: tagForm.combinable, mutually_exclusive_with: tagForm.mutually_exclusive_with }
-      if (tagForm.combinable) {
-        if (!currentTags.combinable) currentTags.combinable = []
-        currentTags.combinable.push(newTag)
-      } else {
-        if (!currentTags.nonCombinable) currentTags.nonCombinable = []
-        currentTags.nonCombinable.push(newTag)
-      }
+      if (!tagForm.name.trim()) return alert('请输入标签名称')
+      const allExisting = [...currentTags.combinable, ...currentTags.nonCombinable]
+      const maxId = allExisting.reduce((max, t) => Math.max(max, typeof t.id === 'number' ? t.id : 0), 0)
+      const newId = Math.max(maxId + 1, currentTags.nextId || 1)
+      currentTags.nextId = newId + 1
+      savedTagId = newId
+      const newTag = { id: newId, name: tagForm.name.trim(), display_name: tagForm.display_name || tagForm.name.trim(), combinable: tagForm.combinable, mutually_exclusive_with: tagForm.mutually_exclusive_with }
+      allExisting.push(newTag)
+      applyMutualPairs(allExisting, savedTagId)
+      currentTags.combinable = allExisting.filter(t => t.combinable !== false)
+      currentTags.nonCombinable = allExisting.filter(t => t.combinable === false)
     }
     await api.post('/api/admin/tags', currentTags)
     await fetchTags()
     closeTagModal()
-  } catch (err) { alert('操作失败: ' + err.message) }
+  } catch (err) { alert('操作失败: ' + (err.data?.error || err.message)) }
 }
 
 const deleteTag = async (tag) => {
@@ -344,23 +442,62 @@ const manualTotal = ref(0)
 const manualPage = ref(1)
 const manualSort = ref('created_at')
 const manualAlbum = ref(null)
+const manualSource = ref('all')
+const manualUserId = ref(null)
 const manualSelected = ref([])
 const manualTagIds = ref([])
 const manualOverwrite = ref(false)
 const manualLoading = ref(false)
 const manualResult = ref('')
 const albums = ref([])
+const users = ref([])
+
+const manualScopeParams = () => {
+  const params = {}
+  if (manualSource.value === 'public') params.public = 'true'
+  else if (manualSource.value === 'mine') params.mine = 'true'
+  else if (manualSource.value === 'user' && manualUserId.value) params.userId = manualUserId.value
+  return params
+}
+
+const albumPlaceholder = computed(() => {
+  if (manualSource.value === 'public') return '全部公共相册'
+  if (manualSource.value === 'mine') return '我的全部相册'
+  if (manualSource.value === 'user') return manualUserId.value ? '该用户全部相册' : '先选择用户'
+  return '全部相册'
+})
+
+const loadManualAlbums = async () => {
+  try {
+    const data = await api.get('/api/internal/albums', { limit: 200, ...manualScopeParams() })
+    albums.value = data.albums || []
+  } catch { albums.value = [] }
+}
 
 const loadManualImages = async (p = 1) => {
   manualPage.value = p
   try {
     const data = await api.get('/api/internal/images', {
       page: p, limit: 10, sort: manualSort.value, order: 'desc',
-      album: manualAlbum.value || undefined
+      album: manualAlbum.value || undefined,
+      ...manualScopeParams()
     })
     manualImages.value = data.images || []
     manualTotal.value = data.total || 0
   } catch {}
+}
+
+const reloadManualContext = async () => {
+  manualAlbum.value = null
+  manualSelected.value = []
+  await loadManualAlbums()
+  await loadManualImages(1)
+}
+
+const switchManualSource = (source) => {
+  manualSource.value = source
+  if (source !== 'user') manualUserId.value = null
+  reloadManualContext()
 }
 
 const toggleManualSelect = (id) => {
@@ -400,10 +537,11 @@ const saveTagConfig = async () => {
 
 onMounted(async () => {
   await fetchAdminTags()
+  await loadManualAlbums()
   await loadManualImages()
   try {
-    const aData = await api.get('/api/internal/albums')
-    albums.value = aData.albums || []
+    const uData = await api.get('/api/admin/users')
+    users.value = uData.users || []
     const sData = await api.get('/api/admin/site-config')
     tagConfig.delayMinutes = sData.tagDelayMinutes || 5
     tagConfig.diffThreshold = sData.tagDiffThreshold || 0.5
@@ -516,17 +654,21 @@ const deleteSubgroup = async (group, sg) => {
 .row-actions { display: flex; gap: 6px; }
 .empty-msg { text-align: center; padding: var(--space-xl); color: var(--fluent-text-secondary); }
 .desc { color: var(--fluent-text-secondary); margin-bottom: var(--space-lg); }
-.toolbar { display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-lg); }
+.manual-filters { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+.source-toggle { display: flex; gap: 2px; background: var(--fluent-hover); border-radius: var(--radius-sm); padding: 2px; }
+.source-btn { padding: 5px 12px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; color: var(--fluent-text-secondary); }
+.source-btn.active { background: white; box-shadow: var(--shadow-1); font-weight: 500; color: var(--fluent-blue); }
+.album-filter { min-width: 180px; }
 .fluent-select { padding: 6px 12px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 13px; background: white; }
 .selected-count { font-size: 13px; color: var(--fluent-text-secondary); margin-left: auto; }
-.image-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-md); }
-.image-card { cursor: pointer; border: 2px solid transparent; border-radius: var(--radius-md); padding: var(--space-sm); transition: all var(--transition-fast); }
+.image-grid { display: grid; grid-template-columns: repeat(auto-fill, 200px); gap: var(--space-md); align-items: start; }
+.image-card { width: 200px; cursor: pointer; border: 2px solid transparent; border-radius: var(--radius-md); padding: var(--space-sm); transition: all var(--transition-fast); box-sizing: border-box; }
 .image-card:hover { border-color: var(--fluent-border); }
 .image-card.selected { border-color: var(--fluent-blue); background: var(--fluent-blue-light); }
-.card-thumb { position: relative; aspect-ratio: 1; border-radius: var(--radius-sm); overflow: hidden; background: var(--fluent-hover); }
-.card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.card-thumb { width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; background: var(--fluent-hover); border-radius: var(--radius-sm); overflow: hidden; position: relative; }
+.card-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
 .check-mark { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: var(--fluent-blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
-.card-name { font-size: 12px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-name { width: 200px; margin-top: var(--space-xs); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-md); padding: var(--space-lg) 0; font-size: 13px; color: var(--fluent-text-secondary); }
 .manual-action { margin-top: var(--space-xl); padding-top: var(--space-xl); border-top: 1px solid var(--fluent-border); }
 .form-group { margin-bottom: var(--space-lg); }

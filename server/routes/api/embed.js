@@ -10,6 +10,7 @@ const imageService = require('../../services/imageService');
 const albumService = require('../../services/albumService');
 const db = require('../../db');
 const jwt = require('jsonwebtoken');
+const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConflict');
 
 const router = express.Router();
 
@@ -33,7 +34,8 @@ router.get('/image', async (req, res, next) => {
     let image;
 
     if (random !== undefined) {
-      const tagIds = tags ? tags.split(',').map(Number) : null;
+      const tagIds = parseTagIds(tags);
+      await assertNoTagFilterConflict(tagIds);
       const images = await imageService.getRandomImages({ count: 1, tagIds, userId, publicOnly: !userId });
       image = images[0];
     } else if (id) {
@@ -46,7 +48,7 @@ router.get('/image', async (req, res, next) => {
 
     if (!image) return res.status(404).json({ error: '图片不存在' });
 
-    const baseUrl = imageService.getPublicBaseUrl();
+    const baseUrl = await imageService.getPublicBaseUrl();
     const embedCodes = imageService.generateEmbedCodes(baseUrl, image);
     const sizeCodes = embedCodes[size] || embedCodes.full;
     const embed = sizeCodes[format] || sizeCodes.source;
@@ -66,7 +68,8 @@ router.get('/album', async (req, res, next) => {
     let album;
 
     if (random !== undefined) {
-      const tagIds = tags ? tags.split(',').map(Number) : null;
+      const tagIds = parseTagIds(tags);
+      await assertNoTagFilterConflict(tagIds);
       const albums = await albumService.getRandomAlbums(1, tagIds, userId, !userId);
       album = albums[0];
     } else if (id) {
@@ -81,7 +84,7 @@ router.get('/album', async (req, res, next) => {
 
     if (!album) return res.status(404).json({ error: '相册不存在' });
 
-    const baseUrl = imageService.getPublicBaseUrl();
+    const baseUrl = await imageService.getPublicBaseUrl();
     let image;
     if (mode === 'random' && album.images && album.images.length > 0) {
       image = album.images[Math.floor(Math.random() * album.images.length)];

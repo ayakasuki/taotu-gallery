@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const imageService = require('../../services/imageService');
 const db = require('../../db');
+const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConflict');
 
 const router = express.Router();
 
@@ -47,7 +48,8 @@ async function resolveUserId(req) {
 router.get('/', async (req, res, next) => {
   try {
     const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnlyParam, userId: targetUserId } = req.query;
-    const tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : null;
+    const tagIds = parseTagIds(tags);
+    await assertNoTagFilterConflict(tagIds);
     const userId = await resolveUserId(req);
 
     let isAdmin = false;
@@ -82,7 +84,7 @@ router.get('/', async (req, res, next) => {
 router.get('/random', async (req, res, next) => {
   try {
     const { count, tags, album, orientation, pic, tag_g, sid } = req.query;
-    let tagIds = tags ? tags.split(',').map(id => id.startsWith('u') ? id : Number(id)) : [];
+    let tagIds = parseTagIds(tags) || [];
     const requestedCount = parseInt(count) || 1;
     const useMedium = pic === 'md';
     const userId = await resolveUserId(req);
@@ -124,6 +126,7 @@ router.get('/random', async (req, res, next) => {
 
     // 去重
     tagIds = [...new Set(tagIds)];
+    await assertNoTagFilterConflict(tagIds);
 
     const images = await imageService.getRandomImages({
       count: requestedCount,

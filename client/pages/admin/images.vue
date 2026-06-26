@@ -26,9 +26,19 @@
               <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
             </select>
           </div>
+          <select v-model="filterAlbumId" class="user-select album-select" @change="loadImages()">
+            <option :value="null">全部相册</option>
+            <option v-for="album in albums" :key="album.id" :value="album.id">{{ album.name }}</option>
+          </select>
           <input v-model="search" class="fluent-input search-input" placeholder="搜索文件名..." @keyup.enter="loadImages" />
+          <button class="fluent-btn fluent-btn-secondary" @click="showMoreFilters = !showMoreFilters">更多</button>
           <button class="fluent-btn fluent-btn-secondary" @click="loadImages">搜索</button>
         </div>
+      </div>
+
+      <div v-if="showMoreFilters" class="more-filters">
+        <label>标签筛选</label>
+        <TagSelector :tags="tags" :selectedTagIds="filterTagIds" @update:selectedTagIds="filterTagIds = $event; loadImages()" />
       </div>
 
       <!-- 批量操作栏 -->
@@ -74,7 +84,7 @@
     </div>
 
     <!-- 编辑图片弹窗 -->
-    <div v-if="editingImage" class="modal-overlay" @click.self="editingImage = null">
+    <div v-if="editingImage" class="modal-overlay" @click.self="closeEdit">
       <div class="modal fluent-card">
         <h3>编辑图片</h3>
         <div class="edit-preview">
@@ -86,11 +96,20 @@
         </div>
         <div class="form-group">
           <label>标签（选择要应用的标签）</label>
-          <TagSelector :tags="tags" :selectedTagIds="editTagIds" @update:selectedTagIds="editTagIds = $event" />
+          <TagSelector :tags="editablePlatformTags" :selectedTagIds="editTagIds" @update:selectedTagIds="editTagIds = $event" />
+        </div>
+        <div class="form-group" v-if="editUserTagOwnerId">
+          <div class="label-row">
+            <label>用户私有标签</label>
+            <select class="user-tag-select" disabled>
+              <option>{{ editUserTagOwnerName }} 的私有标签</option>
+            </select>
+          </div>
+          <TagSelector :tags="editUserTagOptions" :selectedTagIds="editUserTagIds" @update:selectedTagIds="editUserTagIds = $event" />
         </div>
         <div class="modal-actions">
           <button class="fluent-btn fluent-btn-primary" @click="saveEdit">保存</button>
-          <button class="fluent-btn fluent-btn-secondary" @click="editingImage = null">取消</button>
+          <button class="fluent-btn fluent-btn-secondary" @click="closeEdit">取消</button>
         </div>
       </div>
     </div>
@@ -113,9 +132,24 @@ const loading = ref(false)
 const search = ref('')
 const editingImage = ref(null)
 const editTagIds = ref([])
+const editUserTagIds = ref([])
+const editUserTagOwnerId = ref(null)
+const editUserTagOwnerName = ref('用户')
+const editUserTagOptions = ref({ combinable: [], nonCombinable: [] })
+const editablePlatformTags = computed(() => {
+  const keepPlatformTag = tag => !(tag.isSystemTag || tag.isUserTag || tag.isPublicUserTag || (typeof tag.id === 'string' && (tag.id.startsWith('u') || tag.id.startsWith('__'))))
+  return {
+    combinable: (tags.value.combinable || []).filter(keepPlatformTag),
+    nonCombinable: (tags.value.nonCombinable || []).filter(keepPlatformTag)
+  }
+})
 const imgSource = ref('all')
 const filterUserId = ref(null)
 const users = ref([])
+const albums = ref([])
+const filterAlbumId = ref(null)
+const filterTagIds = ref([])
+const showMoreFilters = ref(false)
 
 // 多选相关
 const multiMode = ref(false)
@@ -143,6 +177,7 @@ const deselectAll = () => {
 onMounted(async () => {
   await fetchTags()
   await loadUsers()
+  await loadAlbums()
   await loadImages()
 })
 
@@ -150,6 +185,13 @@ const loadUsers = async () => {
   try {
     const data = await api.get('/api/admin/users')
     users.value = data.users || []
+  } catch {}
+}
+
+const loadAlbums = async () => {
+  try {
+    const data = await api.get('/api/admin/albums', { limit: 200 })
+    albums.value = data.albums || []
   } catch {}
 }
 
@@ -165,6 +207,8 @@ const loadImages = async (p = 1) => {
   selectedIds.value = []
   try {
     const params = { page: p, limit: 20, search: search.value || undefined }
+    if (filterAlbumId.value) params.album = filterAlbumId.value
+    if (filterTagIds.value.length > 0) params.tags = filterTagIds.value.join(',')
     if (imgSource.value === 'public') params.public = 'true'
     else if (imgSource.value === 'mine') params.mine = 'true'
     else if (imgSource.value === 'user' && filterUserId.value) params.userId = filterUserId.value
@@ -186,9 +230,52 @@ const formatSize = (bytes) => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-const openEdit = (img) => {
+const toUserTagId = (tag) => 'u' + (tag.user_tag_id || tag.id)
+const isUserAppliedTag = (tag) => tag.source === 'user' || tag.user_tag_id || tag.user_id
+const mapUserTagsForSelector = (tagList) => {
+  const mapped = tagList.map(tag => ({
+    id: 'u' + tag.id,
+    name: tag.name,
+    display_name: tag.display_name || tag.name,
+    combinable: tag.combinable !== false,
+    isUserTag: true
+  }))
+  return {
+    combinable: mapped.filter(tag => tag.combinable !== false),
+    nonCombinable: mapped.filter(tag => tag.combinable === false)
+  }
+}
+
+const loadEditUserTags = async (userId) => {
+  editUserTagOptions.value = { combinable: [], nonCombinable: [] }
+  if (!userId) return
+  try {
+    const data = await api.get('/api/admin/users/' + userId + '/tags')
+    editUserTagOptions.value = mapUserTagsForSelector(data.tags || [])
+  } catch {}
+}
+
+const openEdit = async (img) => {
   editingImage.value = img
-  editTagIds.value = (img.tags || []).map(t => t.id)
+  editTagIds.value = (img.tags || [])
+    .filter(tag => !isUserAppliedTag(tag))
+    .map(t => t.id)
+    .filter(id => !(typeof id === 'string' && id.startsWith('u')))
+  const userTags = (img.tags || []).filter(isUserAppliedTag)
+  editUserTagIds.value = userTags.map(toUserTagId)
+  editUserTagOwnerId.value = img.uploader_id || userTags[0]?.user_id || null
+  const owner = users.value.find(u => u.id === editUserTagOwnerId.value)
+  editUserTagOwnerName.value = owner?.username || (editUserTagOwnerId.value ? '用户 ' + editUserTagOwnerId.value : '用户')
+  await loadEditUserTags(editUserTagOwnerId.value)
+}
+
+const closeEdit = () => {
+  editingImage.value = null
+  editTagIds.value = []
+  editUserTagIds.value = []
+  editUserTagOwnerId.value = null
+  editUserTagOwnerName.value = '用户'
+  editUserTagOptions.value = { combinable: [], nonCombinable: [] }
 }
 
 const saveEdit = async () => {
@@ -196,9 +283,17 @@ const saveEdit = async () => {
     await api.post('/api/admin/tags/run/manual', {
       imageIds: [editingImage.value.id], tagIds: editTagIds.value, overwrite: true
     })
-    editingImage.value = null
+    if (editUserTagOwnerId.value) {
+      await api.post('/api/admin/tags/run/user-private', {
+        imageIds: [editingImage.value.id],
+        userId: editUserTagOwnerId.value,
+        tagIds: editUserTagIds.value,
+        overwrite: true
+      })
+    }
+    closeEdit()
     await loadImages(page.value)
-  } catch (err) { alert('保存失败: ' + err.message) }
+  } catch (err) { alert('保存失败: ' + (err.data?.error || err.message)) }
 }
 
 const deleteImage = async (img) => {
@@ -248,6 +343,9 @@ const batchSetPublic = async (isPublic) => {
 .selected-count { font-size: 13px; color: var(--fluent-blue); font-weight: 500; }
 .filters { display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap; }
 .search-input { width: 200px; }
+.album-select { min-width: 160px; }
+.more-filters { margin-bottom: var(--space-md); padding: var(--space-md); border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); background: var(--fluent-hover); }
+.more-filters > label { display: block; font-size: 13px; font-weight: 500; margin-bottom: var(--space-sm); }
 .source-toggle { display: flex; gap: 2px; background: var(--fluent-hover); border-radius: var(--radius-sm); padding: 2px; }
 .source-btn { padding: 4px 12px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; transition: all var(--transition-fast); color: var(--fluent-text-secondary); }
 .source-btn.active { background: white; box-shadow: var(--shadow-1); font-weight: 500; color: var(--fluent-blue); }
@@ -273,6 +371,9 @@ const batchSetPublic = async (isPublic) => {
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-md); padding: var(--space-lg) 0; font-size: 13px; color: var(--fluent-text-secondary); }
 .form-group { margin-bottom: var(--space-lg); }
 .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: var(--space-sm); }
+.label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-sm); }
+.label-row label { margin-bottom: 0; }
+.user-tag-select { padding: 5px 10px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); background: var(--fluent-hover); font-size: 12px; color: var(--fluent-text-secondary); }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { width: 500px; padding: var(--space-xl); max-height: 80vh; overflow-y: auto; }
 .modal h3 { margin-bottom: var(--space-lg); }

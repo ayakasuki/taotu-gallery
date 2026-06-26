@@ -11,7 +11,8 @@ const router = express.Router();
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
     const data = await configService.readTagGroups();
-    res.json(data);
+    const systemGroup = { id: '__system', name: '系统分组', system: true, tagIds: ['__untagged', '__tagged'], subgroups: [] };
+    res.json({ ...data, groups: [systemGroup, ...data.groups] });
   } catch (err) { next(err); }
 });
 
@@ -39,6 +40,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
 // 更新分组（名称、标签）
 router.put('/:id', authMiddleware, async (req, res, next) => {
   try {
+    if (req.params.id === '__system') return res.status(400).json({ error: '系统分组不可修改' });
     const groupId = parseInt(req.params.id);
     const data = await configService.readTagGroups();
     const group = data.groups.find(g => g.id === groupId);
@@ -55,6 +57,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
 // 删除分组
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
+    if (req.params.id === '__system') return res.status(400).json({ error: '系统分组不可删除' });
     const groupId = parseInt(req.params.id);
     const data = await configService.readTagGroups();
     data.groups = data.groups.filter(g => g.id !== groupId);
@@ -66,6 +69,7 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
 // 添加子分组（自动分配 sid）
 router.post('/:id/subgroup', authMiddleware, async (req, res, next) => {
   try {
+    if (req.params.id === '__system') return res.status(400).json({ error: '系统分组不可修改' });
     const groupId = parseInt(req.params.id);
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: '子分组名不能为空' });
@@ -93,6 +97,7 @@ router.post('/:id/subgroup', authMiddleware, async (req, res, next) => {
 // 更新子分组（通过 sid 定位）
 router.put('/:id/subgroup/:sid', authMiddleware, async (req, res, next) => {
   try {
+    if (req.params.id === '__system') return res.status(400).json({ error: '系统分组不可修改' });
     const groupId = parseInt(req.params.id);
     const sid = parseInt(req.params.sid);
     const data = await configService.readTagGroups();
@@ -113,6 +118,7 @@ router.put('/:id/subgroup/:sid', authMiddleware, async (req, res, next) => {
 // 删除子分组（通过 sid 定位）
 router.delete('/:id/subgroup/:sid', authMiddleware, async (req, res, next) => {
   try {
+    if (req.params.id === '__system') return res.status(400).json({ error: '系统分组不可修改' });
     const groupId = parseInt(req.params.id);
     const sid = parseInt(req.params.sid);
     const data = await configService.readTagGroups();

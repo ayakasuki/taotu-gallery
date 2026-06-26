@@ -18,6 +18,7 @@
       <!-- 文件上传 -->
       <template v-if="activeTab === 'file'">
     <div class="upload-layout">
+      <div class="upload-main-column">
       <div class="upload-area fluent-card">
         <div
           class="dropzone"
@@ -58,6 +59,23 @@
         </div>
       </div>
 
+      <div v-if="uploadedLinks.length > 0" class="uploaded-links fluent-card">
+        <div class="links-header">
+          <h3>已上传链接</h3>
+          <button class="fluent-btn fluent-btn-secondary" @click="copyAllLinks">批量复制</button>
+        </div>
+        <div class="link-list">
+          <div v-for="item in uploadedLinks" :key="item.id || item.url" class="link-row">
+            <div class="link-info">
+              <span class="link-name">{{ item.filename }}</span>
+              <input class="link-input" :value="item.url" readonly @focus="$event.target.select()" />
+            </div>
+            <button class="fluent-btn fluent-btn-secondary" @click="copyLink(item.url)">复制</button>
+          </div>
+        </div>
+      </div>
+      </div>
+
       <div class="upload-config fluent-card">
         <h3 class="config-title">上传配置</h3>
 
@@ -71,15 +89,15 @@
           </select>
         </div>
 
-        <div class="config-item" v-if="isAdmin">
-          <label>标签</label>
+        <div class="config-item">
+          <label>{{ isAdmin ? '公共标签' : '我的私有标签' }}</label>
           <TagSelector
-            :tags="tags"
+            :tags="uploadTagOptions"
             :selectedTagIds="uploadConfig.tagIds"
             @update:selectedTagIds="uploadConfig.tagIds = $event"
           />
           <div class="new-tag-input">
-            <input v-model="newTagName" class="fluent-input" placeholder="输入新标签名，回车添加" @keyup.enter="addNewTag" />
+            <input v-model="newTagName" class="fluent-input" :placeholder="isAdmin ? '输入新公共标签名，回车添加' : '输入新私有标签名，回车添加'" @keyup.enter="addNewTag" />
             <button v-if="newTagName" class="fluent-btn fluent-btn-secondary" @click="addNewTag">添加</button>
           </div>
           <div v-if="uploadConfig.newTags.length > 0" class="new-tags-list">
@@ -222,9 +240,7 @@ onMounted(() => {
       const payload = JSON.parse(atob(token.split('.')[1]))
       isAdmin.value = payload.role === 'admin'
     } catch {}
-    if (isAdmin.value) {
-      fetchTags()
-    }
+    fetchTags()
     fetchAlbums()
   }
 })
@@ -235,6 +251,7 @@ const isDragover = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
 const uploadResults = ref([])
+const uploadedLinks = ref([])
 const albums = ref([])
 
 const uploadConfig = reactive({
@@ -245,6 +262,21 @@ const uploadConfig = reactive({
 })
 
 const newTagName = ref('')
+
+const uploadTagOptions = computed(() => {
+  const source = tags.value || { combinable: [], nonCombinable: [] }
+  const stripSystem = list => (list || []).filter(tag => !tag.isSystemTag)
+  if (isAdmin.value) {
+    return {
+      combinable: stripSystem(source.combinable).filter(tag => !tag.isUserTag),
+      nonCombinable: stripSystem(source.nonCombinable).filter(tag => !tag.isUserTag)
+    }
+  }
+  return {
+    combinable: stripSystem(source.combinable).filter(tag => tag.isUserTag && !tag.isPublicUserTag),
+    nonCombinable: stripSystem(source.nonCombinable).filter(tag => tag.isUserTag && !tag.isPublicUserTag)
+  }
+})
 
 const addNewTag = () => {
   const name = newTagName.value.trim()
@@ -270,6 +302,7 @@ const triggerFileInput = () => {
 
 const handleFileSelect = (e) => {
   addFiles(e.target.files)
+  e.target.value = ''
 }
 
 const handleDrop = (e) => {
@@ -277,17 +310,24 @@ const handleDrop = (e) => {
   addFiles(e.dataTransfer.files)
 }
 
+const fileKey = (file) => [file.name, file.size, file.lastModified].join(':')
+
 const addFiles = (fileList) => {
+  const existingKeys = new Set(selectedFiles.value.map(item => item.key))
   for (const file of fileList) {
     if (!file.type.startsWith('image/')) continue
+    const key = fileKey(file)
+    if (existingKeys.has(key)) continue
 
     const preview = URL.createObjectURL(file)
     selectedFiles.value.push({
+      key,
       file,
       name: file.name,
       size: file.size,
       preview
     })
+    existingKeys.add(key)
   }
 }
 
@@ -308,10 +348,11 @@ const handleUpload = async () => {
   uploading.value = true
   uploadProgress.value = 0
   uploadResults.value = []
+  const uploadingItems = [...selectedFiles.value]
 
   try {
     const formData = new FormData()
-    selectedFiles.value.forEach(f => formData.append('files', f.file))
+    uploadingItems.forEach(f => formData.append('files', f.file))
 
     if (uploadConfig.albumId) {
       formData.append('album_id', uploadConfig.albumId)
@@ -342,6 +383,8 @@ const handleUpload = async () => {
       try {
         const data = JSON.parse(xhr.responseText)
         uploadResults.value = data.results || []
+        appendUploadedLinks(uploadResults.value)
+        removeUploadedSuccessFiles(uploadingItems, uploadResults.value)
       } catch {
         uploadResults.value = [{ success: false, error: '解析响应失败' }]
       }
@@ -358,6 +401,57 @@ const handleUpload = async () => {
     uploadResults.value = [{ success: false, error: err.message }]
     uploading.value = false
   }
+}
+
+const buildDisplayUrl = (result) => {
+  if (result.source_url) return result.source_url
+  if (!result.url) return ''
+  if (new RegExp('^https?://').test(result.url)) return result.url
+  const base = config.public.apiBase || window.location.origin
+  return base.replace(new RegExp('/+$'), '') + result.url
+}
+
+const appendUploadedLinks = (results) => {
+  const existing = new Set(uploadedLinks.value.map(item => item.url))
+  for (const result of results || []) {
+    if (!result.success) continue
+    const url = buildDisplayUrl(result)
+    if (!url || existing.has(url)) continue
+    uploadedLinks.value.push({ id: result.id, filename: result.filename || 'image', url })
+    existing.add(url)
+  }
+}
+
+const removeUploadedSuccessFiles = (uploadedItems, results) => {
+  const successNameCounts = new Map()
+  for (const result of results || []) {
+    if (!result.success || !result.filename) continue
+    successNameCounts.set(result.filename, (successNameCounts.get(result.filename) || 0) + 1)
+  }
+  if (successNameCounts.size === 0) return
+
+  const successKeys = new Set()
+  for (const item of uploadedItems) {
+    const remaining = successNameCounts.get(item.name) || 0
+    if (remaining <= 0) continue
+    successKeys.add(item.key)
+    successNameCounts.set(item.name, remaining - 1)
+  }
+
+  const kept = []
+  for (const item of selectedFiles.value) {
+    if (successKeys.has(item.key)) URL.revokeObjectURL(item.preview)
+    else kept.push(item)
+  }
+  selectedFiles.value = kept
+}
+
+const copyLink = async (url) => {
+  try { await navigator.clipboard.writeText(url) } catch {}
+}
+
+const copyAllLinks = async () => {
+  try { await navigator.clipboard.writeText(uploadedLinks.value.map(item => item.url).join(String.fromCharCode(10))) } catch {}
 }
 
 const formatSize = (bytes) => {
@@ -382,7 +476,9 @@ const uploadFromUrls = async () => {
   for (const url of urls) {
     try {
       const data = await api.post('/api/upload/url', { url })
-      urlResults.value.push({ url, success: true, ...data })
+      const result = { url, success: true, ...data }
+      urlResults.value.push(result)
+      appendUploadedLinks([result])
     } catch (err) {
       urlResults.value.push({ url, success: false, error: err.data?.error || err.message })
     }
@@ -406,8 +502,15 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   gap: var(--space-lg);
 }
 
-.upload-area {
+.upload-main-column {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.upload-area {
+  width: 100%;
 }
 
 .dropzone {
@@ -507,6 +610,15 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   width: 360px;
   flex-shrink: 0;
 }
+
+.uploaded-links { padding: var(--space-lg); }
+.links-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-md); }
+.links-header h3 { font-size: 16px; font-weight: 600; margin: 0; }
+.link-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+.link-row { display: flex; align-items: center; gap: var(--space-sm); }
+.link-info { flex: 1; min-width: 0; }
+.link-name { display: block; font-size: 12px; color: var(--fluent-text-secondary); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-input { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 13px; background: white; color: var(--fluent-text); }
 
 .config-title {
   font-size: 16px;

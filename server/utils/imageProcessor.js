@@ -37,9 +37,23 @@ async function generateThumbnails(imagePath, options = {}) {
   return { thumbPath, mediumPath };
 }
 
+function calculateOrientation(width, height) {
+  const w = Number(width);
+  const h = Number(height);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+    throw new Error('图片缺少有效像素尺寸');
+  }
+  const ratio = w / h;
+  if (ratio >= 0.9 && ratio <= 1.1) return 'square';
+  return ratio > 1.1 ? 'landscape' : 'portrait';
+}
+
 // 获取图片元信息
 async function getImageMeta(imagePath) {
   const metadata = await sharp(imagePath).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error('图片缺少有效像素尺寸，已拒绝处理');
+  }
   const stats = await sharp(imagePath).stats();
 
   // 计算平均颜色
@@ -49,10 +63,8 @@ async function getImageMeta(imagePath) {
   const b = Math.round(channels[2].mean);
   const avgColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 
-  // 判断横竖
-  let orientation = 'square';
-  if (metadata.width > metadata.height * 1.1) orientation = 'landscape';
-  else if (metadata.height > metadata.width * 1.1) orientation = 'portrait';
+  // 判断横竖正方，0.9-1.1 视为正方图，三者严格互斥
+  const orientation = calculateOrientation(metadata.width, metadata.height);
 
   return {
     width: metadata.width,
@@ -102,6 +114,7 @@ function hexToRgb(hex) {
 module.exports = {
   generateThumbnails,
   getImageMeta,
+  calculateOrientation,
   checkResolution,
   checkColorPresence
 };

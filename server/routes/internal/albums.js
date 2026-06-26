@@ -30,7 +30,8 @@ router.get('/', optionalAuth, async (req, res, next) => {
       sort, order, tagIds, userId,
       publicOnly: publicOnly === 'true',
       ownOnly: mine === 'true' && userId,
-      isAdmin
+      isAdmin,
+      filterUserId: targetUserId ? parseInt(targetUserId) : null
     });
     res.json(result);
   } catch (err) { next(err); }

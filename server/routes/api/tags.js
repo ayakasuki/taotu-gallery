@@ -10,6 +10,11 @@ const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
+const SYSTEM_TAGS = [
+  { id: '__untagged', name: 'system_untagged', display_name: '未标签', combinable: true, isSystemTag: true },
+  { id: '__tagged', name: 'system_tagged', display_name: '已标签', combinable: true, isSystemTag: true }
+];
+
 function resolveUserId(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -37,7 +42,7 @@ router.get('/', async (req, res, next) => {
       });
     }
 
-    const combinable = [];
+    const combinable = [...SYSTEM_TAGS];
     const nonCombinable = [];
     const existingNames = new Set();
 
@@ -46,6 +51,7 @@ router.get('/', async (req, res, next) => {
         id: t.id, name: t.name,
         display_name: t.display_name || t.name,
         combinable: !!t.combinable,
+        mutually_exclusive_with: t.mutually_exclusive_with,
         isPublicTag: true
       };
       if (tag.combinable) combinable.push(tag);
@@ -87,7 +93,7 @@ router.get('/', async (req, res, next) => {
       }
     }
 
-    res.json({ combinable, nonCombinable, all: [...combinable, ...nonCombinable] });
+    res.json({ combinable, nonCombinable, all: [...combinable, ...nonCombinable], systemGroup: { id: '__system', name: '系统分组', system: true, tagIds: SYSTEM_TAGS.map(t => t.id) } });
   } catch (err) { next(err); }
 });
 
