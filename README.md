@@ -51,6 +51,7 @@ v0.3.0 · [MIT License](LICENSE)
 | 文件监听 | chokidar |
 | 图片处理 | sharp（缩略图/中等图/颜色/分辨率） |
 | 认证 | JWT + bcryptjs |
+| 缓存/验证码 | Redis（图片验证码、邮箱验证码、找回密码验证码 TTL） |
 | 云同步 | WebDAV |
 | 部署 | PM2（前后端同端口） |
 
@@ -62,6 +63,7 @@ v0.3.0 · [MIT License](LICENSE)
 
 - Node.js 18+
 - MySQL 5.7+ / MariaDB 10.5+
+- Redis 6+（注册验证码、图片人机验证码、忘记密码验证码必需）
 - npm
 
 ### 安装
@@ -78,7 +80,7 @@ cd client && npm install && cd ..
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env 填入数据库信息
+# 编辑 .env 填入数据库、Redis、JWT 等信息
 ```
 
 ### 配置数据库
@@ -116,6 +118,20 @@ REDIS_USERNAME=
 REDIS_PASSWORD=
 REDIS_DB=0
 ```
+
+### 配置 Redis
+
+Redis 用于图片人机验证码、注册邮箱验证码和忘记密码邮箱验证码。验证码 TTL 默认为 120 秒，重发会覆盖旧验证码。
+
+```env
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_USERNAME=
+REDIS_PASSWORD=
+REDIS_DB=0
+```
+
+如果开启“注册需邮箱验证”或使用忘记密码功能，还需要在后台网站配置中填写 SMTP 并通过测试邮件。
 
 ### 初始化与启动
 
