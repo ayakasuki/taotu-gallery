@@ -45,9 +45,7 @@ const sortOptions = [
 
 const modeOptions = [
   { label: '网格', value: 'grid' },
-  { label: '瀑布流', value: 'waterfall' },
-  { label: '静态', value: 'static' },
-  { label: '轮播', value: 'carousel' }
+  { label: '瀑布流', value: 'waterfall' }
 ]
 
 const setSort = (value) => {

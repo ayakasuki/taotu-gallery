@@ -64,6 +64,18 @@ app.use('/thumb', async (req, res, next) => {
   }
 });
 
+// 公开图库配置（前端首页默认展示使用，不含敏感配置）
+app.get('/api/gallery/config', async (req, res, next) => {
+  try {
+    const configService = require('./services/configService');
+    const siteConfig = await configService.readSiteConfig();
+    const mode = siteConfig.display?.mode === 'waterfall' ? 'waterfall' : 'grid';
+    res.json({ display: { mode }, upload: siteConfig.upload || { showUrlAfterUpload: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // API 调用日志（对外 API）
 const apiLogger = require('./middleware/apiLogger');
 

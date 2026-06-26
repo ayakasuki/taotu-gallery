@@ -38,13 +38,24 @@
           <button class="fluent-btn fluent-btn-primary" @click="showMoveModal = true">移动到相册</button>
         </div>
 
-        <!-- 图片网格（带多选框） -->
-        <div class="gallery-with-select">
-          <div v-for="img in images" :key="img.id" class="gallery-item-wrapper" :class="{ selected: selectedIds.includes(img.id) }" @click="handleItemClick(img)">
+        <div
+          ref="galleryListRef"
+          class="gallery-with-select"
+          :class="['mode-' + displayMode]"
+          :style="galleryLayoutStyle"
+        >
+          <div
+            v-for="(img, index) in images"
+            :key="img.id"
+            class="gallery-item-wrapper"
+            :class="{ selected: selectedIds.includes(img.id) }"
+            :style="getItemStyle(img, index)"
+            @click="handleItemClick(img)"
+          >
             <div class="select-checkbox" v-if="gallerySource === 'mine'" @click.stop="toggleSelect(img.id)">
               <img :src="selectedIds.includes(img.id) ? '/icons/选中.png' : '/icons/未选中.png'" class="check-icon" />
             </div>
-            <ImageCard :image="img" :showInfo="true" :clickDisabled="selectedIds.length > 0" />
+            <ImageCard :image="img" :mode="displayMode" :showInfo="true" />
           </div>
         </div>
 
@@ -93,8 +104,6 @@ import ImageCard from '~/components/gallery/ImageCard.vue'
 const { tags, selectedTagIds, fetchTags } = useTags()
 const { images, total, page, loading, displayMode, sort, fetchImages, setDisplayMode, setSort } = useGallery()
 const api = useApi()
-const config = useRuntimeConfig()
-
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
 const gallerySource = ref('public')
@@ -109,6 +118,15 @@ const showMoveModal = ref(false)
 const moveToAlbumId = ref(null)
 const newAlbumName = ref('')
 const albums = ref([])
+const galleryListRef = ref(null)
+const waterfallItems = ref([])
+const waterfallHeight = ref(0)
+const minGridColumnWidth = 180
+const minWaterfallColumnWidth = 190
+const gridGap = 2
+let resizeObserver = null
+
+const galleryLayoutStyle = computed(() => ({ height: waterfallHeight.value + 'px' }))
 
 const emptyText = computed(() => {
   if (gallerySource.value === 'mine') return '您还没有上传图片'
@@ -117,6 +135,7 @@ const emptyText = computed(() => {
 })
 
 onMounted(async () => {
+  await loadDisplayConfig()
   const token = localStorage.getItem('jwt_token')
   isLoggedIn.value = !!token
   if (token) {
@@ -128,6 +147,14 @@ onMounted(async () => {
   await fetchTags()
   if (isAdmin.value) await loadUsers()
   await loadGallery()
+  await nextTick()
+  resizeObserver = new ResizeObserver(() => scheduleLayout())
+  if (galleryListRef.value) resizeObserver.observe(galleryListRef.value)
+  scheduleLayout()
+})
+
+onBeforeUnmount(() => {
+  if (resizeObserver) resizeObserver.disconnect()
 })
 
 const loadUsers = async () => {
@@ -144,6 +171,15 @@ const loadAlbums = async () => {
   } catch {}
 }
 
+const loadDisplayConfig = async () => {
+  try {
+    const data = await api.get('/api/gallery/config')
+    setDisplayMode(data.display?.mode === 'waterfall' ? 'waterfall' : 'grid')
+  } catch {
+    setDisplayMode(displayMode.value === 'waterfall' ? 'waterfall' : 'grid')
+  }
+}
+
 const loadGallery = () => {
   selectedIds.value = []
   const params = {
@@ -157,7 +193,7 @@ const loadGallery = () => {
   } else {
     params.public = 'true'
   }
-  fetchImages(params)
+  return fetchImages(params).then(() => nextTick()).then(() => scheduleLayout())
 }
 
 const switchSource = (source) => {
@@ -177,17 +213,80 @@ const handleSortChange = (newSort) => {
   loadGallery()
 }
 
-const handleModeChange = (mode) => setDisplayMode(mode)
+const handleModeChange = async (mode) => {
+  setDisplayMode(mode === 'waterfall' ? 'waterfall' : 'grid')
+  await nextTick()
+  scheduleLayout()
+}
+
+
+const getImageAspect = (img) => {
+  const width = Number(img.width) || 1
+  const height = Number(img.height) || 1
+  return width > 0 && height > 0 ? width / height : 1
+}
+
+const getDisplayAspect = (img) => {
+  const aspect = getImageAspect(img)
+  if (displayMode.value === 'waterfall') return aspect
+  return aspect < 1 ? aspect : 1
+}
+
+const calculateWaterfallLayout = () => {
+  const container = galleryListRef.value
+  const width = container?.clientWidth || 0
+  if (!width || images.value.length === 0) {
+    waterfallItems.value = []
+    waterfallHeight.value = 0
+    return
+  }
+
+  const minColumnWidth = displayMode.value === 'waterfall' ? minWaterfallColumnWidth : minGridColumnWidth
+  let columns = Math.floor((width + gridGap) / (minColumnWidth + gridGap))
+  columns = Math.max(width <= 560 ? 2 : 1, columns)
+
+  const columnWidth = (width - (columns - 1) * gridGap) / columns
+  const heights = new Array(columns).fill(0)
+  const nextItems = images.value.map((img) => {
+    const aspect = Math.max(getDisplayAspect(img), 0.25)
+    const itemHeight = columnWidth / aspect
+    const top = Math.min(...heights)
+    const columnIndex = heights.indexOf(top)
+    const left = columnIndex * (columnWidth + gridGap)
+    heights[columnIndex] = top + itemHeight + gridGap
+    return { left, top, width: columnWidth, height: itemHeight }
+  })
+
+  waterfallItems.value = nextItems
+  waterfallHeight.value = Math.max(0, ...heights)
+}
+
+const scheduleLayout = () => {
+  requestAnimationFrame(() => calculateWaterfallLayout())
+}
+
+const getItemStyle = (img, index) => {
+  const item = waterfallItems.value[index]
+  if (!item) return { opacity: 0 }
+  return {
+    position: 'absolute',
+    width: item.width + 'px',
+    height: item.height + 'px',
+    transform: 'translate3d(' + item.left + 'px,' + item.top + 'px,0)'
+  }
+}
 
 const handlePageChange = (newPage) => {
   const params = { page: newPage, tags: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined }
   if (gallerySource.value === 'mine') params.mine = 'true'
   else if (gallerySource.value === 'user') { if (selectedUserId.value) params.userId = selectedUserId.value }
   else params.public = 'true'
-  fetchImages(params)
+  fetchImages(params).then(() => nextTick()).then(() => scheduleLayout())
 }
 
-const handleImageSelect = (image) => navigateTo(`/image/${image.id}`)
+watch(images, async () => { await nextTick(); scheduleLayout() }, { deep: true })
+watch(displayMode, async () => { await nextTick(); scheduleLayout() })
+
 
 // 点击图片：如果已有选中则切换选中状态，否则跳转详情
 const handleItemClick = (image) => {
@@ -276,10 +375,11 @@ const moveToAlbum = async () => {
 .batch-count { font-size: 13px; font-weight: 500; color: var(--fluent-blue); margin-right: var(--space-sm); }
 .delete-btn:hover { color: #d13438; background: #fde7e9; }
 
-/* 图片网格带多选 */
-.gallery-with-select { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-md); }
-.gallery-item-wrapper { position: relative; }
-.gallery-item-wrapper.selected { outline: 2px solid var(--fluent-blue); border-radius: var(--radius-md); }
+/* 图片墙 */
+.gallery-with-select { position: relative; width: 100%; min-height: 160px; }
+.gallery-with-select.mode-grid, .gallery-with-select.mode-waterfall { display: block; }
+.gallery-item-wrapper { position: absolute; left: 0; top: 0; min-width: 0; transition: transform 0.22s ease, opacity 0.18s ease; }
+.gallery-item-wrapper.selected { outline: 2px solid var(--fluent-blue); outline-offset: -2px; z-index: 4; }
 .select-checkbox { position: absolute; top: 8px; right: 8px; z-index: 10; cursor: pointer; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
 .check-icon { width: 18px; height: 18px; }
 
@@ -295,5 +395,5 @@ const moveToAlbum = async () => {
 .fluent-input:focus { outline: none; border-color: var(--fluent-blue); }
 .modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; }
 
-@media (max-width: 768px) { .gallery-body { flex-direction: column; } .gallery-sidebar { width: 100%; } .sidebar-card { position: static; } .gallery-with-select { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px) { .gallery-body { flex-direction: column; } .gallery-sidebar { width: 100%; } .sidebar-card { position: static; } }
 </style>

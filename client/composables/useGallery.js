@@ -6,7 +6,7 @@ export function useGallery() {
   const total = useState('gallery_total', () => 0)
   const page = useState('gallery_page', () => 1)
   const loading = useState('gallery_loading', () => false)
-  const displayMode = useState('gallery_mode', () => 'grid') // grid, waterfall, static, carousel
+  const displayMode = useState('gallery_mode', () => 'grid') // grid, waterfall
   const sort = useState('gallery_sort', () => 'created_at')
   const order = useState('gallery_order', () => 'desc')
 
@@ -53,7 +53,7 @@ export function useGallery() {
   }
 
   const setDisplayMode = (mode) => {
-    displayMode.value = mode
+    displayMode.value = mode === 'waterfall' ? 'waterfall' : 'grid'
   }
 
   const setSort = (newSort, newOrder = 'desc') => {

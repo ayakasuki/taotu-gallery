@@ -1,46 +1,20 @@
 <template>
-  <div class="gallery-grid" :class="[`mode-${mode}`]">
-    <!-- 普通网格 -->
-    <div v-if="mode === 'grid'" class="grid grid-cols-4">
-      <ImageCard
-        v-for="image in images"
+  <div class="gallery-grid" :class="['mode-' + safeMode]">
+    <div class="waterfall-layout" ref="waterfallRef" :style="{ height: waterfallHeight + 'px' }">
+      <div
+        v-for="(image, index) in images"
         :key="image.id"
-        :image="image"
-        @click="$emit('select', image)"
-      />
-    </div>
-
-    <!-- 瀑布流 -->
-    <div v-else-if="mode === 'waterfall'" class="waterfall">
-      <div v-for="image in images" :key="image.id" class="waterfall-item">
-        <ImageCard :image="image" @click="$emit('select', image)" />
+        class="waterfall-item"
+        :style="getWaterfallItemStyle(index)"
+      >
+        <ImageCard :image="image" :mode="safeMode" @click="$emit('select', image)" />
       </div>
     </div>
 
-    <!-- 静态展示 -->
-    <div v-else-if="mode === 'static'" class="static-grid">
-      <div v-for="image in images" :key="image.id" class="static-item">
-        <img :src="getImageUrl(image)" :alt="image.filename" />
-      </div>
-    </div>
-
-    <!-- 轮播随机 -->
-    <div v-else-if="mode === 'carousel'" class="carousel">
-      <div class="carousel-track" :style="{ transform: `translateX(-${carouselIndex * 100}%)` }">
-        <div v-for="image in images" :key="image.id" class="carousel-slide">
-          <img :src="getImageUrl(image)" :alt="image.filename" />
-        </div>
-      </div>
-      <button class="carousel-btn prev" @click="prevSlide">&lt;</button>
-      <button class="carousel-btn next" @click="nextSlide">&gt;</button>
-    </div>
-
-    <!-- 空状态 -->
     <div v-if="images.length === 0 && !loading" class="empty-state">
       <p>暂无图片</p>
     </div>
 
-    <!-- 加载状态 -->
     <div v-if="loading" class="loading-state">
       <p>加载中...</p>
     </div>
@@ -58,91 +32,80 @@ const props = defineProps({
 
 defineEmits(['select'])
 
-const config = useRuntimeConfig()
-const carouselIndex = ref(0)
+const waterfallRef = ref(null)
+const waterfallItems = ref([])
+const waterfallHeight = ref(0)
+const gap = 2
+const minGridColumnWidth = 180
+const minWaterfallColumnWidth = 190
+let resizeObserver = null
 
-const getImageUrl = (image) => {
-  const url = image.thumb_url || image.url
-  return url ? `${config.public.apiBase}${url}` : ''
+const safeMode = computed(() => props.mode === 'waterfall' ? 'waterfall' : 'grid')
+
+const getImageAspect = (image) => {
+  const width = Number(image.width) || 1
+  const height = Number(image.height) || 1
+  return width > 0 && height > 0 ? width / height : 1
 }
 
-const prevSlide = () => {
-  carouselIndex.value = Math.max(0, carouselIndex.value - 1)
+const getDisplayAspect = (image) => {
+  const aspect = getImageAspect(image)
+  if (safeMode.value === 'waterfall') return aspect
+  return aspect < 1 ? aspect : 1
 }
 
-const nextSlide = () => {
-  carouselIndex.value = Math.min(props.images.length - 1, carouselIndex.value + 1)
-}
-
-// 轮播自动播放
-let autoplayTimer = null
-onMounted(() => {
-  if (props.mode === 'carousel') {
-    autoplayTimer = setInterval(() => {
-      carouselIndex.value = (carouselIndex.value + 1) % props.images.length
-    }, 3000)
+const calculateWaterfall = () => {
+  const width = waterfallRef.value?.clientWidth || 0
+  if (!width || props.images.length === 0) {
+    waterfallItems.value = []
+    waterfallHeight.value = 0
+    return
   }
+  const minColumnWidth = safeMode.value === 'waterfall' ? minWaterfallColumnWidth : minGridColumnWidth
+  let columns = Math.floor((width + gap) / (minColumnWidth + gap))
+  columns = Math.max(width <= 560 ? 2 : 1, columns)
+  const columnWidth = (width - (columns - 1) * gap) / columns
+  const heights = new Array(columns).fill(0)
+  waterfallItems.value = props.images.map(image => {
+    const itemHeight = columnWidth / Math.max(getDisplayAspect(image), 0.25)
+    const top = Math.min(...heights)
+    const columnIndex = heights.indexOf(top)
+    const left = columnIndex * (columnWidth + gap)
+    heights[columnIndex] = top + itemHeight + gap
+    return { left, top, width: columnWidth, height: itemHeight }
+  })
+  waterfallHeight.value = Math.max(0, ...heights)
+}
+
+const scheduleLayout = () => requestAnimationFrame(calculateWaterfall)
+
+const getWaterfallItemStyle = (index) => {
+  const item = waterfallItems.value[index]
+  if (!item) return { opacity: 0 }
+  return {
+    width: item.width + 'px',
+    height: item.height + 'px',
+    transform: 'translate3d(' + item.left + 'px,' + item.top + 'px,0)'
+  }
+}
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => scheduleLayout())
+  if (waterfallRef.value) resizeObserver.observe(waterfallRef.value)
+  scheduleLayout()
 })
 
-onUnmounted(() => {
-  if (autoplayTimer) clearInterval(autoplayTimer)
+onBeforeUnmount(() => {
+  if (resizeObserver) resizeObserver.disconnect()
 })
+
+watch(() => props.images, async () => { await nextTick(); scheduleLayout() }, { deep: true })
+watch(safeMode, async () => { await nextTick(); scheduleLayout() })
 </script>
 
 <style scoped>
-.static-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 2px;
-}
-
-.static-item img {
-  width: 100%;
-  display: block;
-}
-
-.carousel {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-md);
-}
-
-.carousel-track {
-  display: flex;
-  transition: transform 0.5s ease;
-}
-
-.carousel-slide {
-  min-width: 100%;
-}
-
-.carousel-slide img {
-  width: 100%;
-  max-height: 500px;
-  object-fit: contain;
-  background: #000;
-}
-
-.carousel-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255,255,255,0.8);
-  border: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  font-size: 18px;
-  cursor: pointer;
-  z-index: 10;
-}
-
-.carousel-btn.prev { left: 16px; }
-.carousel-btn.next { right: 16px; }
-
-.empty-state, .loading-state {
-  text-align: center;
-  padding: var(--space-2xl);
-  color: var(--fluent-text-secondary);
-}
+.gallery-grid { width: 100%; }
+.waterfall-layout { position: relative; width: 100%; min-height: 160px; }
+.waterfall-item { position: absolute; left: 0; top: 0; transition: transform 0.22s ease, opacity 0.18s ease; }
+.empty-state, .loading-state { text-align: center; padding: var(--space-2xl); color: var(--fluent-text-secondary); }
 </style>

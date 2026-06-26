@@ -8,8 +8,6 @@
         <select v-model="config.displayMode" class="fluent-input">
           <option value="grid">网格</option>
           <option value="waterfall">瀑布流</option>
-          <option value="static">静态</option>
-          <option value="carousel">轮播</option>
         </select>
       </div>
       <div class="form-group">
@@ -30,7 +28,7 @@ onMounted(async () => {
   try {
     const api = useApi()
     const data = await api.get('/api/admin/gallery/config')
-    if (data.display) config.displayMode = data.display.mode || 'grid'
+    if (data.display) config.displayMode = data.display.mode === 'waterfall' ? 'waterfall' : 'grid'
     if (data.upload) config.showUrlAfterUpload = data.upload.showUrlAfterUpload !== false
   } catch {}
 })
@@ -39,7 +37,7 @@ const save = async () => {
   try {
     const api = useApi()
     await api.put('/api/admin/gallery/config', {
-      display: { mode: config.displayMode },
+      display: { mode: config.displayMode === 'waterfall' ? 'waterfall' : 'grid' },
       upload: { showUrlAfterUpload: config.showUrlAfterUpload }
     })
     msg.value = '已保存'

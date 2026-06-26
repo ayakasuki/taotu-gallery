@@ -5,13 +5,15 @@ const galleryWatcher = require('../../services/galleryWatcher');
 
 const router = express.Router();
 
+const normalizeDisplayMode = (mode) => mode === 'waterfall' ? 'waterfall' : 'grid';
+
 // 获取图库配置
 router.get('/config', authMiddleware, async (req, res, next) => {
   try {
     const siteConfig = await configService.readSiteConfig();
     const pathsConfig = await configService.readPaths();
     res.json({
-      display: siteConfig.display || { mode: 'grid' },
+      display: { ...(siteConfig.display || {}), mode: normalizeDisplayMode(siteConfig.display?.mode) },
       upload: siteConfig.upload || { showUrlAfterUpload: true },
       customPaths: pathsConfig.customPaths || []
     });
@@ -24,7 +26,7 @@ router.get('/config', authMiddleware, async (req, res, next) => {
 router.put('/config', authMiddleware, async (req, res, next) => {
   try {
     const siteConfig = await configService.readSiteConfig();
-    if (req.body.display) siteConfig.display = req.body.display;
+    if (req.body.display) siteConfig.display = { ...req.body.display, mode: normalizeDisplayMode(req.body.display.mode) };
     if (req.body.upload) siteConfig.upload = req.body.upload;
     await configService.writeSiteConfig(siteConfig);
 
