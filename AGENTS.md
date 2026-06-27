@@ -133,7 +133,24 @@ pm2 logs                     # 查看日志
 
 Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开发计划.md`。
 
-## 当前实现状态（v0.3.0）
+## 当前实现状态（v0.3.1-Pre）
+
+> v0.3.1-Pre 是用户端与访客端基础 UI 迭代记录版。当前仍有部分图标占位，管理后台整体视觉暂未同步重构；待图标替换和后台 UI 一起完成后再发布正式版本。
+
+- 访客端和普通用户端已统一为新版玻璃拟态视觉：默认布局、导航、页脚、首页图库、相册、图片详情、上传、API 文档、登录、注册和仪表盘均已大幅重构。
+- 新增并集中使用 `client/public/icons/` 图标资产和 `client/public/fonts/` 字体资源；当前图标允许存在占位，后续正式版统一替换。
+- 首页图库保留网格/瀑布流两种模式，继续读取 `/api/gallery/config` 的公开展示配置，未登录访客也会按后台保存的默认展示模式进入。
+- 相册列表和相册详情页已重构用户端 UI，支持相册卡片、列表/网格视图、封面设置、图片选择、分页与相册内图片管理。
+- 上传页已重构为新版上传工作台，保留文件上传、URL 上传、批量上传、新建私有标签、上传成功链接展示与批量复制；成功文件会从待上传队列移除。
+- 图片详情页和 API 文档页已重构为新版用户端样式，保留嵌入代码、随机图片 API、Token 认证、复制/下载等原有能力。
+- 登录、注册、忘记密码页面已统一视觉，继续支持图片验证码、邮箱验证码、开放注册开关和 Redis 验证码 TTL。
+- 普通用户仪表盘现在只保留四个侧边栏入口：统计、图片管理、标签设置、账户与安全；相册管理从仪表盘移除，统一到相册页完成。
+- 仪表盘统计页读取 `/api/internal/dashboard/overview`，展示用户图片数、存储配额、私有标签、相册数、最近上传、存储圆环和账号摘要。
+- 仪表盘图片管理已改为表格管理面板，支持我的图库、相册筛选、文件名搜索、私有标签筛选、批量公开/取消公开/删除、公开状态切换、编辑私有标签和分页。
+- 仪表盘标签设置同屏展示私有标签管理与人工标签：私有标签支持分页、当前页全选、批量删除、新建/编辑弹窗、可组合/互斥；人工标签支持选图、选择已有私有标签或回车创建新标签后打标。
+- 账户与安全整合原用户页和 API Token 页，支持头像 hover 上传、账号信息统计、旧密码改密、密码显隐切换、成功/失败提示、Token 遮罩列表、每页 3 条分页和一次性新 Token 展示。
+- 后端配套新增用户头像上传接口 `/api/admin/auth/upload-avatar`、上传静态资源服务 `/uploads/*`、Dashboard overview 内部接口，并让当前用户 Token 列表返回遮罩展示所需字段。
+- 管理后台本轮仅做少量全局样式/图标/配置适配，尚未按用户端新版 UI 整体重构。
 
 - 首页图库已重构为网格/瀑布流两种模式；后台默认展示配置只允许 `grid` / `waterfall`，公开接口 `/api/gallery/config` 决定访客默认模式。
 - 网格模式使用最短列贴合布局，不再用 CSS Grid 行布局；横图 1:1，竖图同宽按比例增高，浏览数显示在左上角。
@@ -169,6 +186,7 @@ node --check server/routes/admin/auth.js
 node --check server/routes/admin/tagConvert.js
 node --check server/routes/api/images.js
 node --check server/routes/api/embed.js
+node --check server/routes/internal/dashboard.js
 node --check server/routes/internal/images.js
 node --check server/utils/tagConflict.js
 cd client && npx nuxt generate

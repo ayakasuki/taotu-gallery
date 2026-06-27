@@ -1,14 +1,18 @@
 <template>
   <div class="admin-gallery">
-    <h1 class="page-title">本地图库设置</h1>
+    <div class="admin-subhero">
+      <div>
+        <span class="hero-kicker">Gallery</span>
+        <h1 class="page-title">本地图库设置</h1>
+        <p>配置首页图库默认展示、分页和公开图库浏览体验。</p>
+      </div>
+      <img src="/icons/admin/gallery-settings-64x64.png" class="subhero-icon" alt="" />
+    </div>
     <div class="fluent-card">
       <h3>图片展示配置</h3>
       <div class="form-group">
         <label>默认展示模式</label>
-        <select v-model="config.displayMode" class="fluent-input">
-          <option value="grid">网格</option>
-          <option value="waterfall">瀑布流</option>
-        </select>
+        <TaotuSelect v-model="config.displayMode" :options="displayModeOptions" />
       </div>
       <div class="form-group">
         <label><input type="checkbox" v-model="config.showUrlAfterUpload" /> 上传成功后展示 URL</label>
@@ -23,6 +27,10 @@
 definePageMeta({ layout: 'admin' })
 const config = reactive({ displayMode: 'grid', showUrlAfterUpload: true })
 const msg = ref('')
+const displayModeOptions = [
+  { label: '网格', value: 'grid' },
+  { label: '瀑布流', value: 'waterfall' }
+]
 
 onMounted(async () => {
   try {

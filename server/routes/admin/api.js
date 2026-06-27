@@ -24,7 +24,7 @@ router.put('/config', authMiddleware, async (req, res) => {
 router.get('/tokens', authMiddleware, async (req, res) => {
   const tokens = await db('api_tokens')
     .where({ user_id: req.user.id })
-    .select('id', 'label', 'is_global', 'user_id', 'created_at', 'last_used_at');
+    .select('id', 'token', 'label', 'is_global', 'user_id', 'created_at', 'last_used_at');
   res.json({ tokens });
 });
 

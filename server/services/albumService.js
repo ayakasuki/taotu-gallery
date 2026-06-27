@@ -7,7 +7,7 @@ const logger = require('../config/logger');
 
 // 获取相册列表
 async function getAlbums(options = {}) {
-  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null } = options;
+  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, search = '' } = options;
   const offset = (page - 1) * limit;
 
   let query = db('albums');
@@ -32,6 +32,13 @@ async function getAlbums(options = {}) {
   if (tagIds && tagIds.length > 0) {
     query = query.whereIn('id', function() {
       this.select('album_id').from('album_tags').whereIn('tag_id', tagIds);
+    });
+  }
+
+  if (search && search.trim()) {
+    const keyword = `%${search.trim()}%`;
+    query = query.where(function() {
+      this.where('name', 'like', keyword).orWhere('description', 'like', keyword);
     });
   }
 
@@ -62,10 +69,22 @@ async function getAlbums(options = {}) {
       this.select('album_id').from('album_tags').whereIn('tag_id', tagIds);
     });
   }
+  if (search && search.trim()) {
+    const keyword = `%${search.trim()}%`;
+    countQuery = countQuery.where(function() {
+      this.where('name', 'like', keyword).orWhere('description', 'like', keyword);
+    });
+  }
   const [{ count }] = await countQuery;
 
   for (const album of albums) {
     const imageService = require('./imageService');
+    const owner = album.user_id
+      ? await db('users').where({ id: album.user_id }).select('username', 'avatar').first()
+      : null;
+    album.owner_name = owner?.username || '系统';
+    album.owner_avatar = owner?.avatar || null;
+
     if (album.cover_image_id) {
       album.cover_image = await db('images').where({ id: album.cover_image_id }).first();
     } else {
@@ -94,6 +113,11 @@ async function getAlbumById(albumId) {
   if (!album) return null;
 
   const imageService = require('./imageService');
+  const owner = album.user_id
+    ? await db('users').where({ id: album.user_id }).select('username', 'avatar').first()
+    : null;
+  album.owner_name = owner?.username || '系统';
+  album.owner_avatar = owner?.avatar || null;
 
   // 获取封面
   if (album.cover_image_id) {

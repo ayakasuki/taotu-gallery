@@ -1,6 +1,5 @@
 <template>
-  <div class="upload-page page-container">
-    <!-- 未登录提示 -->
+  <div class="upload-page">
     <div v-if="!isLoggedIn" class="auth-required fluent-card">
       <h2>需要登录</h2>
       <p>登录后才能上传图片</p>
@@ -8,210 +7,209 @@
     </div>
 
     <template v-else>
-      <h1 class="page-title">上传图片</h1>
-
-      <!-- 上传模式切换 -->
-      <div class="upload-tabs">
-        <button v-for="tab in uploadTabs" :key="tab.key" class="tab-btn" :class="{ active: activeTab === tab.key }" @click="activeTab = tab.key">{{ tab.label }}</button>
-      </div>
-
-      <!-- 文件上传 -->
-      <template v-if="activeTab === 'file'">
-    <div class="upload-layout">
-      <div class="upload-main-column">
-      <div class="upload-area fluent-card">
-        <div
-          class="dropzone"
-          :class="{ dragover: isDragover }"
-          @dragover.prevent="isDragover = true"
-          @dragleave="isDragover = false"
-          @drop.prevent="handleDrop"
-          @click="triggerFileInput"
-        >
-          <input
-            ref="fileInput"
-            type="file"
-            multiple
-            accept="image/*"
-            style="display: none"
-            @change="handleFileSelect"
-          />
-          <div class="dropzone-content">
-            <span class="dropzone-icon">+</span>
-            <p class="dropzone-text">拖拽文件到此处或点击选择</p>
-            <p class="dropzone-hint">支持 JPG、PNG、GIF、WebP、BMP 格式</p>
-          </div>
-        </div>
-
-        <!-- 文件列表 -->
-        <div class="file-list" v-if="selectedFiles.length > 0">
-          <div v-for="(file, idx) in selectedFiles" :key="idx" class="file-item">
-            <div class="file-preview">
-              <img :src="file.preview" v-if="file.preview" />
-              <span v-else class="file-icon">IMG</span>
-            </div>
-            <div class="file-info">
-              <p class="file-name">{{ file.name }}</p>
-              <p class="file-size">{{ formatSize(file.size) }}</p>
-            </div>
-            <button class="remove-btn" @click="removeFile(idx)">×</button>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="uploadedLinks.length > 0" class="uploaded-links fluent-card">
-        <div class="links-header">
-          <h3>已上传链接</h3>
-          <button class="fluent-btn fluent-btn-secondary" @click="copyAllLinks">批量复制</button>
-        </div>
-        <div class="link-list">
-          <div v-for="item in uploadedLinks" :key="item.id || item.url" class="link-row">
-            <div class="link-info">
-              <span class="link-name">{{ item.filename }}</span>
-              <input class="link-input" :value="item.url" readonly @focus="$event.target.select()" />
-            </div>
-            <button class="fluent-btn fluent-btn-secondary" @click="copyLink(item.url)">复制</button>
-          </div>
-        </div>
-      </div>
-      </div>
-
-      <div class="upload-config fluent-card">
-        <h3 class="config-title">上传配置</h3>
-
-        <div class="config-item">
-          <label>目标相册</label>
-          <select v-model="uploadConfig.albumId" class="fluent-select">
-            <option :value="null">不指定相册</option>
-            <option v-for="album in albums" :key="album.id" :value="album.id">
-              {{ album.name }}
-            </option>
-          </select>
-        </div>
-
-        <div class="config-item">
-          <label>{{ isAdmin ? '公共标签' : '我的私有标签' }}</label>
-          <TagSelector
-            :tags="uploadTagOptions"
-            :selectedTagIds="uploadConfig.tagIds"
-            @update:selectedTagIds="uploadConfig.tagIds = $event"
-          />
-          <div class="new-tag-input">
-            <input v-model="newTagName" class="fluent-input" :placeholder="isAdmin ? '输入新公共标签名，回车添加' : '输入新私有标签名，回车添加'" @keyup.enter="addNewTag" />
-            <button v-if="newTagName" class="fluent-btn fluent-btn-secondary" @click="addNewTag">添加</button>
-          </div>
-          <div v-if="uploadConfig.newTags.length > 0" class="new-tags-list">
-            <span v-for="(nt, idx) in uploadConfig.newTags" :key="idx" class="new-tag-chip">
-              {{ nt }} <button @click="uploadConfig.newTags.splice(idx, 1)">×</button>
-            </span>
-          </div>
-        </div>
-
-        <div class="config-item">
-          <label><input type="checkbox" v-model="uploadConfig.isPublic" /> 设为公共图片（所有人可见）</label>
-        </div>
-
-        <div class="upload-actions">
+      <section class="upload-console">
+        <div class="upload-tabs">
           <button
-            class="fluent-btn fluent-btn-primary upload-btn"
-            :disabled="selectedFiles.length === 0 || uploading"
-            @click="handleUpload"
+            v-for="tab in uploadTabs"
+            :key="tab.key"
+            class="tab-btn"
+            :class="{ active: activeTab === tab.key }"
+            type="button"
+            @click="activeTab = tab.key"
           >
-            {{ uploading ? `上传中 (${uploadProgress}%)` : `上传 ${selectedFiles.length} 个文件` }}
+            <img :src="tab.icon" alt="" />
+            <span>{{ tab.label }}</span>
           </button>
-          <button class="fluent-btn fluent-btn-secondary" @click="clearFiles">清空</button>
         </div>
 
-        <!-- 上传结果 -->
-        <div class="upload-results" v-if="uploadResults.length > 0">
-          <h4>上传结果</h4>
-          <div v-for="result in uploadResults" :key="result.id" class="result-item" :class="{ success: result.success, failed: !result.success }">
-            <span>{{ result.filename || result.error }}</span>
-            <span class="result-status">{{ result.success ? '成功' : '失败' }}</span>
+        <template v-if="activeTab === 'file'">
+          <div class="upload-drop-card">
+            <div
+              class="dropzone"
+              :class="{ dragover: isDragover }"
+              @dragover.prevent="isDragover = true"
+              @dragleave="isDragover = false"
+              @drop.prevent="handleDrop"
+              @click="triggerFileInput"
+            >
+              <input
+                ref="fileInput"
+                type="file"
+                multiple
+                accept="image/*"
+                style="display: none"
+                @change="handleFileSelect"
+              />
+              <div class="dropzone-content">
+                <img src="/icons/upload/upload-cloud-128x128.png" class="dropzone-icon" alt="" />
+                <p class="dropzone-text">将文件拖拽到这里开始上传</p>
+                <p class="dropzone-hint">支持 JPG / PNG / WebP / GIF / AVIF，最大 20MB / 张</p>
+                <div class="dropzone-actions">
+                  <button type="button" @click.stop="triggerFileInput">点击选择文件</button>
+                  <span>或按 Ctrl + V 粘贴截图上传</span>
+                </div>
+              </div>
+            </div>
+
+            <section v-if="selectedFiles.length > 0" class="selected-files-card">
+              <header>
+                <strong>已选择 {{ selectedFiles.length }} 个文件（共 {{ formatSize(selectedTotalSize) }}）</strong>
+                <button type="button" @click="clearFiles">
+                  <img src="/icons/upload/clear-64x64.png" alt="" />
+                  清空
+                </button>
+              </header>
+              <div class="selected-file-grid">
+                <article v-for="(file, idx) in selectedFiles" :key="file.key" class="selected-file">
+                  <button class="remove-file" type="button" @click="removeFile(idx)">×</button>
+                  <div class="file-preview">
+                    <img v-if="file.preview" :src="file.preview" :alt="file.name" />
+                    <span v-else>IMG</span>
+                  </div>
+                  <strong>{{ file.name }}</strong>
+                  <small>{{ formatSize(file.size) }}</small>
+                </article>
+              </div>
+            </section>
+
+            <section class="upload-config-panel">
+              <div class="config-row">
+                <label>目标相册</label>
+                <TaotuSelect v-model="uploadConfig.albumId" :options="albumOptions" />
+              </div>
+
+              <div class="config-row tags-row">
+                <label>{{ isAdmin ? '平台标签' : '私有标签（仅自己可见）' }}</label>
+                <div class="tag-config-box">
+                  <TagSelector
+                    :tags="uploadTagOptions"
+                    :selectedTagIds="uploadConfig.tagIds"
+                    @update:selectedTagIds="uploadConfig.tagIds = $event"
+                  />
+                  <div class="new-tag-input">
+                    <input
+                      v-model="newTagName"
+                      :placeholder="isAdmin ? '输入新公共标签名，回车添加' : '输入新私有标签名，回车添加'"
+                      @keyup.enter="addNewTag"
+                    />
+                    <button v-if="newTagName" type="button" @click="addNewTag">新增标签</button>
+                  </div>
+                  <div v-if="uploadConfig.newTags.length > 0" class="new-tags-list">
+                    <span v-for="(nt, idx) in uploadConfig.newTags" :key="idx">
+                      {{ nt }} <button type="button" @click="uploadConfig.newTags.splice(idx, 1)">×</button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-row public-row">
+                <label>是否公开</label>
+                <label class="pretty-check">
+                  <input v-model="uploadConfig.isPublic" type="checkbox" />
+                  <span></span>
+                  公开（所有人可见）
+                </label>
+              </div>
+            </section>
+
+            <footer class="upload-footer">
+              <button
+                class="start-upload-btn"
+                type="button"
+                :disabled="selectedFiles.length === 0 || uploading"
+                @click="handleUpload"
+              >
+                {{ uploading ? '上传中' : '开始上传' }}
+              </button>
+              <div class="progress-wrap">
+                <div class="progress-text">
+                  <span>{{ uploading ? `上传中 ${uploadProgress}%` : selectedFiles.length ? `待上传 ${selectedFiles.length} 张` : '等待选择文件' }}</span>
+                  <span>{{ uploadProgress }}%</span>
+                </div>
+                <div class="progress-track"><i :style="{ width: `${uploadProgress}%` }"></i></div>
+              </div>
+              <button class="cancel-upload-btn" type="button" :disabled="!uploading" @click="cancelUpload">取消上传</button>
+            </footer>
           </div>
-        </div>
-      </div>
-    </div>
-      </template>
+        </template>
 
-      <!-- URL上传 -->
-      <template v-if="activeTab === 'url'">
-        <div class="fluent-card">
-          <h3>通过 URL 上传</h3>
-          <p class="desc">输入图片 URL，每行一个，系统会自动下载并索引</p>
-          <textarea v-model="urlList" class="fluent-textarea" rows="8" placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.png"></textarea>
-          <div class="url-actions">
-            <button class="fluent-btn fluent-btn-primary" @click="uploadFromUrls" :disabled="urlUploading">
+        <template v-if="activeTab === 'url'">
+          <div class="simple-upload-panel">
+            <h3>通过 URL 上传</h3>
+            <p>输入图片 URL，每行一个，系统会自动下载并索引。</p>
+            <textarea v-model="urlList" rows="8" placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.png"></textarea>
+            <button type="button" class="start-upload-btn" :disabled="urlUploading || !urlList.trim()" @click="uploadFromUrls">
               {{ urlUploading ? '上传中...' : '开始上传' }}
             </button>
           </div>
-          <div v-if="urlResults.length > 0" class="upload-results">
-            <h4>上传结果</h4>
-            <div v-for="(r, idx) in urlResults" :key="idx" class="result-item" :class="{ success: r.success, failed: !r.success }">
-              <span>{{ r.url || r.error }}</span>
-              <span>{{ r.success ? '成功' : '失败' }}</span>
-            </div>
-          </div>
-        </div>
-      </template>
+        </template>
 
-      <!-- API上传说明 -->
-      <template v-if="activeTab === 'api'">
-        <div class="fluent-card">
-          <h3>API 接口上传</h3>
-          <p class="desc">通过 API 接口上传图片，支持单文件和批量上传</p>
-
-          <div class="api-section">
-            <h4>上传接口</h4>
+        <template v-if="activeTab === 'api'">
+          <div class="simple-upload-panel">
+            <h3>API 接口上传</h3>
+            <p>通过 API 接口上传图片，支持单文件和批量上传。</p>
             <div class="code-block">
               <pre><code>POST /api/upload
 Content-Type: multipart/form-data
 Authorization: Bearer &lt;your_token&gt;
 
-# 单文件上传
 curl -X POST {{ baseUrl }}/api/upload \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "files=@image.jpg"
-
-# 批量上传
-curl -X POST {{ baseUrl }}/api/upload \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "files=@image1.jpg" \
-  -F "files=@image2.png" \
+  -F "files=@image.jpg" \
   -F "album_id=1" \
   -F 'tags=[1,2,3]'</code></pre>
             </div>
           </div>
+        </template>
+      </section>
 
-          <div class="api-section">
-            <h4>参数说明</h4>
-            <table class="param-table">
-              <tr><th>参数</th><th>类型</th><th>说明</th></tr>
-              <tr><td>files</td><td>File[]</td><td>图片文件，支持多文件</td></tr>
-              <tr><td>album_id</td><td>Number</td><td>目标相册 ID（可选）</td></tr>
-              <tr><td>tags</td><td>JSON Array</td><td>标签 ID 数组，如 [1,2,3]（可选）</td></tr>
-            </table>
+      <section v-if="uploadRecords.length > 0" class="upload-records-card">
+        <header class="records-header">
+          <h2>上传结果</h2>
+          <div class="records-actions">
+            <TaotuSelect v-model="recordStatusFilter" class="status-filter" :options="recordStatusOptions" />
+            <button type="button" class="copy-all-btn" :disabled="successRecords.length === 0" @click="copyAllRecordLinks">
+              <img src="/icons/upload/copy-batch-64x64.png" alt="" />
+              复制全部链接
+            </button>
+            <button type="button" class="clear-records-btn" @click="clearUploadRecords">
+              <img src="/icons/upload/clear-64x64.png" alt="" />
+              清空记录
+            </button>
           </div>
+        </header>
 
-          <div class="api-section">
-            <h4>返回示例</h4>
-            <div class="code-block">
-              <pre><code>{
-  "message": "上传完成: 1 成功, 0 失败",
-  "results": [
-    {
-      "success": true,
-      "id": 1,
-      "filename": "image.jpg",
-      "hash_path": "image/2026-06-24/abc123def456.jpg",
-      "url": "/image/2026-06-24/abc123def456.jpg"
-    }
-  ]
-}</code></pre>
+        <div class="records-table">
+          <div class="records-head">
+            <span>文件名</span>
+            <span>大小</span>
+            <span>状态</span>
+            <span>链接（桃图智库）</span>
+            <span>错误信息</span>
+            <span>操作</span>
+            <span>时间</span>
+          </div>
+          <div v-for="record in filteredUploadRecords" :key="record.key" class="record-row">
+            <div class="record-file">
+              <img v-if="record.preview" :src="record.preview" alt="" />
+              <span v-else class="file-mini-empty"></span>
+              <strong>{{ record.filename }}</strong>
             </div>
+            <span>{{ record.size ? formatSize(record.size) : '-' }}</span>
+            <span class="status-cell" :class="record.success ? 'success' : 'failed'">
+              <img :src="record.success ? '/icons/status/success-64x64.png' : '/icons/status/failure-64x64.png'" alt="" />
+              {{ record.success ? '成功' : '失败' }}
+            </span>
+            <span class="record-link">{{ record.success ? record.url : '-' }}</span>
+            <span class="record-error">{{ record.success ? '-' : (record.error || '上传失败') }}</span>
+            <span class="record-op">
+              <button v-if="record.success" type="button" @click="copyLink(record.url)">复制链接</button>
+              <button v-else type="button" @click="retryRecord(record)">重试</button>
+            </span>
+            <span>{{ record.time }}</span>
           </div>
         </div>
-      </template>
+      </section>
     </template>
   </div>
 </template>
@@ -222,14 +220,13 @@ import TagSelector from '~/components/tags/TagSelector.vue'
 const config = useRuntimeConfig()
 const { tags, fetchTags } = useTags()
 
-// 登录检查
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
 const activeTab = ref('file')
 const uploadTabs = [
-  { key: 'file', label: '文件上传' },
-  { key: 'url', label: 'URL 上传' },
-  { key: 'api', label: 'API 上传' }
+  { key: 'file', label: '文件上传', icon: '/icons/upload/file-upload-64x64.png' },
+  { key: 'url', label: 'URL 上传', icon: '/icons/upload/url-upload-64x64.png' },
+  { key: 'api', label: 'API 上传', icon: '/icons/upload/api-upload-64x64.png' }
 ]
 
 onMounted(() => {
@@ -243,6 +240,14 @@ onMounted(() => {
     fetchTags()
     fetchAlbums()
   }
+  window.addEventListener('paste', handlePaste)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('paste', handlePaste)
+  currentXhr.value?.abort()
+  selectedFiles.value.forEach(f => URL.revokeObjectURL(f.preview))
+  revokeRecordPreviews(uploadRecords.value)
 })
 
 const fileInput = ref(null)
@@ -250,9 +255,16 @@ const selectedFiles = ref([])
 const isDragover = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
-const uploadResults = ref([])
-const uploadedLinks = ref([])
+const uploadRecords = ref([])
+const currentXhr = ref(null)
 const albums = ref([])
+const recordStatusFilter = ref('all')
+const recordStatusOptions = [
+  { label: '全部状态', value: 'all' },
+  { label: '成功', value: 'success' },
+  { label: '失败', value: 'failed' }
+]
+let recordId = 0
 
 const uploadConfig = reactive({
   albumId: null,
@@ -262,6 +274,17 @@ const uploadConfig = reactive({
 })
 
 const newTagName = ref('')
+const albumOptions = computed(() => [
+  { label: '不指定相册', value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id }))
+])
+const selectedTotalSize = computed(() => selectedFiles.value.reduce((sum, item) => sum + item.size, 0))
+const successRecords = computed(() => uploadRecords.value.filter(record => record.success && record.url))
+const filteredUploadRecords = computed(() => {
+  if (recordStatusFilter.value === 'success') return uploadRecords.value.filter(record => record.success)
+  if (recordStatusFilter.value === 'failed') return uploadRecords.value.filter(record => !record.success)
+  return uploadRecords.value
+})
 
 const uploadTagOptions = computed(() => {
   const source = tags.value || { combinable: [], nonCombinable: [] }
@@ -280,8 +303,7 @@ const uploadTagOptions = computed(() => {
 
 const addNewTag = () => {
   const name = newTagName.value.trim()
-  if (!name) return
-  if (uploadConfig.newTags.includes(name)) return
+  if (!name || uploadConfig.newTags.includes(name)) return
   uploadConfig.newTags.push(name)
   newTagName.value = ''
 }
@@ -296,9 +318,7 @@ const fetchAlbums = async () => {
   }
 }
 
-const triggerFileInput = () => {
-  fileInput.value?.click()
-}
+const triggerFileInput = () => fileInput.value?.click()
 
 const handleFileSelect = (e) => {
   addFiles(e.target.files)
@@ -310,6 +330,28 @@ const handleDrop = (e) => {
   addFiles(e.dataTransfer.files)
 }
 
+const handlePaste = (e) => {
+  if (!isLoggedIn.value || activeTab.value !== 'file') return
+  const target = e.target
+  const isEditable = target?.closest?.('input, textarea, [contenteditable="true"]')
+  if (isEditable) return
+
+  const pastedFiles = Array.from(e.clipboardData?.items || [])
+    .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item, idx) => {
+      const file = item.getAsFile()
+      if (!file) return null
+      const ext = (item.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+      return new File([file], `paste-${formatPasteTimestamp(new Date())}-${idx + 1}.${ext}`, { type: file.type })
+    })
+    .filter(Boolean)
+
+  if (pastedFiles.length > 0) {
+    e.preventDefault()
+    addFiles(pastedFiles)
+  }
+}
+
 const fileKey = (file) => [file.name, file.size, file.lastModified].join(':')
 
 const addFiles = (fileList) => {
@@ -318,14 +360,12 @@ const addFiles = (fileList) => {
     if (!file.type.startsWith('image/')) continue
     const key = fileKey(file)
     if (existingKeys.has(key)) continue
-
-    const preview = URL.createObjectURL(file)
     selectedFiles.value.push({
       key,
       file,
       name: file.name,
       size: file.size,
-      preview
+      preview: URL.createObjectURL(file)
     })
     existingKeys.add(key)
   }
@@ -339,69 +379,78 @@ const removeFile = (idx) => {
 const clearFiles = () => {
   selectedFiles.value.forEach(f => URL.revokeObjectURL(f.preview))
   selectedFiles.value = []
-  uploadResults.value = []
+  uploadProgress.value = 0
 }
 
 const handleUpload = async () => {
   if (selectedFiles.value.length === 0) return
-
   uploading.value = true
   uploadProgress.value = 0
-  uploadResults.value = []
   const uploadingItems = [...selectedFiles.value]
 
   try {
     const formData = new FormData()
     uploadingItems.forEach(f => formData.append('files', f.file))
-
-    if (uploadConfig.albumId) {
-      formData.append('album_id', uploadConfig.albumId)
-    }
-    if (uploadConfig.tagIds.length > 0) {
-      formData.append('tags', JSON.stringify(uploadConfig.tagIds))
-    }
-    if (uploadConfig.newTags.length > 0) {
-      formData.append('newTags', JSON.stringify(uploadConfig.newTags))
-    }
-    if (uploadConfig.isPublic) {
-      formData.append('is_public', '1')
-    }
+    if (uploadConfig.albumId) formData.append('album_id', uploadConfig.albumId)
+    if (uploadConfig.tagIds.length > 0) formData.append('tags', JSON.stringify(uploadConfig.tagIds))
+    if (uploadConfig.newTags.length > 0) formData.append('newTags', JSON.stringify(uploadConfig.newTags))
+    if (uploadConfig.isPublic) formData.append('is_public', '1')
 
     const xhr = new XMLHttpRequest()
+    currentXhr.value = xhr
     xhr.open('POST', `${config.public.apiBase}/api/upload`)
-
     const jwt = localStorage.getItem('jwt_token')
     if (jwt) xhr.setRequestHeader('Authorization', `Bearer ${jwt}`)
 
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        uploadProgress.value = Math.round((e.loaded / e.total) * 100)
-      }
+      if (e.lengthComputable) uploadProgress.value = Math.round((e.loaded / e.total) * 100)
     }
 
     xhr.onload = () => {
       try {
         const data = JSON.parse(xhr.responseText)
-        uploadResults.value = data.results || []
-        appendUploadedLinks(uploadResults.value)
-        removeUploadedSuccessFiles(uploadingItems, uploadResults.value)
+        if (xhr.status < 200 || xhr.status >= 300) {
+          const message = data.error || data.message || `上传失败 (${xhr.status})`
+          appendUploadRecords(buildFailureResults(uploadingItems, message), uploadingItems)
+          return
+        }
+        const results = data.results || buildFailureResults(uploadingItems, '响应中没有上传结果')
+        appendUploadRecords(results, uploadingItems)
+        removeUploadedSuccessFiles(uploadingItems, results)
       } catch {
-        uploadResults.value = [{ success: false, error: '解析响应失败' }]
+        appendUploadRecords(buildFailureResults(uploadingItems, '解析响应失败'), uploadingItems)
       }
       uploading.value = false
+      currentXhr.value = null
     }
 
     xhr.onerror = () => {
-      uploadResults.value = [{ success: false, error: '网络错误' }]
+      appendUploadRecords(buildFailureResults(uploadingItems, '网络错误'), uploadingItems)
       uploading.value = false
+      currentXhr.value = null
+    }
+
+    xhr.onabort = () => {
+      uploading.value = false
+      currentXhr.value = null
     }
 
     xhr.send(formData)
   } catch (err) {
-    uploadResults.value = [{ success: false, error: err.message }]
+    appendUploadRecords(buildFailureResults(uploadingItems, err.message), uploadingItems)
     uploading.value = false
+    currentXhr.value = null
   }
 }
+
+const cancelUpload = () => currentXhr.value?.abort()
+
+const buildFailureResults = (items, error) => items.map(item => ({
+  success: false,
+  filename: item.name,
+  size: item.size,
+  error
+}))
 
 const buildDisplayUrl = (result) => {
   if (result.source_url) return result.source_url
@@ -411,14 +460,31 @@ const buildDisplayUrl = (result) => {
   return base.replace(new RegExp('/+$'), '') + result.url
 }
 
-const appendUploadedLinks = (results) => {
-  const existing = new Set(uploadedLinks.value.map(item => item.url))
+const appendUploadRecords = (results, sourceItems = []) => {
+  const sourceQueue = [...sourceItems]
   for (const result of results || []) {
-    if (!result.success) continue
-    const url = buildDisplayUrl(result)
-    if (!url || existing.has(url)) continue
-    uploadedLinks.value.push({ id: result.id, filename: result.filename || 'image', url })
-    existing.add(url)
+    const matched = sourceQueue.find(item => item.name === result.filename) || sourceQueue.shift()
+    const url = result.success ? buildDisplayUrl(result) : ''
+    const preview = matched?.file ? URL.createObjectURL(matched.file) : (result.thumb_url || '')
+    uploadRecords.value.unshift({
+      key: `${Date.now()}-${recordId++}`,
+      id: result.id,
+      filename: result.filename || matched?.name || result.url || 'image',
+      size: result.size || matched?.size || 0,
+      preview,
+      previewObjectUrl: matched?.file ? preview : '',
+      success: !!result.success,
+      url,
+      error: result.error || '',
+      time: formatDateTime(new Date()),
+      retryFile: matched || null
+    })
+  }
+}
+
+const revokeRecordPreviews = (records = []) => {
+  for (const record of records) {
+    if (record.previewObjectUrl) URL.revokeObjectURL(record.previewObjectUrl)
   }
 }
 
@@ -429,7 +495,6 @@ const removeUploadedSuccessFiles = (uploadedItems, results) => {
     successNameCounts.set(result.filename, (successNameCounts.get(result.filename) || 0) + 1)
   }
   if (successNameCounts.size === 0) return
-
   const successKeys = new Set()
   for (const item of uploadedItems) {
     const remaining = successNameCounts.get(item.name) || 0
@@ -437,7 +502,6 @@ const removeUploadedSuccessFiles = (uploadedItems, results) => {
     successKeys.add(item.key)
     successNameCounts.set(item.name, remaining - 1)
   }
-
   const kept = []
   for (const item of selectedFiles.value) {
     if (successKeys.has(item.key)) URL.revokeObjectURL(item.preview)
@@ -446,44 +510,63 @@ const removeUploadedSuccessFiles = (uploadedItems, results) => {
   selectedFiles.value = kept
 }
 
+const retryRecord = (record) => {
+  if (!record.retryFile) return
+  if (!selectedFiles.value.some(item => item.key === record.retryFile.key)) {
+    selectedFiles.value.push(record.retryFile)
+  }
+}
+
+const clearUploadRecords = () => {
+  revokeRecordPreviews(uploadRecords.value)
+  uploadRecords.value = []
+  recordStatusFilter.value = 'all'
+}
+
 const copyLink = async (url) => {
   try { await navigator.clipboard.writeText(url) } catch {}
 }
 
-const copyAllLinks = async () => {
-  try { await navigator.clipboard.writeText(uploadedLinks.value.map(item => item.url).join(String.fromCharCode(10))) } catch {}
+const copyAllRecordLinks = async () => {
+  try {
+    await navigator.clipboard.writeText(successRecords.value.map(item => item.url).join(String.fromCharCode(10)))
+  } catch {}
 }
 
-const formatSize = (bytes) => {
+const formatSize = (bytes = 0) => {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
-// URL 上传
+const formatDateTime = (value) => {
+  const date = new Date(value)
+  const pad = num => String(num).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+const formatPasteTimestamp = (value) => {
+  const date = new Date(value)
+  const pad = num => String(num).padStart(2, '0')
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+}
+
 const urlList = ref('')
 const urlUploading = ref(false)
-const urlResults = ref([])
 
 const uploadFromUrls = async () => {
   if (!urlList.value.trim()) return
   urlUploading.value = true
-  urlResults.value = []
-
   const urls = urlList.value.split('\n').map(u => u.trim()).filter(u => u)
   const api = useApi()
-
   for (const url of urls) {
     try {
       const data = await api.post('/api/upload/url', { url })
-      const result = { url, success: true, ...data }
-      urlResults.value.push(result)
-      appendUploadedLinks([result])
+      appendUploadRecords([{ url, success: true, ...data }])
     } catch (err) {
-      urlResults.value.push({ url, success: false, error: err.data?.error || err.message })
+      appendUploadRecords([{ url, success: false, error: err.data?.error || err.message }])
     }
   }
-
   urlUploading.value = false
 }
 
@@ -491,83 +574,218 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 </script>
 
 <style scoped>
-.page-title {
-  font-size: 24px;
-  font-weight: 600;
-  margin-bottom: var(--space-xl);
+.upload-page {
+  width: min(100%, 1490px);
+  margin: 0 auto;
 }
 
-.upload-layout {
+.auth-required {
+  width: min(460px, 100%);
+  margin: 80px auto;
+  text-align: center;
+}
+
+.upload-console,
+.upload-records-card,
+.simple-upload-panel {
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 16px 42px rgba(84, 74, 112, 0.1);
+  backdrop-filter: blur(24px);
+}
+
+.upload-console {
+  overflow: hidden;
+}
+
+.upload-tabs {
+  height: 56px;
   display: flex;
-  gap: var(--space-lg);
+  align-items: stretch;
+  gap: 0;
+  border-bottom: 1px solid rgba(230, 219, 236, 0.72);
+  padding: 0px 20px;
 }
 
-.upload-main-column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
+.tab-btn {
+  position: relative;
+  min-width: 146px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: #65708a;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 900;
 }
 
-.upload-area {
-  width: 100%;
+.tab-btn img {
+  width: 18px;
+  height: 18px;
+}
+
+.tab-btn.active {
+  color: #f15c96;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: #f15c96;
+}
+
+.upload-drop-card {
+  padding: 16px;
 }
 
 .dropzone {
-  border: 2px dashed var(--fluent-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-2xl);
-  text-align: center;
-  cursor: pointer;
-  transition: all var(--transition-normal);
-}
-
-.dropzone:hover, .dropzone.dragover {
-  border-color: var(--fluent-blue);
-  background: var(--fluent-blue-light);
-}
-
-.dropzone-icon {
-  font-size: 48px;
-  color: var(--fluent-text-secondary);
-}
-
-.dropzone-text {
-  font-size: 16px;
-  margin-top: var(--space-md);
-}
-
-.dropzone-hint {
-  font-size: 13px;
-  color: var(--fluent-text-secondary);
-  margin-top: var(--space-sm);
-}
-
-.file-list {
-  margin-top: var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-sm);
-  border: 1px solid var(--fluent-border);
-  border-radius: var(--radius-sm);
-}
-
-.file-preview {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--fluent-hover);
+  min-height: 170px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1.5px dashed rgba(144, 154, 180, 0.42);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.34);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  padding: 50px 0;
+}
+
+.dropzone:hover,
+.dropzone.dragover {
+  border-color: rgba(248, 95, 154, 0.62);
+  background: rgba(255, 240, 246, 0.72);
+}
+
+.dropzone-icon {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+.dropzone-text {
+  color: #4b566e;
+  font-size: 17px;
+  font-weight: 900;
+  padding: 5px;
+}
+
+.dropzone-hint,
+.dropzone-actions span {
+  color: #8b93a7;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 10px;
+}
+
+.dropzone-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.dropzone-actions button,
+.start-upload-btn,
+.copy-all-btn {
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ff7caf, #f15c96);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.dropzone-actions button {
+  height: 34px;
+  padding: 0 18px;
+}
+
+.selected-files-card,
+.upload-config-panel {
+  margin-top: 14px;
+  border: 1px solid rgba(230, 219, 236, 0.76);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.selected-files-card {
+  padding: 14px 16px;
+}
+
+.selected-files-card header,
+.records-header,
+.records-actions,
+.upload-footer,
+.status-cell,
+.record-file,
+.record-op,
+.pretty-check,
+.copy-all-btn,
+.clear-records-btn {
+  display: flex;
+  align-items: center;
+}
+
+.selected-files-card header {
+  justify-content: space-between;
+  color: #65708a;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.selected-files-card header button,
+.clear-records-btn {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(248, 95, 154, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.56);
+  color: #f15c96;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 12px;
+}
+
+.selected-files-card header img,
+.copy-all-btn img,
+.clear-records-btn img {
+  width: 15px;
+  height: 15px;
+}
+
+.selected-file-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.selected-file {
+  position: relative;
+  min-width: 0;
+}
+
+.file-preview {
+  aspect-ratio: 1.44 / 1;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(245, 248, 255, 0.86);
 }
 
 .file-preview img {
@@ -576,213 +794,428 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   object-fit: cover;
 }
 
-.file-info {
-  flex: 1;
-}
-
-.file-name {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.file-size {
-  font-size: 12px;
-  color: var(--fluent-text-secondary);
-}
-
-.remove-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--fluent-text-secondary);
-}
-
-.remove-btn:hover {
-  background: #fde7e9;
-  color: #d13438;
-}
-
-.upload-config {
-  width: 360px;
-  flex-shrink: 0;
-}
-
-.uploaded-links { padding: var(--space-lg); }
-.links-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-md); }
-.links-header h3 { font-size: 16px; font-weight: 600; margin: 0; }
-.link-list { display: flex; flex-direction: column; gap: var(--space-sm); }
-.link-row { display: flex; align-items: center; gap: var(--space-sm); }
-.link-info { flex: 1; min-width: 0; }
-.link-name { display: block; font-size: 12px; color: var(--fluent-text-secondary); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.link-input { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 13px; background: white; color: var(--fluent-text); }
-
-.config-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: var(--space-lg);
-}
-
-.config-item {
-  margin-bottom: var(--space-lg);
-}
-
-.config-item label {
+.selected-file strong {
   display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #65708a;
   font-size: 13px;
-  font-weight: 500;
-  margin-bottom: var(--space-sm);
+  font-weight: 900;
 }
 
-.fluent-select {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--fluent-border);
-  border-radius: var(--radius-sm);
+.selected-file small {
+  color: #9aa3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.remove-file {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  background: #fff;
+  color: #ff6f96;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.upload-config-panel {
+  padding: 14px 16px;
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.config-row:last-child {
+  margin-bottom: 0;
+}
+
+.config-row > label,
+.config-row > span {
+  color: #65708a;
   font-size: 14px;
-  background: white;
+  font-weight: 900;
 }
 
-.upload-actions {
+.tag-config-box {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(230, 219, 236, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.44);
+}
+
+.new-tag-input {
   display: flex;
-  gap: var(--space-md);
-  margin-top: var(--space-lg);
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.new-tag-input { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); }
-.new-tag-input .fluent-input { flex: 1; padding: 6px 10px; font-size: 13px; }
-.new-tags-list { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
-.new-tag-chip { font-size: 12px; padding: 2px 8px; background: #e6f4ea; color: #107c10; border-radius: 12px; display: flex; align-items: center; gap: 4px; }
-.new-tag-chip button { background: none; border: none; cursor: pointer; font-size: 14px; color: #107c10; padding: 0; line-height: 1; }
-
-.upload-btn {
+.new-tag-input input {
   flex: 1;
+  height: 32px;
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #65708a;
+  padding: 0 11px;
+  outline: none;
+  font-size: 12px;
 }
 
-.upload-results {
-  margin-top: var(--space-lg);
-  border-top: 1px solid var(--fluent-border);
-  padding-top: var(--space-lg);
+.new-tag-input button,
+.new-tags-list span {
+  border: 1px solid rgba(174, 151, 255, 0.36);
+  border-radius: 8px;
+  background: rgba(245, 238, 255, 0.74);
+  color: #9f64ec;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 12px;
 }
 
-.upload-results h4 {
+.new-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.new-tags-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+}
+
+.new-tags-list button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pretty-check {
+  gap: 8px;
+  color: #65708a;
   font-size: 14px;
-  margin-bottom: var(--space-md);
+  font-weight: 900;
 }
 
-.result-item {
+.pretty-check input {
+  display: none;
+}
+
+.pretty-check span {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: rgba(220, 225, 238, 0.86);
+}
+
+.pretty-check input:checked + span {
+  background: #f15c96;
+}
+
+.pretty-check input:checked + span::after {
+  content: '';
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+.upload-footer {
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.start-upload-btn {
+  width: 168px;
+  height: 38px;
+}
+
+.start-upload-btn:disabled,
+.cancel-upload-btn:disabled,
+.copy-all-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.progress-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.progress-text {
   display: flex;
   justify-content: space-between;
-  padding: 4px 0;
-  font-size: 13px;
+  margin-bottom: 6px;
+  color: #7d68e8;
+  font-size: 14px;
+  font-weight: 900;
 }
 
-.result-item.success { color: #107c10; }
-.result-item.failed { color: #d13438; }
-
-@media (max-width: 768px) {
-  .upload-layout {
-    flex-direction: column;
-  }
-
-  .upload-config {
-    width: 100%;
-  }
+.progress-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(220, 225, 238, 0.82);
 }
 
-.upload-tabs {
-  display: flex;
-  gap: 2px;
-  margin-bottom: var(--space-lg);
-  background: var(--fluent-hover);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-  width: fit-content;
+.progress-track i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7a8cff, #48d5b4);
+  transition: width 0.16s ease;
 }
 
-.tab-btn {
-  padding: 8px 20px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
+.cancel-upload-btn {
+  width: 116px;
+  height: 38px;
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #65708a;
   cursor: pointer;
   font-size: 14px;
-  transition: all var(--transition-fast);
+  font-weight: 900;
 }
 
-.tab-btn.active {
-  background: white;
-  box-shadow: var(--shadow-1);
-  font-weight: 500;
+.upload-records-card {
+  margin-top: 14px;
+  overflow: hidden;
 }
 
-.desc {
-  color: var(--fluent-text-secondary);
-  margin-bottom: var(--space-lg);
-  font-size: 14px;
+.records-header {
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 50px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(230, 219, 236, 0.72);
 }
 
-.fluent-textarea {
+.records-header h2 {
+  color: #4b566e;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.records-actions {
+  gap: 12px;
+}
+
+.status-filter {
+  width: 138px;
+}
+
+.copy-all-btn {
+  height: 34px;
+  gap: 7px;
+  padding: 0 14px;
+  background: rgba(245, 238, 255, 0.86);
+  color: #8d6bf2;
+}
+
+.clear-records-btn {
+  height: 34px;
+}
+
+.records-table {
+  overflow-x: auto;
+}
+
+.records-head,
+.record-row {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.4fr) 110px 110px minmax(320px, 2fr) minmax(260px, 1.5fr) 110px 160px;
+  align-items: center;
+  min-width: 1380px;
+}
+
+.records-head {
+  height: 38px;
+  padding: 0 16px;
+  background: rgba(248, 250, 255, 0.52);
+  color: #8b93a7;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.record-row {
+  min-height: 44px;
+  padding: 0 16px;
+  border-top: 1px solid rgba(230, 219, 236, 0.52);
+  color: #8b93a7;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.record-file {
+  min-width: 0;
+  gap: 9px;
+}
+
+.record-file img,
+.file-mini-empty {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(220, 225, 238, 0.82);
+}
+
+.record-file strong,
+.record-link,
+.record-error {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.record-file strong {
+  color: #65708a;
+}
+
+.status-cell {
+  gap: 7px;
+}
+
+.status-cell img {
+  width: 16px;
+  height: 16px;
+}
+
+.status-cell.success {
+  color: #21bd87;
+}
+
+.status-cell.failed,
+.record-error {
+  color: #ff6f96;
+}
+
+.record-op button {
+  min-width: 74px;
+  height: 28px;
+  border: 1px solid rgba(174, 151, 255, 0.42);
+  border-radius: 7px;
+  background: rgba(245, 238, 255, 0.74);
+  color: #8d6bf2;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.simple-upload-panel {
+  margin: 16px;
+  padding: 18px;
+}
+
+.simple-upload-panel h3 {
+  color: #2f3850;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.simple-upload-panel p {
+  margin: 6px 0 14px;
+  color: #8b93a7;
+}
+
+.simple-upload-panel textarea {
   width: 100%;
-  padding: 12px;
-  border: 1px solid var(--fluent-border);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-family: monospace;
-  resize: vertical;
-  box-sizing: border-box;
-}
-
-.fluent-textarea:focus {
+  min-height: 220px;
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #65708a;
   outline: none;
-  border-color: var(--fluent-blue);
-}
-
-.url-actions {
-  margin-top: var(--space-md);
-}
-
-.api-section {
-  margin-bottom: var(--space-xl);
-}
-
-.api-section h4 {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: var(--space-md);
+  padding: 12px;
+  resize: vertical;
 }
 
 .code-block {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: var(--space-md);
-  border-radius: var(--radius-sm);
+  padding: 16px;
   overflow-x: auto;
+  border-radius: 10px;
+  background: rgba(48, 56, 79, 0.94);
+  color: #f5f7ff;
 }
 
 .code-block pre {
   margin: 0;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
-.param-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+@media (max-width: 1120px) {
+  .selected-file-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .upload-footer,
+  .records-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px 16px;
+  }
+
+  .start-upload-btn,
+  .cancel-upload-btn {
+    width: 100%;
+  }
 }
 
-.param-table th, .param-table td {
-  padding: 8px 12px;
-  text-align: left;
-  border-bottom: 1px solid var(--fluent-border);
-}
+@media (max-width: 720px) {
+  .upload-tabs {
+    height: auto;
+    flex-direction: column;
+  }
 
-.param-table th {
-  background: var(--fluent-hover);
-  font-weight: 600;
+  .tab-btn {
+    min-height: 44px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(230, 219, 236, 0.72);
+  }
+
+  .selected-file-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .records-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .status-filter,
+  .copy-all-btn,
+  .clear-records-btn {
+    width: 100%;
+  }
 }
 </style>

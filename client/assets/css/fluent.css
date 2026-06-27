@@ -1,35 +1,70 @@
-/* Fluent Design 设计变量 */
+/* Taotu glass design system. Keeps old fluent-* tokens as compatibility aliases. */
+@font-face {
+  font-family: 'SanJiLuRongTi';
+  src: url('/fonts/SanJiLuRongTi-2.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  /* 强调色 */
-  --fluent-blue: #0078D4;
-  --fluent-blue-hover: #106EBE;
-  --fluent-blue-pressed: #005A9E;
-  --fluent-blue-light: #E8F4FD;
+  --taotu-pink: #f85f9a;
+  --taotu-pink-2: #ff8fba;
+  --taotu-pink-soft: #fff0f6;
+  --taotu-purple: #9b7cff;
+  --taotu-purple-soft: #f3efff;
+  --taotu-mint: #48cfae;
+  --taotu-mint-soft: #eafbf6;
+  --taotu-sky: #78cdf8;
+  --taotu-sky-soft: #eefaff;
+  --taotu-danger: #ff5f7f;
+  --taotu-danger-soft: #fff0f3;
+  --taotu-warning: #ffb45e;
+  --taotu-success: #36c48f;
+  --taotu-text: #30384f;
+  --taotu-text-strong: #1f2638;
+  --taotu-text-muted: #7c859c;
+  --taotu-border: rgba(238, 210, 226, 0.78);
+  --taotu-border-strong: rgba(248, 95, 154, 0.42);
+  --taotu-glass: rgba(255, 255, 255, 0.68);
+  --taotu-glass-strong: rgba(255, 255, 255, 0.86);
+  --taotu-glass-faint: rgba(255, 255, 255, 0.46);
+  --taotu-bg: #f9fbff;
+  --taotu-bg-gradient:
+    radial-gradient(circle at 16% 8%, rgba(255, 181, 211, 0.42), transparent 28%),
+    radial-gradient(circle at 80% 12%, rgba(178, 233, 255, 0.48), transparent 32%),
+    radial-gradient(circle at 64% 88%, rgba(198, 181, 255, 0.25), transparent 36%),
+    linear-gradient(135deg, #fff7fb 0%, #f4fbff 48%, #fff2f8 100%);
+  --taotu-shadow-sm: 0 10px 28px rgba(85, 74, 118, 0.08);
+  --taotu-shadow: 0 18px 48px rgba(85, 74, 118, 0.12);
+  --taotu-shadow-lg: 0 30px 80px rgba(85, 74, 118, 0.16);
+  --taotu-blur: 22px;
+  --taotu-radius-xs: 6px;
+  --taotu-radius-sm: 10px;
+  --taotu-radius-md: 14px;
+  --taotu-radius-lg: 16px;
+  --taotu-radius-xl: 22px;
+  --taotu-transition: 180ms ease;
 
-  /* 中性色板 */
-  --fluent-bg: #FAF9F8;
-  --fluent-bg-card: #FFFFFF;
-  --fluent-text: #323130;
-  --fluent-text-secondary: #605E5C;
-  --fluent-border: #EDEBE9;
-  --fluent-divider: #EDEBE9;
-  --fluent-hover: #F3F2F1;
-
-  /* 阴影层级 */
-  --shadow-1: 0 1.6px 3.6px rgba(0,0,0,0.132), 0 0.3px 0.9px rgba(0,0,0,0.108);
-  --shadow-2: 0 3.2px 7.2px rgba(0,0,0,0.132), 0 0.6px 1.8px rgba(0,0,0,0.108);
-  --shadow-3: 0 6.4px 14.4px rgba(0,0,0,0.132), 0 1.2px 3.6px rgba(0,0,0,0.108);
-
-  /* 圆角 */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-
-  /* 动效 */
-  --transition-fast: 150ms ease;
-  --transition-normal: 200ms ease;
-
-  /* 间距 */
+  --fluent-blue: var(--taotu-pink);
+  --fluent-blue-hover: #f34f8d;
+  --fluent-blue-pressed: #dd3f7b;
+  --fluent-blue-light: var(--taotu-pink-soft);
+  --fluent-bg: var(--taotu-bg);
+  --fluent-bg-card: var(--taotu-glass-strong);
+  --fluent-text: var(--taotu-text);
+  --fluent-text-secondary: var(--taotu-text-muted);
+  --fluent-border: var(--taotu-border);
+  --fluent-divider: rgba(238, 210, 226, 0.58);
+  --fluent-hover: rgba(255, 240, 246, 0.84);
+  --shadow-1: var(--taotu-shadow-sm);
+  --shadow-2: var(--taotu-shadow);
+  --shadow-3: var(--taotu-shadow-lg);
+  --radius-sm: var(--taotu-radius-sm);
+  --radius-md: var(--taotu-radius-md);
+  --radius-lg: var(--taotu-radius-lg);
+  --transition-fast: var(--taotu-transition);
+  --transition-normal: 220ms ease;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
@@ -38,7 +73,6 @@
   --space-2xl: 48px;
 }
 
-/* 全局重置 */
 *,
 *::before,
 *::after {
@@ -47,20 +81,41 @@
   padding: 0;
 }
 
+html {
+  min-height: 100%;
+  background: var(--taotu-bg);
+}
+
 body {
-  font-family: 'Segoe UI', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--fluent-bg);
-  color: var(--fluent-text);
+  min-height: 100vh;
+  font-family: 'SanJiLuRongTi', 'Microsoft YaHei', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--taotu-text);
   line-height: 1.6;
+  background: var(--taotu-bg-gradient);
   -webkit-font-smoothing: antialiased;
 }
 
 a {
-  color: var(--fluent-blue);
+  color: var(--taotu-pink);
   text-decoration: none;
-  transition: color var(--transition-fast);
+  transition: color var(--taotu-transition);
 }
 
 a:hover {
-  color: var(--fluent-blue-hover);
+  color: #df3f7d;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(248, 95, 154, 0.24);
 }

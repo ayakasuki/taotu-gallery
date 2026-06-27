@@ -8,15 +8,19 @@
         @load="loaded = true"
         :class="{ loaded }"
       />
-      <div v-if="mode === 'grid'" class="view-badge">浏览{{ image.view_count || 0 }}</div>
+      <div v-if="mode === 'grid'" class="view-badge">
+        <img src="/icons/gallery/views-64x64.png" class="view-icon" alt="" />
+        {{ formatViews(image.view_count || 0) }}
+      </div>
       <div class="image-gradient"></div>
       <div class="image-info">
-        <div v-if="mode === 'grid' && image.tags && image.tags.length > 0" class="tag-strip">
-          <span v-for="tag in image.tags" :key="tagKey(tag)" class="tag-badge">{{ tag.display_name || tag.name }}</span>
-          <span v-if="image.tags.length > 2" class="tag-more">...</span>
-        </div>
         <div class="alt-title">{{ altText }}</div>
-        <div v-if="uploaderText" class="alt-subtitle">{{ uploaderText }}</div>
+        <div v-if="mode === 'grid' && uploaderText" class="alt-subtitle">@ {{ uploaderText }}</div>
+        <div v-if="mode === 'grid' && displayTags.length > 0" class="tag-strip">
+          <span v-for="(tag, idx) in displayTags" :key="tagKey(tag)" class="tag-badge">
+            {{ tag.display_name || tag.name }}{{ idx === displayTags.length - 1 && hasMoreTags ? '...' : '' }}
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -41,7 +45,9 @@ const imageUrl = computed(() => {
 })
 
 const altText = computed(() => props.image.alt || props.image.title || props.image.filename || '图片')
-const uploaderText = computed(() => props.image.uploader_name ? '来自 ' + props.image.uploader_name + ' 的图片' : '')
+const uploaderText = computed(() => props.image.uploader_name || props.image.username || '')
+const displayTags = computed(() => (props.image.tags || []).slice(0, 4))
+const hasMoreTags = computed(() => (props.image.tags || []).length > 4)
 
 const naturalAspect = computed(() => {
   const width = Number(props.image.width) || 1
@@ -59,6 +65,12 @@ const cardStyle = computed(() => ({
 }))
 
 const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
+const formatViews = (count) => {
+  const n = Number(count) || 0
+  if (n >= 10000) return (n / 10000).toFixed(1).replace(/\.0$/, '') + 'w'
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  return n
+}
 </script>
 
 <style scoped>
@@ -66,9 +78,18 @@ const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
   width: 100%;
   cursor: pointer;
   overflow: hidden;
-  background: #111;
-  border-radius: 3px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.56);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(60, 68, 96, 0.12);
   transform: translateZ(0);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.image-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(248, 95, 154, 0.58);
+  box-shadow: 0 16px 40px rgba(248, 95, 154, 0.16);
 }
 
 .card-media {
@@ -76,7 +97,7 @@ const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
   width: 100%;
   aspect-ratio: var(--card-aspect);
   overflow: hidden;
-  background: #111;
+  background: rgba(255, 240, 246, 0.72);
 }
 
 .card-media img {
@@ -93,26 +114,39 @@ const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
 
 .view-badge {
   position: absolute;
-  top: 6px;
-  left: 7px;
-  z-index: 3;
+  right: 8px;
+  bottom: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: #fff;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
-  padding: 4px 6px;
-  border-radius: 3px;
-  background: rgba(0,0,0,0.34);
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(22, 26, 38, 0.5);
   text-shadow: 0 1px 2px rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+}
+
+.view-badge .view-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
 }
 
 .image-gradient {
   position: absolute;
   inset: auto 0 0;
-  height: 42%;
+  height: 56%;
   z-index: 1;
-  background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.68));
+  background: linear-gradient(180deg, rgba(0,0,0,0), rgba(36,39,54,0.72));
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
 }
 
 .image-info {
@@ -121,20 +155,32 @@ const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
   right: 0;
   bottom: 0;
   z-index: 2;
-  padding: 24px 8px 8px;
+  padding: 46px 10px 12px;
   color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  opacity: 0;
+  transform: translateY(8px);
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.image-card.mode-waterfall .image-info,
-.image-card.mode-waterfall .image-gradient {
-  opacity: 0;
+.image-card.mode-grid:hover .image-info,
+.image-card.mode-grid:hover .image-gradient {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .image-card.mode-waterfall:hover .image-info,
 .image-card.mode-waterfall:hover .image-gradient {
   opacity: 1;
+  transform: translateY(0);
+}
+
+.image-card.mode-waterfall .image-gradient {
+  height: 40%;
+}
+
+.image-card.mode-waterfall .image-info {
+  padding-top: 34px;
 }
 
 .tag-strip {
@@ -142,10 +188,10 @@ const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
   display: flex;
   gap: 4px;
   align-items: center;
+  flex-wrap: wrap;
+  max-height: 24px;
   overflow: hidden;
-  white-space: nowrap;
-  margin-bottom: 4px;
-  padding-right: 22px;
+  margin-top: 7px;
 }
 
 .tag-badge {
@@ -153,33 +199,21 @@ const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
   max-width: 90px;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: rgba(255,255,255,0.22);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.2);
   color: #fff;
   font-size: 11px;
-  font-weight: 600;
-  backdrop-filter: blur(3px);
-}
-
-.tag-more {
-  position: absolute;
-  right: 0;
-  bottom: 1px;
-  width: 22px;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  text-align: right;
-  background: linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,0.55) 45%);
+  font-weight: 800;
+  backdrop-filter: blur(6px);
 }
 
 .alt-title {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 900;
   line-height: 1.28;
 }
 
@@ -189,7 +223,12 @@ const tagKey = (tag) => (tag.source || 'tag') + '-' + (tag.id || tag.name)
   text-overflow: ellipsis;
   margin-top: 2px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
   line-height: 1.25;
+}
+
+.image-card.mode-waterfall .alt-subtitle,
+.image-card.mode-waterfall .tag-strip {
+  display: none;
 }
 </style>

@@ -61,40 +61,49 @@ const setMode = (value) => {
 .sort-filter {
   display: flex;
   align-items: center;
-  gap: var(--space-xl);
-  padding: var(--space-md) 0;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border-radius: var(--taotu-radius-md);
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(255,255,255,0.7);
+  backdrop-filter: blur(16px);
 }
 
 .sort-group, .mode-group {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 7px;
 }
 
 .sort-label {
-  font-size: 13px;
-  color: var(--fluent-text-secondary);
-  font-weight: 500;
+  font-size: 12px;
+  color: var(--taotu-text-muted);
+  font-weight: 900;
 }
 
 .sort-btn {
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
+  min-height: 32px;
+  padding: 5px 12px;
+  border-radius: 999px;
   font-size: 13px;
-  border: 1px solid var(--fluent-border);
-  background: transparent;
-  color: var(--fluent-text-secondary);
+  font-weight: 800;
+  border: 1px solid rgba(238, 210, 226, 0.74);
+  background: rgba(255,255,255,0.66);
+  color: var(--taotu-text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .sort-btn:hover {
-  background: var(--fluent-hover);
+  background: var(--taotu-pink-soft);
+  color: var(--taotu-pink);
 }
 
 .sort-btn.active {
-  background: var(--fluent-blue);
+  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-pink-2));
   color: white;
-  border-color: var(--fluent-blue);
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(248,95,154,0.18);
 }
 </style>

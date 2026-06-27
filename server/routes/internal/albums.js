@@ -19,7 +19,7 @@ function optionalAuth(req, res, next) {
 // 相册列表
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
-    const { page, limit, sort, order, tags, mine, public: publicOnly, userId: targetUserId } = req.query;
+    const { page, limit, sort, order, tags, mine, public: publicOnly, userId: targetUserId, search } = req.query;
     const tagIds = tags ? tags.split(',').map(Number) : null;
     const userId = req.user?.id || null;
     const isAdmin = req.user?.role === 'admin';
@@ -31,7 +31,8 @@ router.get('/', optionalAuth, async (req, res, next) => {
       publicOnly: publicOnly === 'true',
       ownOnly: mine === 'true' && userId,
       isAdmin,
-      filterUserId: targetUserId ? parseInt(targetUserId) : null
+      filterUserId: targetUserId ? parseInt(targetUserId) : null,
+      search: search || ''
     });
     res.json(result);
   } catch (err) { next(err); }

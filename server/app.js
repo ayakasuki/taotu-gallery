@@ -20,10 +20,21 @@ app.use(morgan('combined', {
   stream: { write: (msg) => logger.info(msg.trim()) }
 }));
 
+// 上传资源静态文件服务（站点 Logo、背景、用户头像等）
+const uploadsStaticDir = path.resolve(__dirname, '../data/uploads');
+if (!fs.existsSync(uploadsStaticDir)) fs.mkdirSync(uploadsStaticDir, { recursive: true });
+app.use('/uploads', express.static(uploadsStaticDir));
+
+function isHashImageAssetPath(reqPath) {
+  return /^\/\d{4}-\d{2}-\d{2}\/[^/]+\.[A-Za-z0-9]+$/.test(reqPath);
+}
+
 // 图片静态文件服务（哈希路径映射）
 const imageService = require('./services/imageService');
 app.use('/image', async (req, res, next) => {
   try {
+    if (!isHashImageAssetPath(req.path)) return next();
+
     // 从哈希路径解析真实文件: /image/2026-06-24/abc123.jpg → 查找数据库
     const hashPath = 'image' + req.path; // 拼接完整 hash_path: image/2026-06-24/abc123.jpg
     const record = await imageService.getImageByHashPath(hashPath);
@@ -82,6 +93,7 @@ const apiLogger = require('./middleware/apiLogger');
 // 内部 API（前端专用，不对外暴露）
 app.use('/api/internal/images', require('./routes/internal/images'));
 app.use('/api/internal/albums', require('./routes/internal/albums'));
+app.use('/api/internal/dashboard', require('./routes/internal/dashboard'));
 
 // 对外 API
 app.use('/api/tags', apiLogger, require('./routes/api/tags'));

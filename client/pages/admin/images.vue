@@ -1,6 +1,13 @@
 <template>
   <div class="admin-images">
-    <h1 class="page-title">图片管理</h1>
+    <div class="admin-subhero">
+      <div>
+        <span class="hero-kicker">Content</span>
+        <h1 class="page-title">图片管理</h1>
+        <p>筛选、批量操作和编辑平台标签，同时保留用户私有标签隔离。</p>
+      </div>
+      <img src="/icons/admin/image-management-64x64.png" class="subhero-icon" alt="" />
+    </div>
 
     <div class="fluent-card">
       <div class="section-header">
@@ -21,15 +28,9 @@
             <button class="source-btn" :class="{ active: imgSource === 'public' }" @click="switchSource('public')">公共图库</button>
             <button class="source-btn" :class="{ active: imgSource === 'mine' }" @click="switchSource('mine')">我的图库</button>
             <button class="source-btn" :class="{ active: imgSource === 'user' }" @click="switchSource('user')">用户图库</button>
-            <select v-if="imgSource === 'user'" v-model="filterUserId" class="user-select" @change="loadImages()">
-              <option :value="null">全部用户</option>
-              <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
-            </select>
+            <TaotuSelect v-if="imgSource === 'user'" v-model="filterUserId" class="user-select" :options="userOptions" @change="loadImages()" />
           </div>
-          <select v-model="filterAlbumId" class="user-select album-select" @change="loadImages()">
-            <option :value="null">全部相册</option>
-            <option v-for="album in albums" :key="album.id" :value="album.id">{{ album.name }}</option>
-          </select>
+          <TaotuSelect v-model="filterAlbumId" class="user-select album-select" :options="albumOptions" @change="loadImages()" />
           <input v-model="search" class="fluent-input search-input" placeholder="搜索文件名..." @keyup.enter="loadImages" />
           <button class="fluent-btn fluent-btn-secondary" @click="showMoreFilters = !showMoreFilters">更多</button>
           <button class="fluent-btn fluent-btn-secondary" @click="loadImages">搜索</button>
@@ -101,9 +102,7 @@
         <div class="form-group" v-if="editUserTagOwnerId">
           <div class="label-row">
             <label>用户私有标签</label>
-            <select class="user-tag-select" disabled>
-              <option>{{ editUserTagOwnerName }} 的私有标签</option>
-            </select>
+            <span class="user-tag-select">{{ editUserTagOwnerName }} 的私有标签</span>
           </div>
           <TagSelector :tags="editUserTagOptions" :selectedTagIds="editUserTagIds" @update:selectedTagIds="editUserTagIds = $event" />
         </div>
@@ -154,6 +153,14 @@ const showMoreFilters = ref(false)
 // 多选相关
 const multiMode = ref(false)
 const selectedIds = ref([])
+const userOptions = computed(() => [
+  { label: '全部用户', value: null },
+  ...users.value.map(user => ({ label: user.username, value: user.id }))
+])
+const albumOptions = computed(() => [
+  { label: '全部相册', value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id }))
+])
 
 const toggleMultiMode = () => {
   multiMode.value = !multiMode.value
@@ -349,7 +356,8 @@ const batchSetPublic = async (isPublic) => {
 .source-toggle { display: flex; gap: 2px; background: var(--fluent-hover); border-radius: var(--radius-sm); padding: 2px; }
 .source-btn { padding: 4px 12px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; transition: all var(--transition-fast); color: var(--fluent-text-secondary); }
 .source-btn.active { background: white; box-shadow: var(--shadow-1); font-weight: 500; color: var(--fluent-blue); }
-.user-select { margin-left: 4px; padding: 3px 6px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 11px; background: white; }
+.user-select { width: 150px; margin-left: 4px; }
+.album-select { width: 170px; }
 .batch-bar { display: flex; gap: var(--space-sm); padding: var(--space-md); margin-bottom: var(--space-md); background: var(--fluent-blue-light); border-radius: var(--radius-sm); }
 .image-grid { display: flex; flex-direction: column; gap: var(--space-sm); }
 .image-item { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm); border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); transition: all var(--transition-fast); }

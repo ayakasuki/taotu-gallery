@@ -26,6 +26,7 @@
             selected: isSelected(tag.id),
             disabled: isDisabled(tag)
           }"
+          :title="isDisabled(tag) ? '因互斥标签已被选择，当前不可选' : ''"
           @click="handleNonCombinableClick(tag)"
         >
           {{ tag.display_name || tag.name }}
@@ -109,32 +110,39 @@ const clearSelection = () => {
 .tag-selector {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: 14px;
 }
 
 .section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--fluent-text-secondary);
-  margin-bottom: var(--space-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--taotu-text-muted);
+  margin-bottom: 8px;
 }
 
 .tag-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-sm);
+  gap: 8px;
 }
 
 .tag-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--fluent-border);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(238, 210, 226, 0.62);
+  border-radius: var(--taotu-radius-sm);
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .selected-count {
   font-size: 13px;
-  color: var(--fluent-text-secondary);
+  color: var(--taotu-text-muted);
+  font-weight: 800;
 }
 </style>

@@ -1,52 +1,539 @@
 <template>
-  <div class="admin-layout">
-    <aside class="admin-sidebar">
-      <div class="sidebar-header">
-        <NuxtLink to="/admin" class="sidebar-logo">管理后台</NuxtLink>
-      </div>
-      <nav class="sidebar-nav">
-        <NuxtLink to="/admin" class="sidebar-link">概览</NuxtLink>
-        <NuxtLink to="/admin/images" class="sidebar-link">图片管理</NuxtLink>
-        <NuxtLink to="/admin/tags" class="sidebar-link">标签设置</NuxtLink>
-        <NuxtLink to="/admin/conditions" class="sidebar-link">条件标签</NuxtLink>
-        <NuxtLink to="/admin/models" class="sidebar-link">模型管理</NuxtLink>
-        <NuxtLink to="/admin/paths" class="sidebar-link">自定义路径</NuxtLink>
-        <NuxtLink to="/admin/database" class="sidebar-link">数据库</NuxtLink>
-        <NuxtLink to="/admin/gallery" class="sidebar-link">图库设置</NuxtLink>
-        <NuxtLink to="/admin/api" class="sidebar-link">API 设置</NuxtLink>
-        <NuxtLink to="/admin/users" class="sidebar-link">用户管理</NuxtLink>
-        <NuxtLink to="/admin/site-config" class="sidebar-link">网站配置</NuxtLink>
-        <NuxtLink to="/admin/stats" class="sidebar-link">统计监控</NuxtLink>
-        <NuxtLink to="/admin/backup" class="sidebar-link">备份恢复</NuxtLink>
-        <NuxtLink to="/admin/cloud-sync" class="sidebar-link">云同步</NuxtLink>
+  <div class="admin-page">
+    <header class="admin-topbar">
+      <NuxtLink to="/admin" class="admin-brand">
+        <img v-if="logoUrl" :src="logoUrl" class="taotu-icon brand-icon" alt="" />
+        <span v-else class="brand-fallback">桃</span>
+        <span>{{ siteName }}</span>
+        <small>管理后台</small>
+      </NuxtLink>
+
+      <nav class="admin-topnav">
+        <NuxtLink to="/" class="topnav-link">图库</NuxtLink>
+        <NuxtLink to="/albums" class="topnav-link">相册</NuxtLink>
+        <NuxtLink to="/api-docs" class="topnav-link">API</NuxtLink>
+        <NuxtLink to="/upload" class="topnav-link">上传</NuxtLink>
+        <NuxtLink to="/dashboard" class="topnav-link">仪表盘</NuxtLink>
+        <NuxtLink to="/admin" class="topnav-link active">管理</NuxtLink>
       </nav>
-      <div class="sidebar-footer">
-        <NuxtLink to="/" class="sidebar-link">返回前台</NuxtLink>
-        <button class="sidebar-link logout-btn" @click="handleLogout">退出登录</button>
+
+      <div class="admin-user">
+        <img src="/icons/nav/notification-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
+        <img v-if="avatarUrl" :src="avatarUrl" class="taotu-icon avatar" alt="" />
+        <span v-else class="avatar fallback">{{ username.slice(0, 1).toUpperCase() }}</span>
+        <span>{{ username }}</span>
+        <img src="/icons/nav/chevron-down-64x64.png" class="taotu-icon taotu-icon-16" alt="" />
       </div>
-    </aside>
-    <main class="admin-main">
-      <slot />
-    </main>
+    </header>
+
+    <div class="admin-body">
+      <aside class="admin-sidebar">
+        <nav class="sidebar-scroll">
+          <section v-for="group in menuGroups" :key="group.title" class="menu-group">
+            <h3>{{ group.title }}</h3>
+            <NuxtLink v-for="item in group.items" :key="item.to" :to="item.to" class="sidebar-link">
+              <img :src="item.icon" class="taotu-icon taotu-icon-20" alt="" />
+              <span>{{ item.label }}</span>
+            </NuxtLink>
+          </section>
+        </nav>
+        <div class="sidebar-footer">
+          <NuxtLink to="/" class="sidebar-action">
+            <img src="/icons/admin/return-front-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
+            返回前台
+          </NuxtLink>
+          <button class="sidebar-action danger" @click="handleLogout">
+            <img src="/icons/nav/logout-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
+            退出登录
+          </button>
+        </div>
+      </aside>
+
+      <main class="admin-main">
+        <slot />
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup>
-const { logout } = useAuth()
-const handleLogout = () => logout()
+const api = useApi()
+const username = ref('管理员')
+const siteName = ref('桃图智库')
+const logoUrl = ref('')
+const avatarUrl = ref('')
+
+const menuGroups = [
+  {
+    title: '内容管理',
+    items: [
+      { to: '/admin', label: '概览', icon: '/icons/admin/overview-64x64.png' },
+      { to: '/admin/images', label: '图片管理', icon: '/icons/admin/image-management-64x64.png' },
+      { to: '/admin/paths', label: '自定义路径', icon: '/icons/admin/custom-paths-64x64.png' },
+      { to: '/admin/database', label: '数据库', icon: '/icons/admin/database-64x64.png' }
+    ]
+  },
+  {
+    title: '标签体系',
+    items: [
+      { to: '/admin/tags', label: '标签设置', icon: '/icons/admin/tag-settings-64x64.png' },
+      { to: '/admin/conditions', label: '条件标签', icon: '/icons/admin/condition-tags-64x64.png' },
+      { to: '/admin/models', label: '模型管理', icon: '/icons/admin/model-management-64x64.png' }
+    ]
+  },
+  {
+    title: '用户与权限',
+    items: [
+      { to: '/admin/users', label: '用户管理', icon: '/icons/admin/users-64x64.png' },
+      { to: '/admin/api', label: 'API 设置', icon: '/icons/admin/api-settings-64x64.png' }
+    ]
+  },
+  {
+    title: '站点设置',
+    items: [
+      { to: '/admin/gallery', label: '图库设置', icon: '/icons/admin/gallery-settings-64x64.png' },
+      { to: '/admin/site-config', label: '网站配置', icon: '/icons/admin/site-config-64x64.png' }
+    ]
+  },
+  {
+    title: '运维工具',
+    items: [
+      { to: '/admin/stats', label: '统计监控', icon: '/icons/admin/stats-64x64.png' },
+      { to: '/admin/backup', label: '备份恢复', icon: '/icons/admin/backup-64x64.png' },
+      { to: '/admin/cloud-sync', label: '云同步', icon: '/icons/admin/cloud-sync-64x64.png' }
+    ]
+  }
+]
+
+const normalizeAssetUrl = (url) => {
+  if (!url) return ''
+  if (/^https?:\/\//i.test(url)) return url
+  return `${useRuntimeConfig().public.apiBase || ''}${url}`
+}
+
+onMounted(async () => {
+  const token = localStorage.getItem('jwt_token')
+  if (!token) return
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    username.value = payload.username || payload.name || '管理员'
+  } catch {}
+  try {
+    const [siteConfig, me] = await Promise.all([
+      api.get('/api/admin/site-config/public'),
+      api.get('/api/admin/auth/me')
+    ])
+    siteName.value = siteConfig.siteName || '桃图智库'
+    logoUrl.value = normalizeAssetUrl(siteConfig.logo || siteConfig.icon)
+    username.value = me.username || username.value
+    avatarUrl.value = normalizeAssetUrl(me.avatar)
+  } catch {}
+})
+
+const handleLogout = () => {
+  localStorage.removeItem('jwt_token')
+  navigateTo('/login')
+}
 </script>
 
 <style scoped>
-.admin-layout { display: flex; min-height: 100vh; }
-.admin-sidebar { width: 240px; background: var(--fluent-bg-card); border-right: 1px solid var(--fluent-border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; }
-.sidebar-header { padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--fluent-border); }
-.sidebar-logo { font-size: 16px; font-weight: 600; color: var(--fluent-blue); text-decoration: none; }
-.sidebar-nav { flex: 1; padding: var(--space-sm); overflow-y: auto; }
-.sidebar-link { display: block; padding: 8px 16px; border-radius: var(--radius-sm); font-size: 14px; color: var(--fluent-text-secondary); transition: all var(--transition-fast); text-decoration: none; width: 100%; text-align: left; border: none; background: none; cursor: pointer; }
-.sidebar-link:hover { background: var(--fluent-hover); color: var(--fluent-text); }
-.sidebar-link.router-link-active { background: var(--fluent-blue-light); color: var(--fluent-blue); font-weight: 500; }
-.sidebar-footer { padding: var(--space-sm); border-top: 1px solid var(--fluent-border); }
-.logout-btn { color: #d13438; }
-.logout-btn:hover { background: #fde7e9; }
-.admin-main { flex: 1; margin-left: 240px; padding: var(--space-lg); background: var(--fluent-bg); }
+.admin-page {
+  min-height: 100vh;
+  background: var(--taotu-bg-gradient);
+}
+
+.admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 120;
+  display: grid;
+  grid-template-columns: 280px 1fr 250px;
+  align-items: center;
+  gap: 18px;
+  min-height: 64px;
+  padding: 0 28px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(238, 210, 226, 0.62);
+  backdrop-filter: blur(22px);
+}
+
+.admin-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--taotu-pink);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.admin-brand small {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--taotu-pink-soft);
+  color: var(--taotu-pink);
+  font-size: 12px;
+}
+
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.brand-fallback {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-purple));
+  color: white;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.admin-topnav {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.topnav-link {
+  min-width: 70px;
+  padding: 9px 14px;
+  border-radius: var(--taotu-radius-sm);
+  color: var(--taotu-text);
+  text-align: center;
+  font-weight: 800;
+}
+
+.topnav-link.router-link-active,
+.topnav-link.active {
+  background: var(--taotu-pink-soft);
+  color: var(--taotu-pink);
+}
+
+.admin-user {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  color: var(--taotu-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.avatar.fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-purple));
+  color: white;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.admin-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: calc(100vh - 64px);
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 64px;
+  align-self: start;
+  height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(238, 210, 226, 0.62);
+  background: rgba(255, 255, 255, 0.56);
+  backdrop-filter: blur(22px);
+}
+
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 14px;
+}
+
+.menu-group {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(238, 210, 226, 0.52);
+}
+
+.menu-group:last-child {
+  border-bottom: none;
+}
+
+.menu-group h3 {
+  margin: 0 0 8px;
+  padding: 0 8px;
+  color: var(--taotu-text-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sidebar-link,
+.sidebar-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--taotu-radius-sm);
+  background: transparent;
+  color: var(--taotu-text);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all var(--taotu-transition);
+}
+
+.sidebar-link:hover,
+.sidebar-link.router-link-active,
+.sidebar-action:hover {
+  background: rgba(255, 240, 246, 0.9);
+  color: var(--taotu-pink);
+}
+
+.sidebar-footer {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.sidebar-action {
+  justify-content: flex-start;
+  border: 1px solid rgba(238, 210, 226, 0.62);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.sidebar-action.danger {
+  color: var(--taotu-danger);
+}
+
+.admin-main {
+  min-width: 0;
+  padding: 22px;
+}
+
+.admin-main :deep(.page-title) {
+  margin: 0 0 var(--space-xl);
+  color: var(--taotu-text-strong);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.admin-main :deep(.admin-subhero) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+  padding: 24px 28px;
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  border-radius: var(--taotu-radius-lg);
+  background:
+    linear-gradient(110deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.56)),
+    radial-gradient(circle at 86% 18%, rgba(120, 205, 248, 0.2), transparent 34%),
+    radial-gradient(circle at 12% 10%, rgba(248, 95, 154, 0.14), transparent 28%);
+  box-shadow: var(--taotu-shadow-sm);
+  backdrop-filter: blur(var(--taotu-blur));
+}
+
+.admin-main :deep(.admin-subhero .page-title) {
+  margin-bottom: 4px;
+}
+
+.admin-main :deep(.admin-subhero .page-title::after) {
+  display: none;
+}
+
+.admin-main :deep(.hero-kicker) {
+  color: var(--taotu-pink);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-main :deep(.admin-subhero p) {
+  color: var(--taotu-text-muted);
+  font-size: 14px;
+}
+
+.admin-main :deep(.subhero-icon) {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+}
+
+.admin-main :deep(.page-title::after) {
+  content: '';
+  display: block;
+  width: 72px;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--taotu-pink), var(--taotu-purple), var(--taotu-sky));
+}
+
+.admin-main :deep(.fluent-card) {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(255, 255, 255, 0.84);
+  border-radius: var(--taotu-radius-lg);
+  box-shadow: var(--taotu-shadow-sm);
+}
+
+.admin-main :deep(.fluent-card h3),
+.admin-main :deep(.section-title),
+.admin-main :deep(.section-header h3) {
+  color: var(--taotu-text-strong);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.admin-main :deep(.section-header) {
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid rgba(238, 210, 226, 0.58);
+}
+
+.admin-main :deep(.tabs),
+.admin-main :deep(.source-toggle) {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid var(--taotu-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.admin-main :deep(.tab-btn),
+.admin-main :deep(.source-btn) {
+  border-radius: 999px;
+  color: var(--taotu-text-muted);
+  font-weight: 900;
+}
+
+.admin-main :deep(.tab-btn.active),
+.admin-main :deep(.source-btn.active) {
+  background: var(--taotu-pink-soft);
+  color: var(--taotu-pink);
+  box-shadow: var(--taotu-shadow-sm);
+}
+
+.admin-main :deep(.table-header),
+.admin-main :deep(.private-table-header) {
+  background: rgba(255, 240, 246, 0.78);
+  color: var(--taotu-text-muted);
+  font-weight: 900;
+}
+
+.admin-main :deep(.table-row),
+.admin-main :deep(.private-table-row),
+.admin-main :deep(.image-item),
+.admin-main :deep(.group-item),
+.admin-main :deep(.path-item),
+.admin-main :deep(.user-row),
+.admin-main :deep(.token-item),
+.admin-main :deep(.backup-item) {
+  background: rgba(255, 255, 255, 0.46);
+  border-color: rgba(238, 210, 226, 0.62);
+  border-radius: var(--taotu-radius-md);
+}
+
+.admin-main :deep(.tag-table),
+.admin-main :deep(.user-table),
+.admin-main :deep(.stat-table),
+.admin-main :deep(.group-list) {
+  border-color: rgba(238, 210, 226, 0.62);
+  border-radius: var(--taotu-radius-md);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.admin-main :deep(.form-group label) {
+  color: var(--taotu-text);
+  font-weight: 800;
+}
+
+.admin-main :deep(.fluent-input),
+.admin-main :deep(.fluent-select),
+.admin-main :deep(.user-select),
+.admin-main :deep(.user-tag-select) {
+  min-height: 38px;
+  border-color: var(--taotu-border);
+  border-radius: var(--taotu-radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.admin-main :deep(.more-filters),
+.admin-main :deep(.batch-bar),
+.admin-main :deep(.manual-action) {
+  border: 1px solid var(--taotu-border);
+  border-radius: var(--taotu-radius-md);
+  background: rgba(255, 240, 246, 0.56);
+}
+
+.admin-main :deep(.modal) {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: var(--taotu-radius-lg);
+  box-shadow: var(--taotu-shadow-lg);
+}
+
+.admin-main :deep(.modal h3) {
+  color: var(--taotu-text-strong);
+  font-weight: 900;
+}
+
+.admin-main :deep(.tag-mini),
+.admin-main :deep(.tag-chip),
+.admin-main :deep(.source-pill) {
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.admin-main :deep(.empty-msg),
+.admin-main :deep(.desc),
+.admin-main :deep(.form-hint) {
+  color: var(--taotu-text-muted);
+}
+
+@media (max-width: 1100px) {
+  .admin-topbar {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 14px;
+  }
+
+  .admin-body {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .sidebar-scroll {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .menu-group {
+    min-width: 180px;
+  }
+}
 </style>

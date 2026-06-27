@@ -1,6 +1,13 @@
 <template>
   <div class="admin-site-config">
-    <h1 class="page-title">网站配置</h1>
+    <div class="admin-subhero">
+      <div>
+        <span class="hero-kicker">Site Config</span>
+        <h1 class="page-title">网站配置</h1>
+        <p>配置品牌外观、公开域名、注册策略、SMTP、备案号和部署安全项。</p>
+      </div>
+      <img src="/icons/admin/site-config-64x64.png" class="subhero-icon" alt="" />
+    </div>
     <div class="config-grid">
 
       <!-- 网站外观 -->
@@ -17,6 +24,15 @@
             <span v-else class="icon-placeholder">无</span>
           </div>
           <input type="file" accept="image/*,.ico" @change="handleIconUpload" class="file-input" />
+        </div>
+        <div class="form-group">
+          <label>网站 Logo</label>
+          <div class="logo-preview">
+            <img v-if="logoPreview" :src="logoPreview" class="logo-thumb" />
+            <span v-else class="icon-placeholder">无</span>
+          </div>
+          <input type="file" accept="image/*" @change="handleLogoUpload" class="file-input" />
+          <p class="form-hint">用于顶部导航、登录页和注册页品牌标识。</p>
         </div>
         <div class="form-group">
           <label>网站背景图</label>
@@ -144,6 +160,7 @@ const form = reactive({
   httpsEnabled: false, certPath: '', keyPath: '',
   publicDomain: '',
   recordNumber: '',
+  logo: '',
   bgUrl: '',
   bgBlur: 0,
   mediumWidth: 1500, mediumHeight: 1500,
@@ -152,6 +169,7 @@ const form = reactive({
 })
 const msg = ref('')
 const iconPreview = ref('')
+const logoPreview = ref('')
 const testingSmtp = ref(false)
 
 onMounted(async () => {
@@ -162,6 +180,7 @@ onMounted(async () => {
     form.emailVerification = data.registration?.emailVerification || false
     form.publicDomain = data.publicDomain || ''
     form.recordNumber = data.recordNumber || ''
+    form.logo = data.logo || ''
     form.httpsEnabled = data.https?.enabled || false
     form.certPath = data.https?.certPath || ''
     form.keyPath = data.https?.keyPath || ''
@@ -178,6 +197,7 @@ onMounted(async () => {
     form.smtpPassword = data.smtp?.password || ''
     form.smtpFrom = data.smtp?.from || ''
     if (data.icon) iconPreview.value = `${config.public.apiBase || ''}${data.icon}`
+    if (data.logo) logoPreview.value = `${config.public.apiBase || ''}${data.logo}`
   } catch {}
 })
 
@@ -187,6 +207,7 @@ const saveSiteConfig = async () => {
       siteName: form.siteName,
       publicDomain: form.publicDomain,
       recordNumber: form.recordNumber,
+      logo: form.logo || null,
       registration: { enabled: form.registrationEnabled, emailVerification: form.emailVerification },
       https: { enabled: form.httpsEnabled, certPath: form.certPath, keyPath: form.keyPath },
       background: { type: form.bgUrl ? 'url' : 'none', value: form.bgUrl, blur: form.bgBlur },
@@ -215,6 +236,7 @@ const testSmtp = async () => {
       siteName: form.siteName,
       publicDomain: form.publicDomain,
       recordNumber: form.recordNumber,
+      logo: form.logo || null,
       registration: { enabled: form.registrationEnabled, emailVerification: form.emailVerification },
       https: { enabled: form.httpsEnabled, certPath: form.certPath, keyPath: form.keyPath },
       background: { type: form.bgUrl ? 'url' : 'none', value: form.bgUrl, blur: form.bgBlur },
@@ -259,6 +281,19 @@ const handleIconUpload = async (e) => {
   } catch (err) { alert('上传失败: ' + err.message) }
 }
 
+const handleLogoUpload = async (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const res = await api.request('/api/admin/site-config/upload-logo', { method: 'POST', body: fd })
+    form.logo = res.url
+    logoPreview.value = `${config.public.apiBase || ''}${res.url}?t=${Date.now()}`
+    msg.value = 'Logo 已上传'
+  } catch (err) { alert('上传失败: ' + err.message) }
+}
+
 const handleBgUpload = async (e) => {
   const file = e.target.files[0]
   if (!file) return
@@ -289,6 +324,8 @@ const handleBgUpload = async (e) => {
 .file-input { margin-top: var(--space-sm); font-size: 13px; }
 .icon-preview { margin-bottom: var(--space-sm); }
 .icon-thumb { width: 32px; height: 32px; border-radius: 4px; }
+.logo-preview { margin-bottom: var(--space-sm); }
+.logo-thumb { width: 72px; height: 72px; border-radius: 16px; object-fit: contain; background: rgba(255,255,255,0.72); border: 1px solid var(--fluent-border); padding: 8px; }
 .icon-placeholder { font-size: 13px; color: var(--fluent-text-secondary); }
 .bg-preview { margin-bottom: var(--space-sm); }
 .bg-thumb { max-width: 200px; max-height: 100px; border-radius: var(--radius-sm); object-fit: cover; }

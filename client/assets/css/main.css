@@ -1,127 +1,302 @@
-/* 主样式文件 */
+/* Shared Taotu UI primitives. */
 
-/* 通用组件样式 */
+.taotu-page {
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.58)),
+    var(--site-bg-image, var(--taotu-bg-gradient));
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+.taotu-shell {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0 auto;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+
+.taotu-card,
 .fluent-card {
-  background: var(--fluent-bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-1);
-  padding: var(--space-lg);
-  transition: box-shadow var(--transition-normal);
+  background: var(--taotu-glass);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: var(--taotu-radius-md);
+  box-shadow: var(--taotu-shadow-sm);
+  backdrop-filter: blur(var(--taotu-blur));
+  transition: transform var(--taotu-transition), box-shadow var(--taotu-transition), border-color var(--taotu-transition);
 }
 
+.taotu-card:hover,
 .fluent-card:hover {
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--taotu-shadow);
 }
 
+.taotu-card-pad,
+.fluent-card {
+  padding: var(--space-lg);
+}
+
+.taotu-panel {
+  background: var(--taotu-glass-strong);
+  border: 1px solid var(--taotu-border);
+  border-radius: var(--taotu-radius-lg);
+  box-shadow: var(--taotu-shadow);
+  backdrop-filter: blur(var(--taotu-blur));
+}
+
+.taotu-section-title {
+  color: var(--taotu-text-strong);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.taotu-muted {
+  color: var(--taotu-text-muted);
+}
+
+.taotu-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.taotu-icon-16 { width: 16px; height: 16px; }
+.taotu-icon-18 { width: 18px; height: 18px; }
+.taotu-icon-20 { width: 20px; height: 20px; }
+.taotu-icon-24 { width: 24px; height: 24px; }
+.taotu-icon-32 { width: 32px; height: 32px; }
+.taotu-icon-44 { width: 44px; height: 44px; }
+.taotu-icon-48 { width: 48px; height: 48px; }
+.taotu-icon-64 { width: 64px; height: 64px; }
+.taotu-icon-96 { width: 96px; height: 96px; }
+.taotu-icon-128 { width: 128px; height: 128px; }
+
+.taotu-btn,
 .fluent-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-sm);
+  gap: 8px;
+  min-height: 36px;
   padding: 8px 16px;
-  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  border-radius: var(--taotu-radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--taotu-text);
   font-size: 14px;
-  font-weight: 500;
-  border: none;
+  font-weight: 700;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: transform var(--taotu-transition), box-shadow var(--taotu-transition), background var(--taotu-transition), border-color var(--taotu-transition), color var(--taotu-transition);
+  user-select: none;
 }
 
+.taotu-btn:hover:not(:disabled),
+.fluent-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--taotu-shadow-sm);
+}
+
+.taotu-btn:disabled,
+.fluent-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.taotu-btn-primary,
 .fluent-btn-primary {
-  background: var(--fluent-blue);
-  color: white;
+  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-pink-2));
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 12px 28px rgba(248, 95, 154, 0.22);
 }
 
-.fluent-btn-primary:hover {
-  background: var(--fluent-blue-hover);
-}
-
-.fluent-btn-primary:active {
-  background: var(--fluent-blue-pressed);
-}
-
+.taotu-btn-secondary,
 .fluent-btn-secondary {
-  background: transparent;
-  color: var(--fluent-text);
-  border: 1px solid var(--fluent-border);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--taotu-text);
+  border-color: var(--taotu-border);
 }
 
-.fluent-btn-secondary:hover {
-  background: var(--fluent-hover);
+.taotu-btn-danger {
+  background: var(--taotu-danger-soft);
+  color: var(--taotu-danger);
+  border-color: rgba(255, 95, 127, 0.28);
 }
 
-/* 标签徽章 */
+.taotu-input,
+.fluent-input,
+.fluent-input-sm {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--taotu-border);
+  border-radius: var(--taotu-radius-sm);
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--taotu-text);
+  outline: none;
+  transition: border-color var(--taotu-transition), box-shadow var(--taotu-transition), background var(--taotu-transition);
+}
+
+select.taotu-input,
+select.fluent-input,
+select.fluent-input-sm,
+select.fluent-select {
+  appearance: none;
+  padding-right: 28px;
+  background-image: url('/icons/nav/chevron-down-64x64.png');
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  background-size: 14px 14px;
+  font-size: 14px;
+}
+
+.taotu-input:focus,
+.fluent-input:focus,
+.fluent-input-sm:focus {
+  border-color: var(--taotu-border-strong);
+  box-shadow: 0 0 0 4px rgba(248, 95, 154, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.taotu-chip,
 .tag-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
-  border-radius: 12px;
+  justify-content: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 3px 10px;
+  border: 1px solid rgba(248, 95, 154, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 240, 246, 0.82);
+  color: var(--taotu-pink);
   font-size: 12px;
-  font-weight: 500;
-  background: var(--fluent-blue-light);
-  color: var(--fluent-blue);
-  transition: all var(--transition-fast);
-  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: all var(--taotu-transition);
 }
 
-.tag-badge:hover {
-  background: var(--fluent-blue);
-  color: white;
-}
-
+.taotu-chip.selected,
 .tag-badge.selected {
-  background: var(--fluent-blue);
-  color: white;
+  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-pink-2));
+  color: #fff;
+  border-color: transparent;
 }
 
+.taotu-chip.disabled,
 .tag-badge.disabled {
-  opacity: 0.5;
+  background: rgba(240, 240, 246, 0.72);
+  color: #a3a8b8;
   cursor: not-allowed;
+  opacity: 0.7;
+  text-decoration: line-through;
 }
 
-/* 页面容器 */
+.taotu-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.taotu-badge.success { background: var(--taotu-mint-soft); color: var(--taotu-success); }
+.taotu-badge.danger { background: var(--taotu-danger-soft); color: var(--taotu-danger); }
+.taotu-badge.purple { background: var(--taotu-purple-soft); color: var(--taotu-purple); }
+.taotu-badge.pink { background: var(--taotu-pink-soft); color: var(--taotu-pink); }
+.taotu-badge.sky { background: var(--taotu-sky-soft); color: #3d9fd5; }
+
+.taotu-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid rgba(238, 210, 226, 0.62);
+  border-radius: var(--taotu-radius-md);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.taotu-table th,
+.taotu-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(238, 210, 226, 0.52);
+  color: var(--taotu-text);
+  font-size: 13px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.taotu-table th {
+  background: rgba(255, 247, 251, 0.76);
+  color: var(--taotu-text-muted);
+  font-weight: 800;
+}
+
+.taotu-table tr:last-child td {
+  border-bottom: none;
+}
+
+.taotu-table tbody tr:hover {
+  background: rgba(255, 240, 246, 0.42);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(65, 49, 78, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.modal {
+  max-width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  border-radius: var(--taotu-radius-lg);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  box-shadow: var(--taotu-shadow-lg);
+  backdrop-filter: blur(var(--taotu-blur));
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .page-container {
-  max-width: 1400px;
+  width: min(100%, 1440px);
   margin: 0 auto;
   padding: var(--space-lg);
 }
 
-/* 响应式栅格 */
 .grid {
   display: grid;
   gap: var(--space-md);
 }
 
-.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
-.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
-.grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
-.grid-cols-5 { grid-template-columns: repeat(5, 1fr); }
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
-@media (max-width: 768px) {
-  .grid-cols-3, .grid-cols-4, .grid-cols-5 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-/* 瀑布流布局 */
-.waterfall {
-  column-count: 4;
-  column-gap: var(--space-md);
-}
-
-.waterfall-item {
-  break-inside: avoid;
-  margin-bottom: var(--space-md);
-}
-
-@media (max-width: 1200px) { .waterfall { column-count: 3; } }
-@media (max-width: 768px) { .waterfall { column-count: 2; } }
-@media (max-width: 480px) { .waterfall { column-count: 1; } }
-
-/* 滚动条美化 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -129,10 +304,31 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--fluent-border);
-  border-radius: 3px;
+  background: rgba(124, 133, 156, 0.24);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--fluent-text-secondary);
+  background: rgba(248, 95, 154, 0.36);
+}
+
+@media (max-width: 900px) {
+  .grid-cols-3,
+  .grid-cols-4,
+  .grid-cols-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-container {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4,
+  .grid-cols-5 {
+    grid-template-columns: 1fr;
+  }
 }

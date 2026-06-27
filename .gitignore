@@ -17,3 +17,4 @@ client/dist/
 client/node_modules/
 logs/
 .mimocode
+.agents

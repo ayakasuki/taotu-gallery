@@ -5,6 +5,9 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../../db');
 const authMiddleware = require('../../middleware/auth');
 const configService = require('../../services/configService');
@@ -12,6 +15,9 @@ const redisService = require('../../services/redisService');
 const mailService = require('../../services/mailService');
 
 const router = express.Router();
+const uploadsDir = path.resolve(__dirname, '../../../data/uploads');
+const tmpUploadDir = path.join(uploadsDir, 'tmp');
+if (!fs.existsSync(tmpUploadDir)) fs.mkdirSync(tmpUploadDir, { recursive: true });
 
 const CAPTCHA_TTL_SECONDS = 120;
 const EMAIL_CODE_TTL_SECONDS = 120;
@@ -381,6 +387,26 @@ router.post('/change-password', authMiddleware, async (req, res, next) => {
     await db('users').where({ id: req.user.id }).update({ password_hash: passwordHash });
 
     res.json({ message: '密码修改成功' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 上传当前用户头像
+router.post('/upload-avatar', authMiddleware, multer({ dest: tmpUploadDir }).single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: '请选择文件' });
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const avatarDir = path.join(uploadsDir, 'avatars');
+    if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true });
+    const filename = `user_${req.user.id}_${Date.now()}${ext}`;
+    const destPath = path.join(avatarDir, filename);
+    fs.renameSync(req.file.path, destPath);
+
+    const avatarUrl = `/uploads/avatars/${filename}`;
+    await db('users').where({ id: req.user.id }).update({ avatar: avatarUrl });
+
+    res.json({ url: avatarUrl });
   } catch (err) {
     next(err);
   }

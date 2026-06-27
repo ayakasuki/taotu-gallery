@@ -45,7 +45,8 @@ async function readSiteConfig() {
       background: config.background || { type: 'none', value: '' },
       mediumSize: config.mediumSize || { width: 1500, height: 1500 },
       defaultQuota: config.defaultQuota || { storageLimit: 0, maxFileSize: 50 },
-      icon: config.icon || null
+      icon: config.icon || null,
+      logo: config.logo || null
     };
   } catch (err) {
     logger.error(`读取网站配置失败: ${err.message}`);

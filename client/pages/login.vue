@@ -1,8 +1,13 @@
 <template>
   <div class="login-page">
     <div class="login-card fluent-card">
-      <h1 class="login-title">登录</h1>
-      <p class="login-subtitle">登录后可上传图片和管理图库</p>
+      <div class="brand-block">
+        <img v-if="brandLogo" :src="brandLogo" class="brand-logo" alt="" />
+        <span v-else class="brand-logo fallback">桃</span>
+        <h1 class="brand-name">{{ siteName }}</h1>
+      </div>
+      <h2 class="login-title">欢迎回来</h2>
+      <p class="login-subtitle">登录以继续探索美好的图像世界</p>
 
       <div class="form-group">
         <label class="form-label">用户名</label>
@@ -30,8 +35,18 @@
     <div v-if="showForgot" class="modal-overlay" @click.self="closeForgotModal">
       <div class="forgot-modal fluent-card">
         <div class="modal-header">
-          <h2>忘记密码</h2>
-          <button class="close-btn" type="button" @click="closeForgotModal">×</button>
+          <div>
+            <span class="hero-kicker">Reset</span>
+            <h2>忘记密码</h2>
+          </div>
+          <button class="close-btn" type="button" @click="closeForgotModal">
+            <img src="/icons/actions/close-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
+          </button>
+        </div>
+
+        <div class="reset-steps">
+          <span :class="{ active: !forgotSent }">1 验证身份</span>
+          <span :class="{ active: forgotSent }">2 重置密码</span>
         </div>
 
         <div class="form-group">
@@ -90,8 +105,11 @@ definePageMeta({ layout: false })
 
 const api = useApi()
 const router = useRouter()
+const config = useRuntimeConfig()
 
 const form = reactive({ username: '', password: '' })
+const siteName = ref('桃图智库')
+const brandLogo = ref('')
 const error = ref('')
 const loading = ref(false)
 const showForgot = ref(false)
@@ -125,6 +143,15 @@ onBeforeUnmount(() => {
 })
 
 const getErrorMessage = (err, fallback) => err?.data?.error || err?.message || fallback
+
+onMounted(async () => {
+  try {
+    const siteConfig = await api.get('/api/admin/site-config/public')
+    siteName.value = siteConfig.siteName || '桃图智库'
+    const logo = siteConfig.logo || siteConfig.icon
+    brandLogo.value = logo ? `${config.public.apiBase || ''}${logo}` : ''
+  } catch {}
+})
 
 const handleLogin = async () => {
   if (!form.username || !form.password) {
@@ -266,22 +293,80 @@ const resetForgotPassword = async () => {
 <style scoped>
 .login-page {
   min-height: 100vh;
-  background: var(--fluent-bg);
+  background:
+    linear-gradient(rgba(255,255,255,0.18), rgba(255,255,255,0.28)),
+    radial-gradient(circle at 24% 18%, rgba(255, 181, 211, 0.44), transparent 28%),
+    radial-gradient(circle at 78% 12%, rgba(120, 205, 248, 0.46), transparent 30%),
+    linear-gradient(135deg, #ffeef7 0%, #e9f8ff 50%, #fff4fb 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--space-xl);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 8%;
+  border-radius: 42px;
+  background:
+    radial-gradient(circle at 16% 28%, rgba(255,255,255,0.75), transparent 18%),
+    radial-gradient(circle at 82% 70%, rgba(255,255,255,0.58), transparent 24%);
+  filter: blur(2px);
+  opacity: 0.82;
+  pointer-events: none;
 }
 
 .login-card {
+  position: relative;
+  z-index: 1;
   max-width: 400px;
   width: 100%;
   padding: var(--space-2xl);
+  text-align: center;
+  background: rgba(255,255,255,0.72);
+  border-color: rgba(255,255,255,0.88);
+}
+
+.brand-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--space-lg);
+}
+
+.brand-logo {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+}
+
+.brand-logo.fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22px;
+  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-purple));
+  color: white;
+  font-size: 30px;
+  font-weight: 900;
+  box-shadow: 0 16px 34px rgba(248,95,154,0.2);
+}
+
+.brand-name {
+  color: var(--taotu-pink);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0;
 }
 
 .login-title {
+  color: var(--taotu-text-strong);
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 900;
   margin-bottom: var(--space-xs);
 }
 
@@ -291,22 +376,38 @@ const resetForgotPassword = async () => {
   margin-bottom: var(--space-xl);
 }
 
-.form-group { margin-bottom: var(--space-lg); }
-.form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: var(--space-sm); }
+.form-group { margin-bottom: var(--space-lg); text-align: left; }
+.form-label { display: block; color: var(--taotu-text); font-size: 13px; font-weight: 800; margin-bottom: var(--space-sm); }
 .fluent-input { width: 100%; padding: 10px 14px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 14px; transition: border-color var(--transition-fast); box-sizing: border-box; }
 .fluent-input:focus { outline: none; border-color: var(--fluent-blue); }
-.error-msg { color: #d13438; font-size: 13px; margin-bottom: var(--space-md); }
-.success-msg { color: #107c10; font-size: 13px; margin-bottom: var(--space-md); }
+.error-msg { color: var(--taotu-danger); font-size: 13px; margin-bottom: var(--space-md); text-align: left; }
+.success-msg { color: var(--taotu-success); font-size: 13px; margin-bottom: var(--space-md); text-align: left; }
 .login-btn { width: 100%; padding: 10px; font-size: 15px; }
 .login-footer { display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--fluent-border); }
 .back-link, .register-link, .footer-action { font-size: 13px; color: var(--fluent-text-secondary); text-decoration: none; }
 .footer-action { border: none; background: transparent; cursor: pointer; padding: 0; }
 .back-link:hover, .register-link:hover, .footer-action:hover { color: var(--fluent-blue); }
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.32); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: var(--space-lg); }
-.forgot-modal { width: min(440px, 100%); padding: var(--space-xl); }
+.forgot-modal { width: min(760px, 100%); padding: var(--space-xl); background: rgba(255,255,255,0.82); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-lg); }
-.modal-header h2 { font-size: 20px; font-weight: 600; margin: 0; }
-.close-btn { border: none; background: transparent; font-size: 24px; line-height: 1; cursor: pointer; color: var(--fluent-text-secondary); }
+.hero-kicker { color: var(--taotu-pink); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+.modal-header h2 { color: var(--taotu-text-strong); font-size: 22px; font-weight: 900; margin: 0; }
+.close-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--taotu-border); border-radius: 999px; background: rgba(255,255,255,0.62); cursor: pointer; }
+.reset-steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: var(--space-lg);
+}
+.reset-steps span {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.58);
+  color: var(--taotu-text-muted);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+.reset-steps span.active { background: var(--taotu-pink-soft); color: var(--taotu-pink); }
 .captcha-row { display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm); }
 .captcha-box { width: 160px; height: 52px; flex: 0 0 160px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); overflow: hidden; background: #fff; }
 .action-wide { width: 100%; }

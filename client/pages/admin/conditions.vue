@@ -1,6 +1,13 @@
 <template>
   <div class="admin-conditions">
-    <h1 class="page-title">条件标签</h1>
+    <div class="admin-subhero">
+      <div>
+        <span class="hero-kicker">Auto Rules</span>
+        <h1 class="page-title">条件标签</h1>
+        <p>根据路径、分辨率、方向和比例自动给图片写入条件标签。</p>
+      </div>
+      <img src="/icons/admin/condition-tags-64x64.png" class="subhero-icon" alt="" />
+    </div>
     <p class="page-desc">条件标签会自动将符合条件的图片归类到对应标签。例如设置"表情包"路径正则条件，所有路径含"表情包"的图片自动纳入该标签。</p>
 
     <div class="fluent-card">
@@ -52,14 +59,7 @@
 
         <div class="form-group">
           <label>条件类型</label>
-          <select v-model="form.type" class="fluent-input" :disabled="!!editing">
-            <option value="path_regex">路径正则（路径包含指定文字）</option>
-            <option value="path_exclude">路径排除（路径不含指定文字）</option>
-            <option value="resolution">分辨率（横或竖边 ≥ 指定像素）</option>
-            <option value="orientation">横竖图</option>
-            <option value="aspect_ratio">横竖比（正方形筛选）</option>
-            <option value="plugin" disabled>插件条件（暂未启用）</option>
-          </select>
+          <TaotuSelect v-model="form.type" :options="conditionTypeOptions" :disabled="!!editing" />
         </div>
 
         <!-- 路径正则 -->
@@ -89,10 +89,7 @@
         <!-- 横竖图 -->
         <div class="form-group" v-if="form.type === 'orientation'">
           <label>选择方向</label>
-          <select v-model="form.config.orientation" class="fluent-input">
-            <option value="landscape">横图（宽 > 高）</option>
-            <option value="portrait">竖图（高 > 宽）</option>
-          </select>
+          <TaotuSelect v-model="form.config.orientation" :options="orientationOptions" />
         </div>
 
         <!-- 横竖比 -->
@@ -131,6 +128,18 @@ const typeLabels = {
 
 const defaultConfig = () => ({ pattern: '', minPixels: 1080, orientation: 'landscape' })
 const form = reactive({ name: '', type: 'path_regex', config: defaultConfig() })
+const conditionTypeOptions = [
+  { label: '路径正则（路径包含指定文字）', value: 'path_regex' },
+  { label: '路径排除（路径不含指定文字）', value: 'path_exclude' },
+  { label: '分辨率（横或竖边 ≥ 指定像素）', value: 'resolution' },
+  { label: '横竖图', value: 'orientation' },
+  { label: '横竖比（正方形筛选）', value: 'aspect_ratio' },
+  { label: '插件条件（暂未启用）', value: 'plugin', disabled: true }
+]
+const orientationOptions = [
+  { label: '横图（宽 > 高）', value: 'landscape' },
+  { label: '竖图（高 > 宽）', value: 'portrait' }
+]
 
 onMounted(() => loadConditions())
 

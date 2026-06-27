@@ -249,10 +249,12 @@ async function getImageById(imageId, internal = false) {
     .select('tags.*', 'image_tags.source', 'image_tags.source_detail');
 
   if (image.uploader_id) {
-    const uploader = await db('users').where({ id: image.uploader_id }).select('username').first();
+    const uploader = await db('users').where({ id: image.uploader_id }).select('username', 'avatar').first();
     image.uploader_name = uploader?.username || '未知';
+    image.uploader_avatar = uploader?.avatar || null;
   } else {
     image.uploader_name = '系统导入';
+    image.uploader_avatar = null;
   }
 
   const urls = buildImageUrls(image);

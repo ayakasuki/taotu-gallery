@@ -35,9 +35,9 @@ defineEmits(['select'])
 const waterfallRef = ref(null)
 const waterfallItems = ref([])
 const waterfallHeight = ref(0)
-const gap = 2
-const minGridColumnWidth = 180
-const minWaterfallColumnWidth = 190
+const gap = 10
+const minGridColumnWidth = 190
+const minWaterfallColumnWidth = 200
 let resizeObserver = null
 
 const safeMode = computed(() => props.mode === 'waterfall' ? 'waterfall' : 'grid')
@@ -105,7 +105,18 @@ watch(safeMode, async () => { await nextTick(); scheduleLayout() })
 
 <style scoped>
 .gallery-grid { width: 100%; }
-.waterfall-layout { position: relative; width: 100%; min-height: 160px; }
+.waterfall-layout { position: relative; width: 100%; min-height: 220px; }
 .waterfall-item { position: absolute; left: 0; top: 0; transition: transform 0.22s ease, opacity 0.18s ease; }
-.empty-state, .loading-state { text-align: center; padding: var(--space-2xl); color: var(--fluent-text-secondary); }
+.empty-state, .loading-state {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-2xl);
+  color: var(--taotu-text-muted);
+  border: 1px dashed rgba(248, 95, 154, 0.24);
+  border-radius: var(--taotu-radius-lg);
+  background: rgba(255,255,255,0.44);
+}
 </style>

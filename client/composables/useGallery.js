@@ -25,7 +25,8 @@ export function useGallery() {
         public: params.public || undefined,
         userId: params.userId || undefined
       })
-      images.value = data.images || []
+      if (params.append) images.value = [...images.value, ...(data.images || [])]
+      else images.value = data.images || []
       total.value = data.total || 0
       page.value = data.page || 1
     } catch (err) {

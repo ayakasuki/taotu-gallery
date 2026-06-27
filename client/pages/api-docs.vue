@@ -1,124 +1,222 @@
 <template>
-  <div class="api-docs-page page-container">
-    <h1 class="page-title">API 接口</h1>
-    <div class="api-notice">
-      <span>说明：未注册用户无需 Token 即可访问公共图库。生成 Token 后可通过 Authorization Header 或 URL 参数 ?tk= 认证访问私有内容。</span>
-    </div>
-
+  <div class="api-docs-page">
     <div class="api-layout">
-      <!-- 左侧配置面板 -->
-      <div class="api-sidebar fluent-card">
-        <h3>参数配置</h3>
+      <aside class="api-sidebar">
+        <div class="panel-title">
+          <h1>API 参数配置</h1>
+          <span class="help-tip" tabindex="0">
+            <img src="/icons/status/warning-64x64.png" alt="" />
+            <span class="help-popover">未注册用户无需 Token 即可访问公共图库。生成 Token 后可通过 Authorization Header 或 URL 参数 ?tk= 认证访问私有内容。</span>
+          </span>
+        </div>
+
+        <label class="form-row token-row">
+          <span class="config-label">API Token</span>
+          <div ref="tokenPickerRef" class="token-picker" :class="{ open: tokenDropdownOpen }">
+            <div class="token-input">
+              <input
+                v-model="apiToken"
+                :type="showToken ? 'text' : 'password'"
+                placeholder="输入或选择 Token（可选）"
+                @focus="openTokenDropdown"
+                @input="tokenDropdownOpen = true; debouncedRefresh()"
+              />
+              <button type="button" class="token-dropdown-btn" title="选择 Token" @click="toggleTokenDropdown">
+                <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+              </button>
+              <button type="button" title="显示 Token" @click="showToken = !showToken">
+                <img :src="showToken ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+              </button>
+            </div>
+            <div v-if="tokenDropdownOpen" class="token-menu">
+              <button
+                v-for="token in filteredTokenOptions"
+                :key="token.id"
+                type="button"
+                class="token-option"
+                @click="selectToken(token)"
+              >
+                <strong>{{ token.label || `Token #${token.id}` }}</strong>
+                <span>{{ maskToken(token.token) }}</span>
+              </button>
+              <div v-if="tokenOptions.length === 0" class="token-empty">当前账号暂无 API Token</div>
+              <div v-else-if="filteredTokenOptions.length === 0" class="token-empty">没有匹配的 Token</div>
+            </div>
+          </div>
+          <small>提示：Token 仅用于当前会话，不会被保存到服务器</small>
+        </label>
 
         <div class="config-section">
-          <label class="config-label">API Token</label>
-          <input v-model="apiToken" class="fluent-input" placeholder="输入 Token（可选）" @input="debouncedRefresh" />
+          <span class="config-label">接口端点</span>
+          <div class="endpoint-grid">
+            <button
+              v-for="ep in endpoints"
+              :key="ep.key"
+              type="button"
+              class="endpoint-btn"
+              :class="{ active: selectedEndpoint === ep.key }"
+              @click="selectedEndpoint = ep.key; onEndpointChange()"
+            >
+              <img :src="ep.icon" alt="" />
+              <span>{{ ep.label }}</span>
+            </button>
+          </div>
         </div>
 
-        <div class="config-section">
-          <label class="config-label">接口端点</label>
-          <select v-model="selectedEndpoint" class="fluent-select" @change="onEndpointChange">
-            <option v-for="ep in endpoints" :key="ep.key" :value="ep.key">{{ ep.label }}</option>
-          </select>
+        <div class="config-section tag-filter-section" v-if="currentEp.showTags">
+          <div class="section-head">
+            <span class="config-label">标签筛选</span>
+            <span v-if="selectedFilterCount > 0">已选筛选 ({{ selectedFilterCount }})</span>
+            <button v-if="selectedFilterCount > 0" type="button" @click="clearFilters">清除全部</button>
+          </div>
+          <div class="important-filter-box">
+            <TagGroupSelectorFlat
+              :tags="tags"
+              :selectedGroupIds="selectedGroupIds"
+              :selectedSids="selectedSids"
+              :selectedTagIds="selectedTagIds"
+              @update:selectedGroupIds="selectedGroupIds = $event; debouncedRefresh()"
+              @update:selectedSids="selectedSids = $event; debouncedRefresh()"
+              @update:selectedTagIds="selectedTagIds = $event; debouncedRefresh()"
+            />
+          </div>
         </div>
 
-        <div class="config-section" v-if="currentEp.showTags">
-          <label class="config-label">分组 / 标签筛选</label>
-          <TagGroupSelectorFlat
-            :tags="tags"
-            :selectedGroupIds="selectedGroupIds"
-            :selectedSids="selectedSids"
-            :selectedTagIds="selectedTagIds"
-            @update:selectedGroupIds="selectedGroupIds = $event; debouncedRefresh()"
-            @update:selectedSids="selectedSids = $event; debouncedRefresh()"
-            @update:selectedTagIds="selectedTagIds = $event; debouncedRefresh()"
-          />
+        <label class="form-row" v-if="currentEp.showAlbum">
+          <span class="config-label">相册选择</span>
+          <TaotuSelect v-model="selectedAlbum" :options="albumOptions" @change="debouncedRefresh" />
+        </label>
+
+        <div class="form-row count-row" v-if="currentEp.showCount">
+          <span class="config-label">返回数量</span>
+          <div class="count-control">
+            <button type="button" @click="changeCount(-1)">−</button>
+            <input v-model.number="randomCount" type="number" min="1" max="100" @input="normalizeCount" />
+            <button type="button" @click="changeCount(1)">＋</button>
+          </div>
+          <span class="range-text">1-100</span>
         </div>
 
-        <div class="config-section" v-if="currentEp.showAlbum">
-          <label class="config-label">相册</label>
-          <select v-model="selectedAlbum" class="fluent-select" @change="debouncedRefresh">
-            <option :value="null">全部相册</option>
-            <option v-for="a in albums" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
+        <div class="form-row switch-row" v-if="selectedEndpoint === 'images-random'">
+          <span class="config-label">随机图片使用中等图</span>
+          <button type="button" class="pink-switch" :class="{ active: useMedium }" @click="useMedium = !useMedium; debouncedRefresh()">
+            <i></i>
+          </button>
         </div>
 
-        <div class="config-section" v-if="currentEp.showCount">
-          <label class="config-label">数量</label>
-          <input v-model.number="randomCount" type="number" min="1" max="50" class="fluent-input" @input="debouncedRefresh" />
+        <label class="form-row" v-if="selectedEndpoint === 'embed-image' || selectedEndpoint === 'embed-album'">
+          <span class="config-label">嵌入格式</span>
+          <TaotuSelect v-model="embedFormat" :options="embedFormatOptions" @change="debouncedRefresh" />
+        </label>
+
+        <label class="form-row" v-if="selectedEndpoint === 'embed-image'">
+          <span class="config-label">嵌入尺寸</span>
+          <TaotuSelect v-model="embedSize" :options="embedSizeOptions" @change="debouncedRefresh" />
+        </label>
+
+        <div v-if="previewError" class="error-banner">
+          <img src="/icons/api/config-warning-64x64.png" alt="" />
+          <span>{{ previewError }}</span>
+          <button type="button" @click="previewError = ''">×</button>
         </div>
 
-        <div class="config-section" v-if="selectedEndpoint === 'images-random'">
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="useMedium" @change="debouncedRefresh" /> 中等图（减少带宽）
-          </label>
+        <div class="sidebar-actions">
+          <button class="reset-btn" type="button" @click="resetConfig">重置</button>
+          <button class="send-btn" type="button" @click="fetchPreview(true)">
+            <img src="/icons/api/send-request-64x64.png" alt="" />
+            发送请求
+          </button>
         </div>
+      </aside>
 
-        <div class="config-section" v-if="selectedEndpoint === 'embed-image' || selectedEndpoint === 'embed-album'">
-          <label class="config-label">嵌入格式</label>
-          <select v-model="embedFormat" class="fluent-select" @change="debouncedRefresh">
-            <option value="source">源地址</option>
-            <option value="html">HTML</option>
-            <option value="bbcode">BBCode</option>
-            <option value="markdown">Markdown</option>
-          </select>
-        </div>
+      <section class="request-panel">
+        <header class="result-heading">
+          <h2>请求与结果</h2>
+          <span class="status-pill" :class="{ loading: previewLoading, error: !!previewError }">
+            <img :src="previewLoading ? '/icons/status/loading-64x64.png' : (previewError ? '/icons/status/failure-64x64.png' : '/icons/status/success-64x64.png')" alt="" />
+            {{ previewLoading ? '请求中' : (previewError ? '请求异常' : '请求成功') }}
+          </span>
+        </header>
 
-        <div class="config-section" v-if="selectedEndpoint === 'embed-image'">
-          <label class="config-label">图片尺寸</label>
-          <select v-model="embedSize" class="fluent-select" @change="debouncedRefresh">
-            <option value="thumb">缩略图</option>
-            <option value="medium">中等</option>
-            <option value="full">完整</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- 右侧结果面板 -->
-      <div class="api-main">
-        <div class="fluent-card">
-          <h3>API 地址</h3>
+        <div class="url-card">
+          <label>生成的 API URL</label>
           <div class="url-box">
-            <code>{{ generatedUrl }}</code>
-            <button class="copy-btn fluent-btn fluent-btn-primary" @click="copyText(generatedUrl)">复制</button>
+            <input :value="generatedUrl" readonly />
+            <button class="copy-pink" @click="copyText(generatedUrl)">
+              <img src="/icons/api/copy-url-64x64.png" alt="" />
+              复制 URL
+            </button>
           </div>
         </div>
 
-        <div class="fluent-card">
-          <h3>调用方法</h3>
-          <div class="code-block">
-            <pre><code v-html="curlExample"></code></pre>
-            <button class="copy-btn-corner" @click="copyText(curlExamplePlain)">复制</button>
-          </div>
-        </div>
+        <div class="result-grid">
+          <div class="left-results">
+            <article class="mini-result-card">
+              <h3>cURL 示例</h3>
+              <div class="code-block">
+                <pre><code v-html="curlExample"></code></pre>
+                <button class="copy-btn-corner" @click="copyText(curlExamplePlain)">
+                  <img src="/icons/actions/copy-64x64.png" alt="" />
+                  复制 cURL
+                </button>
+              </div>
+            </article>
 
-        <div class="fluent-card">
-          <h3>返回参数结构</h3>
-          <div class="code-block">
-            <pre><code>{{ responseStructure }}</code></pre>
+            <article class="mini-result-card response-card">
+              <h3>响应结构说明</h3>
+              <div class="response-code">
+                <pre><code>{{ responseStructure }}</code></pre>
+              </div>
+            </article>
           </div>
-        </div>
 
-        <!-- 实时预览 -->
-        <div class="fluent-card">
-          <h3>
-            实时预览
-            <span v-if="previewLoading" class="loading-text">加载中...</span>
-          </h3>
-          <!-- 图片预览（随机图片 count=1 时） -->
-          <div v-if="previewImageUrl" class="image-preview">
-            <img :src="previewImageUrl" @load="previewLoading = false" @error="onImageError" />
-          </div>
-          <div v-else-if="previewNoImage" class="preview-empty">暂无符合条件的图片</div>
-          <!-- JSON 预览 -->
-          <div v-else-if="previewData" class="preview-data">
-            <pre><code>{{ JSON.stringify(previewData, null, 2) }}</code></pre>
-            <button class="copy-btn-corner" @click="copyText(JSON.stringify(previewData, null, 2))">复制</button>
-          </div>
-          <div v-else-if="previewLoading" class="preview-loading">正在请求 API...</div>
-          <div v-else class="preview-empty">参数变动后自动预览</div>
+          <article class="mini-result-card preview-card">
+            <header class="preview-head">
+              <h3>实时预览</h3>
+              <button class="copy-outline" @click="copyText(previewCopyText)">
+                <img src="/icons/actions/copy-64x64.png" alt="" />
+                复制结果
+              </button>
+            </header>
+
+            <div class="preview-tabs">
+              <button type="button" :class="{ active: previewMode === 'images' }" @click="previewMode = 'images'">图片预览</button>
+              <button type="button" :class="{ active: previewMode === 'json' }" @click="previewMode = 'json'">JSON 预览</button>
+              <button type="button" :class="{ active: previewMode === 'text' }" @click="previewMode = 'text'">文本预览</button>
+            </div>
+
+            <div v-if="previewLoading" class="preview-loading">正在请求 API...</div>
+            <div v-else-if="previewNoImage" class="preview-empty">
+              <img src="/icons/empty/search-empty-256x256.png" alt="" />
+              <span>暂无符合条件的图片</span>
+            </div>
+            <div v-else-if="previewMode === 'images' && previewImages.length > 0" class="preview-grid">
+              <figure v-for="img in visiblePreviewImages" :key="img.id || img.url" class="preview-tile">
+                <img :src="previewImageSrc(img)" :alt="img.alt || img.filename || '图片预览'" />
+                <figcaption>{{ imageSizeText(img) }}</figcaption>
+              </figure>
+            </div>
+            <div v-else-if="previewMode === 'images' && previewImageUrl" class="single-preview">
+              <img :src="previewImageUrl" @error="onImageError" />
+            </div>
+            <div v-else-if="previewMode === 'json'" class="preview-data">
+              <pre><code>{{ previewJsonText }}</code></pre>
+            </div>
+            <div v-else-if="previewMode === 'text'" class="preview-data">
+              <pre><code>{{ previewText || previewJsonText }}</code></pre>
+            </div>
+            <div v-else class="preview-empty">
+              <img src="/icons/empty/no-data-256x256.png" alt="" />
+              <span>点击发送请求获取预览</span>
+            </div>
+
+            <button v-if="previewImages.length > visiblePreviewLimit" class="load-more-preview" type="button" @click="visiblePreviewLimit += 9">
+              <img src="/icons/actions/refresh-64x64.png" alt="" />
+              加载更多（还有 {{ previewImages.length - visiblePreviewLimit }} 张）
+            </button>
+          </article>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </template>
@@ -126,7 +224,6 @@
 <script setup>
 definePageMeta({ ssr: false })
 
-import TagSelector from '~/components/tags/TagSelector.vue'
 import TagGroupSelectorFlat from '~/components/tags/TagGroupSelectorFlat.vue'
 
 const config = useRuntimeConfig()
@@ -138,52 +235,84 @@ const selectedAlbum = ref(null)
 const randomCount = ref(1)
 const apiToken = ref('')
 const useMedium = ref(true)
-const tagGroups = ref([])
 const selectedGroupIds = ref([])
 const selectedSids = ref([])
-const selectedSubName = ref('')
 const selectedEndpoint = ref('images-random')
-const embedFormat = ref('html')
-const embedSize = ref('thumb')
+const embedFormat = ref('markdown')
+const embedSize = ref('medium')
 const previewData = ref(null)
 const previewImageUrl = ref(null)
+const previewText = ref('')
+const previewMode = ref('images')
 const previewLoading = ref(false)
 const previewNoImage = ref(false)
+const previewError = ref('')
+const showToken = ref(false)
+const tokenDropdownOpen = ref(false)
+const tokenPickerRef = ref(null)
+const tokenOptions = ref([])
+const visiblePreviewLimit = ref(9)
+const requestSeq = ref(0)
 
 const endpoints = [
-  { key: 'images', label: '图片列表', showTags: true, showAlbum: true, showCount: false },
-  { key: 'images-random', label: '随机图片', showTags: true, showAlbum: true, showCount: true },
-  { key: 'albums', label: '相册列表', showTags: false, showAlbum: false, showCount: false },
-  { key: 'albums-random', label: '随机相册', showTags: false, showAlbum: false, showCount: true },
-  { key: 'embed-image', label: '图片嵌入', showTags: true, showAlbum: false, showCount: false },
-  { key: 'embed-album', label: '相册嵌入', showTags: false, showAlbum: false, showCount: false },
-  { key: 'tags', label: '标签列表', showTags: false, showAlbum: false, showCount: false }
+  { key: 'images', label: '图片列表', icon: '/icons/api/image-list-64x64.png', showTags: true, showAlbum: true, showCount: true },
+  { key: 'images-random', label: '随机图片', icon: '/icons/api/random-image-64x64.png', showTags: true, showAlbum: true, showCount: true },
+  { key: 'albums', label: '相册列表', icon: '/icons/api/album-list-64x64.png', showTags: false, showAlbum: false, showCount: true },
+  { key: 'albums-random', label: '随机相册', icon: '/icons/api/random-album-64x64.png', showTags: false, showAlbum: false, showCount: true },
+  { key: 'embed-image', label: '图片嵌入', icon: '/icons/api/embed-image-64x64.png', showTags: true, showAlbum: false, showCount: false },
+  { key: 'embed-album', label: '相册嵌入', icon: '/icons/api/embed-album-64x64.png', showTags: false, showAlbum: false, showCount: false },
+  { key: 'tags', label: '标签列表', icon: '/icons/api/tag-list-64x64.png', showTags: false, showAlbum: false, showCount: false }
 ]
 
 const currentEp = computed(() => endpoints.find(e => e.key === selectedEndpoint.value) || endpoints[0])
+const albumOptions = computed(() => [
+  { label: '全部相册', value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id }))
+])
+const embedFormatOptions = [
+  { label: '源地址', value: 'source' },
+  { label: 'HTML', value: 'html' },
+  { label: 'BBCode', value: 'bbcode' },
+  { label: 'Markdown', value: 'markdown' }
+]
+const embedSizeOptions = [
+  { label: '缩略图', value: 'thumb' },
+  { label: '中图（1280px）', value: 'medium' },
+  { label: '完整图', value: 'full' }
+]
+const selectedFilterCount = computed(() => selectedGroupIds.value.length + selectedSids.value.length + selectedTagIds.value.length)
+const previewImages = computed(() => extractPreviewImages(previewData.value))
+const visiblePreviewImages = computed(() => previewImages.value.slice(0, visiblePreviewLimit.value))
+const previewJsonText = computed(() => previewData.value ? JSON.stringify(previewData.value, null, 2) : '')
+const previewCopyText = computed(() => previewMode.value === 'text' ? (previewText.value || previewJsonText.value) : previewJsonText.value)
+const filteredTokenOptions = computed(() => {
+  const keyword = apiToken.value.trim().toLowerCase()
+  if (!keyword) return tokenOptions.value
+  return tokenOptions.value.filter(token => {
+    return String(token.label || '').toLowerCase().includes(keyword) || String(token.token || '').toLowerCase().includes(keyword)
+  })
+})
 
-// 生成 URL（含 token 拼接）
 const generatedUrl = computed(() => {
   const base = import.meta.client ? window.location.origin : 'http://localhost'
-  const ep = selectedEndpoint.value
   const params = new URLSearchParams()
-
-  // 分组/子分组/标签筛选（叠加）
   if (selectedGroupIds.value.length > 0) params.set('tag_g', selectedGroupIds.value.join(','))
   if (selectedSids.value.length > 0) params.set('sid', selectedSids.value.join(','))
   if (selectedTagIds.value.length > 0) params.set('tags', selectedTagIds.value.join(','))
   if (selectedAlbum.value) params.set('album', selectedAlbum.value)
   if (apiToken.value) params.set('tk', apiToken.value)
 
-  switch (ep) {
+  switch (selectedEndpoint.value) {
     case 'images':
+      params.set('limit', randomCount.value)
       return `${base}/api/images?${params.toString()}`
     case 'images-random':
       params.set('count', randomCount.value)
       if (useMedium.value) params.set('pic', 'md')
       return `${base}/api/images/random?${params.toString()}`
     case 'albums':
-      return `${base}/api/albums${params.toString() ? '?' + params.toString() : ''}`
+      params.set('limit', randomCount.value)
+      return `${base}/api/albums?${params.toString()}`
     case 'albums-random':
       params.set('count', randomCount.value)
       return `${base}/api/albums/random?${params.toString()}`
@@ -191,7 +320,6 @@ const generatedUrl = computed(() => {
       params.set('format', embedFormat.value)
       params.set('size', embedSize.value)
       params.set('random', '1')
-      if (selectedTagIds.value.length > 0) params.set('tags', selectedTagIds.value.join(','))
       return `${base}/api/embed/image?${params.toString()}`
     case 'embed-album':
       params.set('format', embedFormat.value)
@@ -205,57 +333,103 @@ const generatedUrl = computed(() => {
 })
 
 const tokenPlaceholder = '<span class="token-highlight">YOUR_TOKEN</span>'
-
-const curlExample = computed(() => {
-  const url = generatedUrl.value
-  const token = apiToken.value || 'YOUR_TOKEN'
-  return `# 方式一：通过 Authorization Header
-curl -H "Authorization: Bearer ${apiToken.value ? token : tokenPlaceholder}" \\
-     "${url}"
-
-# 方式二：通过 URL 参数（已自动拼接 tk=）
-curl "${url}"`
-})
-
-const curlExamplePlain = computed(() => {
-  const url = generatedUrl.value
-  const token = apiToken.value || 'YOUR_TOKEN'
-  return `# 方式一：通过 Authorization Header
-curl -H "Authorization: Bearer ${token}" \\
-     "${url}"
-
-# 方式二：通过 URL 参数
-curl "${url}"`
-})
+const curlExample = computed(() => `curl -G "${escapeHtml(generatedUrl.value.split('?')[0])}" \\
+  -H "Authorization: Bearer ${apiToken.value || tokenPlaceholder}" \\
+${curlDataParams.value}`)
+const curlExamplePlain = computed(() => `curl -G "${generatedUrl.value.split('?')[0]}" \\
+  -H "Authorization: Bearer ${apiToken.value || 'YOUR_TOKEN'}" \\
+${curlDataParamsPlain.value}`)
+const curlDataParams = computed(() => curlParamLines(true))
+const curlDataParamsPlain = computed(() => curlParamLines(false))
 
 const responseStructure = computed(() => {
-  const ep = selectedEndpoint.value
-  if (ep === 'images-random') {
-    if (randomCount.value === 1) {
-      return '// count=1 时直接返回图片二进制 (Content-Type: image/jpeg)\n// 浏览器直接访问 URL 即可预览图片'
-    }
-    return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/image/...' }] }, null, 2)
+  if (selectedEndpoint.value === 'images-random' && Number(randomCount.value) === 1) {
+    return '// count=1 时直接返回图片二进制\n// Content-Type: image/jpeg 或图片原 mime_type\n// 使用 pic=md 时优先返回中等图'
   }
-  if (ep === 'images') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/image/...' }], total: 100, page: 1 }, null, 2)
-  if (ep === 'albums') return JSON.stringify({ albums: [{ id: 1, name: '...', image_count: 10 }], total: 5 }, null, 2)
-  if (ep === 'albums-random') return JSON.stringify({ albums: [{ id: 1, name: '...' }] }, null, 2)
-  if (ep === 'tags') return JSON.stringify({ combinable: [{ id: 1, name: '...' }], nonCombinable: [] }, null, 2)
-  if (ep.startsWith('embed-')) return '// 返回 ' + embedFormat.value + ' 格式字符串'
+  if (selectedEndpoint.value === 'images-random') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/image/...', medium_url: '/thumb/...?s=medium', width: 1920, height: 1080 }] }, null, 2)
+  if (selectedEndpoint.value === 'images') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/image/...', thumb_url: '/thumb/...?s=thumb', medium_url: '/thumb/...?s=medium' }], total: 100, page: 1, limit: 20 }, null, 2)
+  if (selectedEndpoint.value === 'albums') return JSON.stringify({ albums: [{ id: 1, name: '...', image_count: 10, cover_image: {} }], total: 5, page: 1 }, null, 2)
+  if (selectedEndpoint.value === 'albums-random') return JSON.stringify({ albums: [{ id: 1, name: '...', cover_image: {} }] }, null, 2)
+  if (selectedEndpoint.value === 'tags') return JSON.stringify({ combinable: [{ id: 1, name: '...' }], nonCombinable: [] }, null, 2)
+  if (selectedEndpoint.value.startsWith('embed-')) return `// 返回 ${embedFormat.value} 格式\n// source 格式返回 JSON；HTML、BBCode、Markdown 返回文本`
   return '{}'
 })
 
-// 防抖自动刷新
 let refreshTimer = null
 const debouncedRefresh = () => {
   if (refreshTimer) clearTimeout(refreshTimer)
-  refreshTimer = setTimeout(fetchPreview, 500)
+  refreshTimer = setTimeout(() => fetchPreview(false), 500)
 }
 
 const onEndpointChange = () => {
   previewData.value = null
+  previewText.value = ''
   previewImageUrl.value = null
   previewNoImage.value = false
+  previewError.value = ''
+  visiblePreviewLimit.value = 9
+  randomCount.value = defaultCountForEndpoint(selectedEndpoint.value)
   debouncedRefresh()
+}
+
+const defaultCountForEndpoint = (endpoint) => endpoint === 'images-random' ? 1 : 20
+
+const normalizeAssetUrl = (url) => {
+  if (!url) return ''
+  if (/^https?:\/\//i.test(url)) return url
+  return `${config.public.apiBase || ''}${url}`
+}
+
+const fetchPreview = async (force = false) => {
+  requestSeq.value += 1
+  const seq = requestSeq.value
+  previewLoading.value = true
+  previewData.value = null
+  previewText.value = ''
+  previewImageUrl.value = null
+  previewNoImage.value = false
+  previewError.value = ''
+  visiblePreviewLimit.value = 9
+
+  try {
+    const headers = {}
+    if (apiToken.value) headers.Authorization = `Bearer ${apiToken.value}`
+    const url = withRefreshParam(generatedUrl.value, force ? Date.now() : requestSeq.value)
+
+    if (selectedEndpoint.value === 'images-random' && Number(randomCount.value) === 1) {
+      previewImageUrl.value = url
+      previewMode.value = 'images'
+      return
+    }
+
+    if (selectedEndpoint.value.startsWith('embed-') && embedFormat.value !== 'source') {
+      const res = await fetch(url, { headers })
+      const text = await res.text()
+      if (seq !== requestSeq.value) return
+      if (!res.ok) throw new Error(text || `HTTP ${res.status}`)
+      previewText.value = text
+      previewData.value = { format: embedFormat.value, content: text }
+      previewMode.value = 'text'
+      return
+    }
+
+    const data = await $fetch(url, { headers })
+    if (seq !== requestSeq.value) return
+    previewData.value = data
+    previewMode.value = previewImages.value.length > 0 ? 'images' : 'json'
+    if (previewImages.value.length === 0 && selectedEndpoint.value.includes('image')) previewNoImage.value = true
+  } catch (err) {
+    previewError.value = err.data?.error || err.message || '请求失败'
+    previewData.value = { error: previewError.value }
+    previewMode.value = 'json'
+  } finally {
+    if (seq === requestSeq.value) previewLoading.value = false
+  }
+}
+
+const withRefreshParam = (url, value) => {
+  const joiner = url.includes('?') ? '&' : '?'
+  return `${url}${joiner}_preview=${value}`
 }
 
 const onImageError = () => {
@@ -264,95 +438,877 @@ const onImageError = () => {
   previewNoImage.value = true
 }
 
-const onTagChange = (ids) => {
-  selectedTagIds.value = ids
+const extractPreviewImages = (data) => {
+  if (!data) return []
+  if (Array.isArray(data.images)) return data.images
+  if (Array.isArray(data.data?.images)) return data.data.images
+  if (data.image) return [data.image]
+  if (Array.isArray(data.albums)) return data.albums.map(album => album.cover_image || album.images?.[0]).filter(Boolean)
+  return []
+}
+
+const previewImageSrc = (img) => normalizeAssetUrl(img.medium_url || img.thumb_url || img.url)
+const imageSizeText = (img) => img.width && img.height ? `${img.width} × ${img.height}` : (img.filename || '预览')
+
+const curlParamLines = (html = false) => {
+  const query = generatedUrl.value.split('?')[1] || ''
+  const params = new URLSearchParams(query)
+  const lines = []
+  for (const [key, value] of params.entries()) {
+    if (key === '_preview') continue
+    const escaped = html ? escapeHtml(value) : value
+    lines.push(`  --data-urlencode "${key}=${escaped}" \\`)
+  }
+  return lines.join('\n').replace(/ \\$/, '')
+}
+
+const escapeHtml = (value) => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+
+const changeCount = (step) => {
+  randomCount.value = Math.max(1, Math.min(100, Number(randomCount.value || 1) + step))
   debouncedRefresh()
 }
 
-// 获取预览
-const fetchPreview = async () => {
-  previewLoading.value = true
-  previewData.value = null
-  previewImageUrl.value = null
-  previewNoImage.value = false
+const normalizeCount = () => {
+  randomCount.value = Math.max(1, Math.min(100, Number(randomCount.value || 1)))
+  debouncedRefresh()
+}
 
+const clearFilters = () => {
+  selectedGroupIds.value = []
+  selectedSids.value = []
+  selectedTagIds.value = []
+  debouncedRefresh()
+}
+
+const resetConfig = () => {
+  apiToken.value = ''
+  selectedAlbum.value = null
+  randomCount.value = defaultCountForEndpoint(selectedEndpoint.value)
+  useMedium.value = true
+  embedFormat.value = 'markdown'
+  embedSize.value = 'medium'
+  clearFilters()
+}
+
+const loadTokenOptions = async () => {
   try {
-    const ep = selectedEndpoint.value
-    const url = generatedUrl.value
-
-    // 随机图片 count=1 时直接返回图片
-    if (ep === 'images-random' && randomCount.value === 1) {
-      previewImageUrl.value = url
-      return
-    }
-
-    // 嵌入端点返回 HTML/文本
-    if (ep.startsWith('embed-') && embedFormat.value !== 'source') {
-      const res = await fetch(url)
-      const text = await res.text()
-      previewData.value = { format: embedFormat.value, content: text }
-      previewLoading.value = false
-      return
-    }
-
-    // 其他端点返回 JSON
-    const headers = {}
-    if (apiToken.value) headers['Authorization'] = `Bearer ${apiToken.value}`
-    const data = await $fetch(url, { headers })
-    previewData.value = data
-  } catch (err) {
-    previewData.value = { error: err.data?.error || err.message || '请求失败' }
-  } finally {
-    previewLoading.value = false
+    const data = await api.get('/api/admin/api/tokens')
+    tokenOptions.value = (data.tokens || []).filter(token => token.token)
+  } catch {
+    tokenOptions.value = []
   }
 }
 
+const openTokenDropdown = () => {
+  tokenDropdownOpen.value = true
+  if (tokenOptions.value.length === 0) loadTokenOptions()
+}
+
+const toggleTokenDropdown = () => {
+  tokenDropdownOpen.value = !tokenDropdownOpen.value
+  if (tokenDropdownOpen.value && tokenOptions.value.length === 0) loadTokenOptions()
+}
+
+const selectToken = (token) => {
+  apiToken.value = token.token || ''
+  tokenDropdownOpen.value = false
+  debouncedRefresh()
+}
+
+const maskToken = (token) => {
+  const value = String(token || '')
+  if (value.length <= 12) return value
+  return `${value.slice(0, 6)}••••••${value.slice(-6)}`
+}
+
+const handleTokenPickerPointer = (event) => {
+  if (!tokenDropdownOpen.value) return
+  if (tokenPickerRef.value?.contains(event.target)) return
+  tokenDropdownOpen.value = false
+}
+
 const copyText = async (text) => {
-  try { await navigator.clipboard.writeText(text); alert('已复制') } catch {
-    const ta = document.createElement('textarea'); ta.value = text
+  try { await navigator.clipboard.writeText(text || ''); alert('已复制') } catch {
+    const ta = document.createElement('textarea'); ta.value = text || ''
     document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
     alert('已复制')
   }
 }
 
 onMounted(async () => {
+  document.addEventListener('pointerdown', handleTokenPickerPointer)
   await fetchTags()
   try { const d = await api.get('/api/albums'); albums.value = d.albums || [] } catch {}
-  try { const g = await api.get('/api/tag-groups'); tagGroups.value = g.groups || [] } catch {}
-  fetchPreview()
+  await loadTokenOptions()
+  fetchPreview(true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleTokenPickerPointer)
+  if (refreshTimer) clearTimeout(refreshTimer)
 })
 </script>
 
 <style scoped>
-.page-title { font-size: 24px; font-weight: 600; margin-bottom: var(--space-md); }
-.api-notice { background: var(--fluent-blue-light); padding: var(--space-md) var(--space-lg); border-radius: var(--radius-sm); margin-bottom: var(--space-xl); font-size: 13px; line-height: 1.6; }
-.api-layout { display: flex; gap: var(--space-lg); }
-.api-sidebar { width: 300px; flex-shrink: 0; position: sticky; top: 72px; align-self: flex-start; }
-.api-sidebar h3 { font-size: 16px; font-weight: 600; margin-bottom: var(--space-lg); }
-.config-section { margin-bottom: var(--space-lg); }
-.config-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: var(--space-sm); color: var(--fluent-text-secondary); }
-.fluent-input, .fluent-select { width: 100%; padding: 8px 12px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 14px; box-sizing: border-box; background: white; }
-.fluent-input:focus, .fluent-select:focus { outline: none; border-color: var(--fluent-blue); }
-.checkbox-label { display: flex; align-items: center; gap: var(--space-sm); font-size: 14px; cursor: pointer; }
-.checkbox-label input { margin: 0; }
-.config-divider { border-top: 1px solid var(--fluent-border); margin: var(--space-md) 0; }
-.selected-group-info { display: flex; align-items: center; gap: var(--space-sm); padding: 6px 10px; background: var(--fluent-blue-light); border-radius: var(--radius-sm); font-size: 13px; margin-top: var(--space-sm); }
-.btn-sm { padding: 3px 8px; font-size: 12px; }
-.api-main { flex: 1; display: flex; flex-direction: column; gap: var(--space-lg); }
-.api-main h3 { font-size: 15px; font-weight: 600; margin-bottom: var(--space-md); display: flex; align-items: center; justify-content: space-between; }
-.loading-text { font-size: 12px; color: var(--fluent-text-secondary); font-weight: 400; }
-.url-box { display: flex; align-items: center; gap: var(--space-md); background: #f5f5f5; padding: var(--space-md); border-radius: var(--radius-sm); overflow-x: auto; }
-.url-box code { flex: 1; font-size: 13px; word-break: break-all; }
-.copy-btn { flex-shrink: 0; font-size: 12px; padding: 4px 12px; }
-.code-block { position: relative; background: #1e1e1e; color: #d4d4d4; padding: var(--space-md); border-radius: var(--radius-sm); overflow-x: auto; }
-.code-block pre { margin: 0; font-size: 12px; line-height: 1.6; }
-.copy-btn-corner { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); border: none; color: white; padding: 4px 10px; border-radius: var(--radius-sm); font-size: 11px; cursor: pointer; }
-.copy-btn-corner:hover { background: rgba(255,255,255,0.3); }
-.token-highlight { color: #4caf50; font-weight: 700; background: rgba(76,175,80,0.15); padding: 1px 4px; border-radius: 3px; }
-.image-preview { text-align: center; padding: var(--space-md); }
-.image-preview img { max-width: 100%; max-height: 400px; border-radius: var(--radius-sm); object-fit: contain; }
-.preview-loading, .preview-empty { text-align: center; padding: var(--space-xl); color: var(--fluent-text-secondary); }
-.preview-data { position: relative; }
-.preview-data pre { background: #f5f5f5; padding: var(--space-md); border-radius: var(--radius-sm); font-size: 12px; max-height: 500px; overflow: auto; }
-@media (max-width: 768px) { .api-layout { flex-direction: column; } .api-sidebar { width: 100%; position: static; } }
+.api-docs-page {
+  width: min(100%, 1508px);
+  margin: 0 auto;
+}
+
+.api-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, 520px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.api-sidebar,
+.request-panel {
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 42px rgba(84, 74, 112, 0.1);
+  backdrop-filter: blur(24px);
+}
+
+.api-sidebar {
+  position: sticky;
+  top: 84px;
+  padding: 18px 16px;
+}
+
+.panel-title,
+.result-heading,
+.preview-head,
+.section-head,
+.form-row,
+.switch-row,
+.count-row {
+  display: flex;
+  align-items: center;
+}
+
+.panel-title {
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.panel-title h1,
+.result-heading h2 {
+  color: #2f3850;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.help-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: help;
+}
+
+.help-tip img {
+  width: 16px;
+  height: 16px;
+}
+
+.help-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  z-index: 20;
+  width: 360px;
+  max-width: min(360px, calc(100vw - 48px));
+  padding: 12px 14px;
+  border: 1px solid rgba(230, 219, 236, 0.92);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 38px rgba(84, 74, 112, 0.16);
+  color: #65708a;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.7;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  backdrop-filter: blur(18px);
+}
+
+.help-tip:hover .help-popover,
+.help-tip:focus-visible .help-popover {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.config-section,
+.form-row {
+  margin-bottom: 15px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 126px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.token-row small {
+  grid-column: 2;
+  margin-top: -7px;
+  color: #9aa3b8;
+  font-size: 12px;
+}
+
+.config-label {
+  color: #4b566e;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.token-picker,
+.token-input,
+.url-box,
+.count-control {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.token-picker {
+  position: relative;
+  width: 100%;
+}
+
+.token-input,
+.url-box input,
+.count-control,
+:deep(.taotu-select-trigger) {
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.token-input input,
+.url-box input,
+.count-control input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #65708a;
+  font-size: 14px;
+}
+
+.token-input {
+  width: 100%;
+  height: 32px;
+  padding-left: 11px;
+}
+
+.token-input button {
+  width: 34px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.token-input img {
+  width: 16px;
+  height: 16px;
+}
+
+.token-dropdown-btn img {
+  transition: transform 0.16s ease;
+}
+
+.token-picker.open .token-dropdown-btn img {
+  transform: rotate(180deg);
+}
+
+.token-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 25;
+  max-height: 238px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid rgba(220, 225, 238, 0.88);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 38px rgba(84, 74, 112, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.token-option {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #4b566e;
+  cursor: pointer;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.token-option:hover {
+  background: rgba(255, 235, 244, 0.72);
+}
+
+.token-option strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.token-option span,
+.token-empty {
+  color: #9aa3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.token-empty {
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.endpoint-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.endpoint-btn {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #65708a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.endpoint-btn.active {
+  border-color: rgba(248, 95, 154, 0.55);
+  background: rgba(255, 235, 244, 0.74);
+  color: #f15c96;
+}
+
+.endpoint-btn img {
+  width: 15px;
+  height: 15px;
+}
+
+.section-head {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.section-head span:not(.config-label),
+.section-head button {
+  color: #f15c96;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.section-head button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.important-filter-box {
+  padding: 12px;
+  border: 1px solid rgba(230, 219, 236, 0.86);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.count-row {
+  grid-template-columns: 126px 142px auto;
+}
+
+.count-control {
+  height: 32px;
+  overflow: hidden;
+}
+
+.count-control button {
+  width: 38px;
+  height: 100%;
+  border: 0;
+  background: rgba(249, 250, 254, 0.72);
+  color: #65708a;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.count-control input {
+  height: 100%;
+  text-align: center;
+}
+
+.range-text {
+  align-self: center;
+  color: #9aa3b8;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.switch-row {
+  justify-content: space-between;
+}
+
+.pink-switch {
+  width: 56px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(220, 225, 238, 0.86);
+  cursor: pointer;
+  padding: 3px;
+}
+
+.pink-switch i {
+  width: 24px;
+  height: 24px;
+  display: block;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(60, 54, 82, 0.16);
+  transition: transform 0.18s ease;
+}
+
+.pink-switch.active {
+  background: linear-gradient(135deg, #ff7caf, #f15c96);
+}
+
+.pink-switch.active i {
+  transform: translateX(26px);
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin: 6px 0 16px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 99, 139, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 235, 241, 0.82);
+  color: #f15c72;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.error-banner img {
+  width: 16px;
+  height: 16px;
+}
+
+.error-banner button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #f15c72;
+  cursor: pointer;
+}
+
+.sidebar-actions {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.reset-btn,
+.send-btn,
+.copy-pink,
+.copy-outline,
+.load-more-preview {
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.reset-btn {
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  background: rgba(255, 255, 255, 0.62);
+  color: #7d879d;
+}
+
+.send-btn,
+.copy-pink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  background: linear-gradient(135deg, #ff7caf, #f15c96);
+  color: #fff;
+}
+
+.send-btn img,
+.copy-pink img,
+.copy-outline img,
+.copy-btn-corner img,
+.load-more-preview img {
+  width: 15px;
+  height: 15px;
+}
+
+.request-panel {
+  padding: 18px;
+}
+
+.result-heading {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(221, 250, 235, 0.88);
+  color: #20ad79;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.status-pill.loading {
+  background: rgba(226, 244, 255, 0.88);
+  color: #3d9fd5;
+}
+
+.status-pill.error {
+  background: rgba(255, 235, 241, 0.88);
+  color: #f15c72;
+}
+
+.status-pill img {
+  width: 15px;
+  height: 15px;
+}
+
+.url-card,
+.mini-result-card {
+  border: 1px solid rgba(230, 219, 236, 0.7);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow: 0 8px 24px rgba(80, 70, 110, 0.05);
+}
+
+.url-card {
+  padding: 14px;
+}
+
+.url-card label,
+.mini-result-card h3 {
+  display: block;
+  margin-bottom: 10px;
+  color: #4b566e;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.url-box {
+  gap: 10px;
+}
+
+.url-box input {
+  height: 38px;
+  padding: 0 12px;
+}
+
+.copy-pink {
+  flex: 0 0 106px;
+  height: 38px;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.left-results {
+  display: grid;
+  gap: 12px;
+}
+
+.mini-result-card {
+  padding: 14px;
+}
+
+.code-block,
+.response-code,
+.preview-data pre {
+  border: 1px solid rgba(220, 225, 238, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #596278;
+}
+
+.code-block {
+  position: relative;
+  min-height: 168px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.code-block pre,
+.response-code pre,
+.preview-data pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.62;
+}
+
+.copy-btn-corner {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #ff7caf, #f15c96);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 0 12px;
+}
+
+.response-code {
+  min-height: 326px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 14px;
+}
+
+.token-highlight {
+  color: #22af76;
+  font-weight: 900;
+}
+
+.preview-card {
+  min-height: 650px;
+}
+
+.preview-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.copy-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(248, 95, 154, 0.42);
+  background: rgba(255, 255, 255, 0.54);
+  color: #f15c96;
+}
+
+.preview-tabs {
+  display: inline-flex;
+  overflow: hidden;
+  margin-bottom: 14px;
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.preview-tabs button {
+  min-width: 92px;
+  height: 36px;
+  border: 0;
+  border-right: 1px solid rgba(220, 225, 238, 0.82);
+  background: transparent;
+  color: #7d879d;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.preview-tabs button:last-child {
+  border-right: 0;
+}
+
+.preview-tabs button.active {
+  background: rgba(255, 235, 244, 0.78);
+  color: #f15c96;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.preview-tile,
+.single-preview {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(245, 248, 255, 0.86);
+}
+
+.preview-tile {
+  aspect-ratio: 1.18 / 1;
+}
+
+.preview-tile img,
+.single-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.preview-tile figcaption {
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(31, 36, 50, 0.45);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  backdrop-filter: blur(10px);
+}
+
+.single-preview {
+  height: 430px;
+}
+
+.single-preview img {
+  object-fit: contain;
+}
+
+.preview-data {
+  position: relative;
+}
+
+.preview-data pre {
+  min-height: 420px;
+  max-height: 620px;
+  overflow: auto;
+  padding: 14px;
+}
+
+.preview-loading,
+.preview-empty {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #8b93a7;
+  font-weight: 900;
+}
+
+.preview-empty img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+
+.load-more-preview {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  border: 1px solid rgba(220, 225, 238, 0.82);
+  background: rgba(255, 255, 255, 0.58);
+  color: #7d879d;
+}
+
+@media (max-width: 1280px) {
+  .api-layout,
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .api-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .api-sidebar,
+  .request-panel {
+    padding: 14px;
+  }
+
+  .form-row,
+  .count-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .token-row small {
+    grid-column: 1;
+  }
+
+  .endpoint-grid,
+  .preview-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .url-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .copy-pink {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
 </style>

@@ -1,6 +1,13 @@
 <template>
   <div class="admin-tags">
-    <h1 class="page-title">标签设置</h1>
+    <div class="admin-subhero">
+      <div>
+        <span class="hero-kicker">Tag System</span>
+        <h1 class="page-title">标签设置</h1>
+        <p>管理平台标签、互斥关系、人工标签、通用配置和分组导航。</p>
+      </div>
+      <img src="/icons/admin/tag-settings-64x64.png" class="subhero-icon" alt="" />
+    </div>
 
     <div class="tabs">
       <button v-for="tab in tabs" :key="tab.key" class="tab-btn" :class="{ active: activeTab === tab.key }" @click="activeTab = tab.key">{{ tab.label }}</button>
@@ -78,18 +85,9 @@
           <button class="source-btn" :class="{ active: manualSource === 'mine' }" @click="switchManualSource('mine')">我的图库</button>
           <button class="source-btn" :class="{ active: manualSource === 'user' }" @click="switchManualSource('user')">用户图库</button>
         </div>
-        <select v-if="manualSource === 'user'" v-model="manualUserId" class="fluent-select" @change="reloadManualContext">
-          <option :value="null">选择用户</option>
-          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
-        </select>
-        <select v-model="manualSort" class="fluent-select" @change="loadManualImages()">
-          <option value="created_at">最新</option>
-          <option value="view_count">最热门</option>
-        </select>
-        <select v-model="manualAlbum" class="fluent-select album-filter" @change="loadManualImages()">
-          <option :value="null">{{ albumPlaceholder }}</option>
-          <option v-for="a in albums" :key="a.id" :value="a.id">{{ a.name }}</option>
-        </select>
+        <TaotuSelect v-if="manualSource === 'user'" v-model="manualUserId" class="manual-select" :options="manualUserOptions" @change="reloadManualContext" />
+        <TaotuSelect v-model="manualSort" class="manual-select" :options="manualSortOptions" @change="loadManualImages()" />
+        <TaotuSelect v-model="manualAlbum" class="manual-select album-filter" :options="manualAlbumOptions" @change="loadManualImages()" />
         <span class="selected-count">已选 {{ manualSelected.length }} 张</span>
       </div>
 
@@ -513,6 +511,18 @@ const manualLoading = ref(false)
 const manualResult = ref('')
 const albums = ref([])
 const users = ref([])
+const manualUserOptions = computed(() => [
+  { label: '选择用户', value: null },
+  ...users.value.map(user => ({ label: user.username, value: user.id }))
+])
+const manualSortOptions = [
+  { label: '最新', value: 'created_at' },
+  { label: '最热门', value: 'view_count' }
+]
+const manualAlbumOptions = computed(() => [
+  { label: albumPlaceholder.value, value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id }))
+])
 
 const manualScopeParams = () => {
   const params = {}
@@ -722,8 +732,8 @@ const deleteSubgroup = async (group, sg) => {
 .source-toggle { display: flex; gap: 2px; background: var(--fluent-hover); border-radius: var(--radius-sm); padding: 2px; }
 .source-btn { padding: 5px 12px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; color: var(--fluent-text-secondary); }
 .source-btn.active { background: white; box-shadow: var(--shadow-1); font-weight: 500; color: var(--fluent-blue); }
+.manual-select { width: 150px; }
 .album-filter { min-width: 180px; }
-.fluent-select { padding: 6px 12px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 13px; background: white; }
 .selected-count { font-size: 13px; color: var(--fluent-text-secondary); margin-left: auto; }
 .image-grid { display: grid; grid-template-columns: repeat(auto-fill, 200px); gap: var(--space-md); align-items: start; }
 .image-card { width: 200px; cursor: pointer; border: 2px solid transparent; border-radius: var(--radius-md); padding: var(--space-sm); transition: all var(--transition-fast); box-sizing: border-box; }

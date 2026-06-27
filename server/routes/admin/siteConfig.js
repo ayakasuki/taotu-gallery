@@ -8,6 +8,8 @@ const configService = require('../../services/configService');
 const router = express.Router();
 
 const uploadsDir = path.resolve(__dirname, '../../../data/uploads');
+const tmpUploadDir = path.join(uploadsDir, 'tmp');
+if (!fs.existsSync(tmpUploadDir)) fs.mkdirSync(tmpUploadDir, { recursive: true });
 
 function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
@@ -27,6 +29,7 @@ router.get('/public', async (req, res, next) => {
       registration: siteConfig.registration || { enabled: false, emailVerification: false },
       background: siteConfig.background || { type: 'none', value: '' },
       icon: siteConfig.icon || null,
+      logo: siteConfig.logo || null,
       mediumSize: siteConfig.mediumSize || { width: 1500, height: 1500 }
     });
   } catch (err) { next(err); }
@@ -62,7 +65,7 @@ router.post('/test-smtp', authMiddleware, requireAdmin, async (req, res, next) =
 });
 
 // 上传网站图标
-router.post('/upload-icon', authMiddleware, requireAdmin, multer({ dest: path.join(uploadsDir, 'tmp') }).single('file'), async (req, res, next) => {
+router.post('/upload-icon', authMiddleware, requireAdmin, multer({ dest: tmpUploadDir }).single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: '请选择文件' });
     const ext = path.extname(req.file.originalname) || '.ico';
@@ -77,8 +80,24 @@ router.post('/upload-icon', authMiddleware, requireAdmin, multer({ dest: path.jo
   } catch (err) { next(err); }
 });
 
+// 上传网站 Logo
+router.post('/upload-logo', authMiddleware, requireAdmin, multer({ dest: tmpUploadDir }).single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: '请选择文件' });
+    const ext = path.extname(req.file.originalname) || '.png';
+    const destPath = path.join(uploadsDir, `site_logo${ext}`);
+    fs.renameSync(req.file.path, destPath);
+
+    const siteConfig = await configService.readSiteConfig();
+    siteConfig.logo = `/uploads/site_logo${ext}`;
+    await configService.writeSiteConfig(siteConfig);
+
+    res.json({ url: `/uploads/site_logo${ext}` });
+  } catch (err) { next(err); }
+});
+
 // 上传背景图
-router.post('/upload-bg', authMiddleware, requireAdmin, multer({ dest: path.join(uploadsDir, 'tmp') }).single('file'), async (req, res, next) => {
+router.post('/upload-bg', authMiddleware, requireAdmin, multer({ dest: tmpUploadDir }).single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: '请选择文件' });
     const ext = path.extname(req.file.originalname);

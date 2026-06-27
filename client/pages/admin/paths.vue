@@ -1,6 +1,13 @@
 <template>
   <div class="admin-paths">
-    <h1 class="page-title">自定义路径管理</h1>
+    <div class="admin-subhero">
+      <div>
+        <span class="hero-kicker">Storage Paths</span>
+        <h1 class="page-title">自定义路径管理</h1>
+        <p>维护数据库持久化的外部图库路径，支持扫描、相册和批量标签。</p>
+      </div>
+      <img src="/icons/admin/custom-paths-64x64.png" class="subhero-icon" alt="" />
+    </div>
 
     <!-- 本地图库 -->
     <div class="fluent-card">
@@ -61,19 +68,12 @@
 
         <div class="form-group">
           <label>添加到相册</label>
-          <select v-model="newPath.albumMode" class="fluent-input">
-            <option value="none">无（直接加入图库）</option>
-            <option value="existing">选择已有相册</option>
-            <option value="new">新建相册</option>
-          </select>
+          <TaotuSelect v-model="newPath.albumMode" :options="albumModeOptions" />
         </div>
 
         <div class="form-group" v-if="newPath.albumMode === 'existing'">
           <label>选择相册</label>
-          <select v-model="newPath.albumId" class="fluent-input">
-            <option :value="null">请选择</option>
-            <option v-for="a in albums" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
+          <TaotuSelect v-model="newPath.albumId" :options="albumOptions" />
         </div>
 
         <div class="form-group" v-if="newPath.albumMode === 'new'">
@@ -132,6 +132,15 @@ const newPath = reactive({
   newTagName: '',
   newTagNames: []
 })
+const albumModeOptions = [
+  { label: '无（直接加入图库）', value: 'none' },
+  { label: '选择已有相册', value: 'existing' },
+  { label: '新建相册', value: 'new' }
+]
+const albumOptions = computed(() => [
+  { label: '请选择', value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id }))
+])
 
 onMounted(async () => {
   await loadConfig()

@@ -2,10 +2,12 @@
   <div class="tag-group-selector">
     <div class="group-selectors">
       <div v-for="(slot, idx) in slots" :key="idx" class="group-slot">
-        <select v-model="slot.groupId" class="group-select" @change="onGroupChange(idx)">
-          <option :value="null">选择分组 {{ idx + 1 }}</option>
-          <option v-for="g in availableGroups(idx)" :key="g.id" :value="g.id">{{ g.name }}</option>
-        </select>
+        <TaotuSelect
+          v-model="slot.groupId"
+          class="group-select"
+          :options="groupOptions(idx)"
+          @change="onGroupChange(idx)"
+        />
       </div>
     </div>
 
@@ -112,6 +114,10 @@ const availableGroups = (currentIdx) => {
   const selectedIds = slots.value.map(s => s.groupId).filter(Boolean)
   return groups.value.filter(g => !selectedIds.includes(g.id) || slots.value[currentIdx].groupId === g.id)
 }
+const groupOptions = (currentIdx) => [
+  { label: `选择分组 ${currentIdx + 1}`, value: null },
+  ...availableGroups(currentIdx).map(group => ({ label: group.name, value: group.id }))
+]
 
 const getGroupName = (id) => groups.value.find(g => g.id === id)?.name || ''
 const getSubgroups = (id) => groups.value.find(g => g.id === id)?.subgroups || []
@@ -219,7 +225,7 @@ const onGroupChange = () => {}
 .tag-group-selector { display: flex; flex-direction: column; gap: var(--space-md); }
 .group-selectors { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
 .group-slot { flex: 1; min-width: 120px; }
-.group-select { width: 100%; padding: 6px 10px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 13px; background: white; }
+.group-select { width: 100%; }
 .group-panels { display: flex; gap: var(--space-md); flex-wrap: wrap; }
 .group-panel { flex: 1; min-width: 200px; max-width: 300px; border: 1px solid var(--fluent-border); border-radius: var(--radius-md); overflow: hidden; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--fluent-hover); font-size: 13px; font-weight: 600; }

@@ -1,6 +1,13 @@
 <template>
   <div class="admin-users">
-    <h1 class="page-title">用户管理</h1>
+    <div class="admin-subhero">
+      <div>
+        <span class="hero-kicker">Accounts</span>
+        <h1 class="page-title">用户管理</h1>
+        <p>管理用户角色、邮箱、存储配额和单图大小限制。</p>
+      </div>
+      <img src="/icons/admin/users-64x64.png" class="subhero-icon" alt="" />
+    </div>
 
     <div class="fluent-card">
       <div class="section-header">
@@ -45,10 +52,7 @@
         </div>
         <div class="form-group">
           <label>角色</label>
-          <select v-model="form.role" class="fluent-input">
-            <option value="user">普通用户</option>
-            <option value="admin">管理员</option>
-          </select>
+          <TaotuSelect v-model="form.role" :options="roleOptions" />
         </div>
         <div class="form-group">
           <label>存储上限 (MB，0=使用全局默认)</label>
@@ -75,6 +79,10 @@ const users = ref([])
 const showAdd = ref(false)
 const editingUser = ref(null)
 const form = reactive({ username: '', password: '', email: '', role: 'user', storageLimitMB: 0, maxFileSizeMB: 0 })
+const roleOptions = [
+  { label: '普通用户', value: 'user' },
+  { label: '管理员', value: 'admin' }
+]
 
 onMounted(() => loadUsers())
 
