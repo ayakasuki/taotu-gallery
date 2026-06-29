@@ -5,7 +5,7 @@
         <div class="brand-block">
           <NuxtLink to="/" class="brand-link">
             <img v-if="brandLogoUrl" :src="brandLogoUrl" class="taotu-icon brand-icon" alt="" />
-            <span v-else class="brand-fallback">桃</span>
+            <span v-else-if="showBrandFallback" class="brand-fallback">桃</span>
             <span>{{ siteName }}</span>
           </NuxtLink>
         </div>
@@ -18,19 +18,15 @@
         </nav>
 
         <div class="header-actions">
-          <button class="icon-btn" title="通知">
-            <img src="/icons/nav/notification-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
-          </button>
-
-          <template v-if="isLoggedIn">
-            <div class="user-pill">
-              <img v-if="userAvatarUrl" :src="userAvatarUrl" class="taotu-icon user-avatar" alt="" />
-              <span v-else class="user-avatar fallback">{{ userInitial }}</span>
-              <span>{{ currentUser?.username || '用户' }}</span>
-              <img src="/icons/nav/chevron-down-64x64.png" class="taotu-icon taotu-icon-16" alt="" />
-            </div>
-            <button class="logout-soft" @click="handleLogout">退出</button>
-          </template>
+          <NavNoticeUser
+            v-if="isLoggedIn"
+            :is-logged-in="isLoggedIn"
+            :user="currentUser"
+            :avatar-url="userAvatarUrl"
+            :fallback-ready="showUserFallback"
+            username-fallback="用户"
+            @logout="handleLogout"
+          />
 
           <NuxtLink v-else to="/login" class="taotu-btn taotu-btn-primary login-btn">
             <img src="/icons/nav/login-64x64.png" class="taotu-icon taotu-icon-18" alt="" />
@@ -62,6 +58,14 @@
 const api = useApi()
 const router = useRouter()
 const route = useRoute()
+const {
+  readSiteConfigCache,
+  writeSiteConfigCache,
+  readCurrentUserCache,
+  writeCurrentUserCache,
+  clearCurrentUserCache,
+  normalizeAssetUrl
+} = useUiCache()
 
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
@@ -69,9 +73,19 @@ const currentUser = ref(null)
 const siteName = ref('桃图智库')
 const recordNumber = ref('')
 const iconUrl = ref('')
-const logoUrl = ref('')
 const bgUrl = ref('')
 const bgBlur = ref(0)
+const bgOverlayTop = ref('rgba(255, 255, 255, 0.08)')
+const bgOverlayBottom = ref('rgba(255, 246, 250, 0.42)')
+const defaultSiteBg = '/site_bg.png'
+const hasCustomBackground = ref(false)
+const siteConfigReady = ref(false)
+const currentUserReady = ref(false)
+
+const isDefaultBackground = (background = {}) => {
+  const value = String(background?.value || '')
+  return !value || background?.type === 'default' || value === defaultSiteBg
+}
 
 const navItems = computed(() => [
   { to: '/', label: '图库', icon: '/icons/nav/gallery-64x64.png', visible: true },
@@ -83,23 +97,51 @@ const navItems = computed(() => [
 ])
 
 const visibleNavItems = computed(() => navItems.value.filter(item => item.visible))
-const brandLogoUrl = computed(() => logoUrl.value || iconUrl.value || '')
-const userAvatarUrl = computed(() => {
-  const avatar = currentUser.value?.avatar
-  if (!avatar) return ''
-  if (/^https?:\/\//i.test(avatar)) return avatar
-  return `${apiBase.value}${avatar}`
-})
-const userInitial = computed(() => (currentUser.value?.username || 'U').slice(0, 1).toUpperCase())
-const apiBase = computed(() => useRuntimeConfig().public.apiBase || '')
+const brandLogoUrl = computed(() => normalizeAssetUrl(iconUrl.value))
+const userAvatarUrl = computed(() => normalizeAssetUrl(currentUser.value?.avatar))
+const showBrandFallback = computed(() => siteConfigReady.value && !brandLogoUrl.value)
+const showUserFallback = computed(() => currentUserReady.value && !userAvatarUrl.value)
 
 const pageStyle = computed(() => {
-  if (!bgUrl.value) return {}
-  return {
-    '--site-bg-image': `linear-gradient(rgba(255,255,255,.0), rgba(255,255,255,0.4)), url("${bgUrl.value}")`,
-    '--site-bg-filter': bgBlur.value ? `blur(${bgBlur.value * 0.25}px)` : 'none'
+  const blurPx = Math.round(Math.min(100, Math.max(0, bgBlur.value)) * 0.4 * 10) / 10
+  const style = {
+    '--site-bg-filter': blurPx > 0 ? `blur(${blurPx}px)` : 'none'
   }
+  if (hasCustomBackground.value && bgUrl.value) {
+    style['--site-bg-image'] = `linear-gradient(to bottom, ${bgOverlayTop.value}, ${bgOverlayBottom.value}), url("${bgUrl.value}")`
+  }
+  return style
 })
+
+const applySiteConfig = (siteConfig = {}) => {
+  const background = siteConfig.background || {}
+  const useDefaultBackground = isDefaultBackground(background)
+  siteName.value = siteConfig.siteName || '桃图智库'
+  recordNumber.value = siteConfig.recordNumber || ''
+  iconUrl.value = siteConfig.icon || ''
+  hasCustomBackground.value = !useDefaultBackground
+  bgUrl.value = useDefaultBackground ? '' : normalizeAssetUrl(background.value)
+  bgBlur.value = Number(background.blur || 0)
+  bgOverlayTop.value = background.overlayTop || 'rgba(255, 255, 255, 0.08)'
+  bgOverlayBottom.value = background.overlayBottom || 'rgba(255, 246, 250, 0.42)'
+  siteConfigReady.value = true
+  if (import.meta.client && useDefaultBackground) {
+    document.documentElement.style.removeProperty('--site-bg-image')
+  }
+  if (import.meta.client) document.title = siteName.value
+  if (import.meta.client && siteConfig.icon) {
+    let link = document.querySelector("link[rel~='icon']")
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.href = normalizeAssetUrl(siteConfig.icon)
+  }
+}
+
+const initialSiteConfig = import.meta.client ? readSiteConfigCache() : null
+if (initialSiteConfig) applySiteConfig(initialSiteConfig)
 
 const checkAuth = () => {
   if (!import.meta.client) return
@@ -108,6 +150,8 @@ const checkAuth = () => {
     isLoggedIn.value = false
     isAdmin.value = false
     currentUser.value = null
+    currentUserReady.value = true
+    clearCurrentUserCache()
     return
   }
   try {
@@ -115,18 +159,24 @@ const checkAuth = () => {
     if (payload.exp * 1000 > Date.now()) {
       isLoggedIn.value = true
       isAdmin.value = payload.role === 'admin'
-      currentUser.value = payload
+      const cachedUser = readCurrentUserCache()
+      currentUser.value = cachedUser?.id === payload.id ? { ...payload, ...cachedUser } : payload
+      currentUserReady.value = !!cachedUser?.avatar
       loadCurrentUser()
     } else {
       localStorage.removeItem('jwt_token')
       isLoggedIn.value = false
       isAdmin.value = false
       currentUser.value = null
+      currentUserReady.value = true
+      clearCurrentUserCache()
     }
   } catch {
     isLoggedIn.value = false
     isAdmin.value = false
     currentUser.value = null
+    currentUserReady.value = true
+    clearCurrentUserCache()
   }
 }
 
@@ -134,34 +184,44 @@ const loadCurrentUser = async () => {
   try {
     currentUser.value = await api.get('/api/admin/auth/me')
     isAdmin.value = currentUser.value?.role === 'admin'
-  } catch {}
+    currentUserReady.value = true
+    writeCurrentUserCache(currentUser.value)
+  } catch {
+    currentUserReady.value = true
+  }
 }
 
 const loadSiteConfig = async () => {
   try {
     const siteConfig = await api.get('/api/admin/site-config/public')
-    siteName.value = siteConfig.siteName || '桃图智库'
-    recordNumber.value = siteConfig.recordNumber || ''
-    iconUrl.value = siteConfig.icon || ''
-    logoUrl.value = siteConfig.logo || ''
-    bgUrl.value = siteConfig.background?.value || ''
-    bgBlur.value = Number(siteConfig.background?.blur || 0)
-    document.title = siteName.value
-    if (siteConfig.icon) {
-      let link = document.querySelector("link[rel~='icon']")
-      if (!link) {
-        link = document.createElement('link')
-        link.rel = 'icon'
-        document.head.appendChild(link)
-      }
-      link.href = siteConfig.icon
-    }
+    applySiteConfig(siteConfig)
+    writeSiteConfigCache(siteConfig)
   } catch {}
 }
 
+const handleSiteConfigUpdated = (event) => {
+  if (event.detail) applySiteConfig(event.detail)
+}
+
+const handleCurrentUserUpdated = (event) => {
+  if (!event.detail) return
+  currentUser.value = { ...(currentUser.value || {}), ...event.detail }
+  isAdmin.value = currentUser.value?.role === 'admin'
+}
+
 onMounted(async () => {
+  const cachedSiteConfig = readSiteConfigCache()
+  if (cachedSiteConfig && !siteConfigReady.value) applySiteConfig(cachedSiteConfig)
+  window.addEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
+  window.addEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
   checkAuth()
   await loadSiteConfig()
+})
+
+onBeforeUnmount(() => {
+  if (!import.meta.client) return
+  window.removeEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
+  window.removeEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
 })
 
 watch(() => route.path, () => checkAuth())
@@ -171,6 +231,7 @@ const handleLogout = () => {
   isLoggedIn.value = false
   isAdmin.value = false
   currentUser.value = null
+  clearCurrentUserCache()
   router.push('/')
 }
 </script>
@@ -184,7 +245,7 @@ const handleLogout = () => {
   grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
   align-items: center;
   gap: 18px;
-  min-height: 64px;
+  min-height: 50px;
   padding: 0 28px;
   background: rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid rgba(238, 210, 226, 0.62);
@@ -193,6 +254,7 @@ const handleLogout = () => {
 }
 
 .brand-link {
+  margin: 10px 0 0 0;
   display: inline-flex;
   align-items: center;
   gap: 11px;
@@ -233,10 +295,11 @@ const handleLogout = () => {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-width: 74px;
+  min-width: 35px;
+  max-height: 35px;
   justify-content: center;
   padding: 10px 14px;
-  border-radius: var(--taotu-radius-sm);
+  border-radius: 100vh;
   color: var(--taotu-text);
   font-size: 14px;
   font-weight: 800;
@@ -245,8 +308,8 @@ const handleLogout = () => {
 
 .nav-link:hover,
 .nav-link.router-link-active {
-  background: rgba(255, 240, 246, 0.95);
-  color: var(--taotu-pink);
+  background: linear-gradient(160deg, rgb(255, 143, 163), rgb(245, 109, 134));
+  color: #ffffff;
 }
 
 .header-actions {
@@ -254,60 +317,6 @@ const handleLogout = () => {
   justify-content: flex-end;
   align-items: center;
   gap: 12px;
-}
-
-.icon-btn {
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.62);
-  cursor: pointer;
-}
-
-.user-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 10px 5px 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.64);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  color: var(--taotu-text);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.user-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.user-avatar.fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-purple));
-  color: white;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.logout-soft {
-  border: none;
-  background: transparent;
-  color: var(--taotu-text-muted);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.logout-soft:hover {
-  color: var(--taotu-danger);
 }
 
 .login-btn {

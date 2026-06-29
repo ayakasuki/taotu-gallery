@@ -7,11 +7,20 @@ const albumService = require('../../services/albumService');
 
 const router = express.Router();
 
-function optionalAuth(req, res, next) {
+async function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const jwt = require('jsonwebtoken');
-    try { req.user = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET); } catch {}
+    try {
+      const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
+      const user = await db('users')
+        .where({ id: decoded.id })
+        .select('id', 'username', 'role', 'is_disabled')
+        .first();
+      if (user && !user.is_disabled) {
+        req.user = { ...decoded, id: user.id, username: user.username, role: user.role };
+      }
+    } catch {}
   }
   next();
 }

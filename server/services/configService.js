@@ -8,6 +8,23 @@
 const db = require('../db');
 const logger = require('../config/logger');
 
+const DEFAULT_SITE_BACKGROUND = {
+  type: 'default',
+  value: '/site_bg.png',
+  blur: 0,
+  overlayTop: 'rgba(255, 255, 255, 0.08)',
+  overlayBottom: 'rgba(255, 246, 250, 0.42)'
+};
+
+function normalizeSiteBackground(background) {
+  const merged = { ...DEFAULT_SITE_BACKGROUND, ...(background || {}) };
+  if (!merged.value) {
+    merged.type = 'default';
+    merged.value = DEFAULT_SITE_BACKGROUND.value;
+  }
+  return merged;
+}
+
 function parseJsonField(value, fallback = []) {
   if (value === null || value === undefined || value === '') return fallback;
   if (Array.isArray(value) || typeof value === 'object') return value;
@@ -33,24 +50,33 @@ async function readSiteConfig() {
     }
     return {
       siteName: config.siteName || '桃图智库',
-      registration: config.registration || { enabled: false, emailVerification: false },
+      registration: config.registration || { enabled: false, emailVerification: false, maxUsers: 0 },
       display: config.display || { mode: 'grid' },
       upload: config.upload || { showUrlAfterUpload: true },
       tagDelayMinutes: config.tagDelayMinutes || 5,
       tagDiffThreshold: config.tagDiffThreshold || 0.5,
+      tagAutoSync: config.tagAutoSync !== false,
       publicDomain: config.publicDomain || '',
       recordNumber: config.recordNumber || '',
       smtp: config.smtp || { host: '', port: 465, secure: true, username: '', password: '', from: '' },
       https: config.https || { enabled: false },
-      background: config.background || { type: 'none', value: '' },
+      background: normalizeSiteBackground(config.background),
       mediumSize: config.mediumSize || { width: 1500, height: 1500 },
+      imageProcessing: config.imageProcessing || { quality: 85, formats: ['jpg', 'png', 'webp', 'gif'] },
       defaultQuota: config.defaultQuota || { storageLimit: 0, maxFileSize: 50 },
       icon: config.icon || null,
-      logo: config.logo || null
+      logo: config.logo || null,
+      webdav: config.webdav || {
+        configured: false,
+        url: '',
+        username: '',
+        password: '',
+        remotePath: '/gallery-sync/'
+      }
     };
   } catch (err) {
     logger.error(`读取网站配置失败: ${err.message}`);
-    return { siteName: '桃图智库', registration: { enabled: false } };
+    return { siteName: '桃图智库', registration: { enabled: false }, background: DEFAULT_SITE_BACKGROUND };
   }
 }
 

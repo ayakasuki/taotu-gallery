@@ -564,7 +564,11 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: minmax(420px, 520px) minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.api-layout > * {
+  min-width: 0;
 }
 
 .api-sidebar,
@@ -579,6 +583,8 @@ onBeforeUnmount(() => {
 .api-sidebar {
   position: sticky;
   top: 84px;
+  align-self: stretch;
+  height: 100%;
   padding: 18px 16px;
 }
 
@@ -986,6 +992,7 @@ onBeforeUnmount(() => {
 }
 
 .request-panel {
+  min-width: 0;
   padding: 18px;
 }
 
@@ -1059,18 +1066,22 @@ onBeforeUnmount(() => {
 
 .result-grid {
   display: grid;
-  grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);
+  grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
   gap: 12px;
   margin-top: 12px;
+  min-width: 0;
 }
 
 .left-results {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .mini-result-card {
+  min-width: 0;
   padding: 14px;
+  overflow: hidden;
 }
 
 .code-block,
@@ -1133,11 +1144,17 @@ onBeforeUnmount(() => {
 }
 
 .preview-head {
+  gap: 10px;
   justify-content: space-between;
   margin-bottom: 12px;
 }
 
+.preview-head h3 {
+  margin-bottom: 0;
+}
+
 .copy-outline {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1149,7 +1166,9 @@ onBeforeUnmount(() => {
 }
 
 .preview-tabs {
-  display: inline-flex;
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
   overflow: hidden;
   margin-bottom: 14px;
   border: 1px solid rgba(220, 225, 238, 0.82);
@@ -1158,8 +1177,10 @@ onBeforeUnmount(() => {
 }
 
 .preview-tabs button {
-  min-width: 92px;
+  min-width: 0;
+  flex: 1 1 92px;
   height: 36px;
+  padding: 0 12px;
   border: 0;
   border-right: 1px solid rgba(220, 225, 238, 0.82);
   background: transparent;
@@ -1167,6 +1188,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 13px;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .preview-tabs button:last-child {
@@ -1222,6 +1244,7 @@ onBeforeUnmount(() => {
 
 .single-preview {
   height: 430px;
+  max-width: 100%;
 }
 
 .single-preview img {
@@ -1233,6 +1256,7 @@ onBeforeUnmount(() => {
 }
 
 .preview-data pre {
+  width: 100%;
   min-height: 420px;
   max-height: 620px;
   overflow: auto;
@@ -1277,6 +1301,7 @@ onBeforeUnmount(() => {
 
   .api-sidebar {
     position: static;
+    height: auto;
   }
 }
 

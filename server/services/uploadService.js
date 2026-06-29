@@ -59,25 +59,65 @@ async function checkUserQuota(userId, fileSize) {
   return { ok: true };
 }
 
+function normalizeAllowedFormats(formats) {
+  const allowed = Array.isArray(formats) ? formats : ['jpg', 'png', 'webp', 'gif'];
+  return new Set(allowed.map(format => String(format || '').toLowerCase().replace('jpeg', 'jpg')));
+}
+
+function mimetypeToFormat(mimetype) {
+  const normalized = String(mimetype || '').toLowerCase();
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
+  if (normalized === 'image/png') return 'png';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/gif') return 'gif';
+  if (normalized === 'image/bmp') return 'bmp';
+  return '';
+}
+
 // 文件过滤器
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`不支持的文件类型: ${file.mimetype}`), false);
+const fileFilter = async (req, file, cb) => {
+  try {
+    const configService = require('./configService');
+    const siteConfig = await configService.readSiteConfig();
+    const allowedFormats = normalizeAllowedFormats(siteConfig.imageProcessing?.formats);
+    const currentFormat = mimetypeToFormat(file.mimetype);
+    if (allowedFormats.has(currentFormat)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`不支持的文件类型: ${file.mimetype}`), false);
+    }
+  } catch (err) {
+    cb(err, false);
   }
 };
 
-// Multer 实例
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: config.uploadLimits.fileSize,
-    files: config.uploadLimits.maxFiles
+function buildUpload(maxFileSizeBytes) {
+  const limits = { files: config.uploadLimits.maxFiles };
+  const maxFileSize = Number(maxFileSizeBytes);
+  if (Number.isFinite(maxFileSize) && maxFileSize > 0) {
+    limits.fileSize = maxFileSize;
+  } else if (maxFileSizeBytes === undefined) {
+    limits.fileSize = config.uploadLimits.fileSize;
   }
-});
+  return multer({ storage, fileFilter, limits });
+}
+
+// Multer 实例：保留旧入口，普通上传路由使用下面的动态入口读取站点配置。
+const upload = buildUpload();
+
+async function uploadFiles(req, res, next) {
+  try {
+    const configService = require('./configService');
+    const siteConfig = await configService.readSiteConfig();
+    const user = req.user?.id ? await db('users').where({ id: req.user.id }).first() : null;
+    const userLimit = Number(user?.max_file_size || 0);
+    const defaultLimit = Number(siteConfig.defaultQuota?.maxFileSize || 0) * 1024 * 1024;
+    const effectiveLimit = user?.role === 'admin' ? 0 : (userLimit > 0 ? userLimit : defaultLimit);
+    return buildUpload(effectiveLimit).array('files', config.uploadLimits.maxFiles)(req, res, next);
+  } catch (err) {
+    next(err);
+  }
+}
 
 // 处理上传后的图片
 async function processUploadedFile(file, albumId = null, tags = [], userId = null, isPublic = false, userTagIds = []) {
@@ -90,7 +130,12 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
   const configService = require('./configService');
   const siteConfig = await configService.readSiteConfig();
   const mediumOpts = siteConfig.mediumSize || {};
-  await imageProcessor.generateThumbnails(file.path, { mediumWidth: mediumOpts.width, mediumHeight: mediumOpts.height });
+  const processingOpts = siteConfig.imageProcessing || {};
+  await imageProcessor.generateThumbnails(file.path, {
+    mediumWidth: mediumOpts.width,
+    mediumHeight: mediumOpts.height,
+    quality: processingOpts.quality
+  });
 
   // 生成哈希路径（对外展示用，不暴露本地路径）
   const hashPath = imageService.generateHashPath(file.originalname);
@@ -233,6 +278,7 @@ async function getUploadLogs(page = 1, limit = 20) {
 
 module.exports = {
   upload,
+  uploadFiles,
   processUploadedFile,
   processUploadedFiles,
   getUploadLogs,

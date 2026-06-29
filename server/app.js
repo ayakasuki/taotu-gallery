@@ -104,6 +104,7 @@ app.use('/api/albums', apiLogger, require('./routes/api/albums'));
 app.use('/api/embed', apiLogger, require('./routes/api/embed'));
 app.use('/api/upload', require('./routes/api/upload'));
 app.use('/api/upload/url', require('./routes/api/urlUpload'));
+app.use('/api/announcements', require('./routes/api/announcements'));
 
 // 管理 API 路由
 app.use('/api/admin/auth', require('./routes/admin/auth'));
@@ -118,6 +119,7 @@ app.use('/api/admin/database', require('./routes/admin/database'));
 app.use('/api/admin/gallery', require('./routes/admin/gallery'));
 app.use('/api/admin/api', require('./routes/admin/api'));
 app.use('/api/admin/site-config', require('./routes/admin/siteConfig'));
+app.use('/api/admin/announcements', require('./routes/admin/announcements'));
 app.use('/api/admin/users', require('./routes/admin/users'));
 app.use('/api/admin/stats', require('./routes/admin/stats'));
 app.use('/api/admin/backup', require('./routes/admin/backup'));

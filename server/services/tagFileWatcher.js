@@ -21,6 +21,11 @@ async function startPeriodicScan() {
   if (periodicTimer) clearInterval(periodicTimer);
 
   const siteConfig = await configService.readSiteConfig();
+  if (siteConfig.tagAutoSync === false) {
+    periodicTimer = null;
+    logger.info('定时条件标签扫描未启用');
+    return;
+  }
   const intervalMinutes = (siteConfig.tagDelayMinutes || 5) * 60 * 1000;
 
   periodicTimer = setInterval(async () => {
@@ -31,9 +36,7 @@ async function startPeriodicScan() {
 
       logger.info('定时条件标签扫描开始...');
       const result = await conditionTagService.tagImagesByConditions(null, null, false);
-      if (result.tagged > 0) {
-        logger.info(`定时扫描完成: 新标记 ${result.tagged} 张图片`);
-      }
+      logger.info(`定时扫描完成: ${result.message || `新标记 ${result.tagged} 张图片`}`);
     } catch (err) {
       logger.error(`定时条件标签扫描失败: ${err.message}`);
     }
@@ -52,7 +55,7 @@ function stopWatching() {
 async function forceConditionTagNow() {
   logger.info('手动触发条件标签执行...');
   const result = await conditionTagService.tagImagesByConditions(null, null, true);
-  logger.info(`条件标签执行完成: 处理 ${result.processed} 张, 标记 ${result.tagged} 张`);
+  logger.info(`条件标签执行完成: ${result.message || `处理 ${result.processed} 张, 标记 ${result.tagged} 张`}`);
   return result;
 }
 

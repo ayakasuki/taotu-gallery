@@ -96,8 +96,8 @@ const setMode = (value) => {
 }
 
 .sort-btn:hover {
-  background: var(--taotu-pink-soft);
-  color: var(--taotu-pink);
+  background: rgba(255,255,255,0.66);
+  color: #000000;
 }
 
 .sort-btn.active {

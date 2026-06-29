@@ -2,11 +2,10 @@
 
 .taotu-page {
   min-height: 100vh;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.58)),
-    var(--site-bg-image, var(--taotu-bg-gradient));
+  background: var(--site-bg-image, linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 246, 250, 0.42)), url('/site_bg.png'));
   background-size: cover;
   background-attachment: fixed;
+  background-position: center;
 }
 
 .taotu-shell {
@@ -18,6 +17,8 @@
   overflow: visible;
   background: transparent;
   box-shadow: none;
+  backdrop-filter: var(--site-bg-filter, none);
+  -webkit-backdrop-filter: var(--site-bg-filter, none);
 }
 
 .taotu-card,
@@ -106,6 +107,149 @@
 .fluent-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+button[class*="btn"]:not(:disabled):not(.tab-btn):not(.tag-tab-btn):not(.private-row-btn):not(.clear-btn):hover,
+button[class*="action"]:not(:disabled):not(.text-action):not(.footer-action):not(.summary-edit):hover,
+button[class*="button"]:not(:disabled):hover,
+input[type="button"]:not(:disabled):hover,
+input[type="submit"]:not(:disabled):hover,
+input[type="reset"]:not(:disabled):hover,
+a.taotu-btn:hover,
+a.fluent-btn:hover,
+a[role="button"]:hover,
+.taotu-btn:not(:disabled):hover,
+.fluent-btn:not(:disabled):hover {
+  border-color: var(--taotu-button-hover-border) !important;
+  background: var(--taotu-button-hover-bg) !important;
+  color: var(--taotu-button-hover-color) !important;
+  -webkit-text-fill-color: var(--taotu-button-hover-color) !important;
+  box-shadow: inset 0 0 0 1px var(--taotu-button-hover-border) !important;
+}
+
+button[class*="btn"]:not(:disabled):not(.tab-btn):not(.tag-tab-btn):not(.private-row-btn):not(.clear-btn):hover :where(span, strong, small, i, em, b),
+button[class*="action"]:not(:disabled):not(.text-action):not(.footer-action):not(.summary-edit):hover :where(span, strong, small, i, em, b),
+button[class*="button"]:not(:disabled):hover :where(span, strong, small, i, em, b),
+input[type="button"]:not(:disabled):hover :where(span, strong, small, i, em, b),
+input[type="submit"]:not(:disabled):hover :where(span, strong, small, i, em, b),
+input[type="reset"]:not(:disabled):hover :where(span, strong, small, i, em, b),
+a.taotu-btn:hover :where(span, strong, small, i, em, b),
+a.fluent-btn:hover :where(span, strong, small, i, em, b),
+a[role="button"]:hover :where(span, strong, small, i, em, b),
+.taotu-btn:not(:disabled):hover :where(span, strong, small, i, em, b),
+.fluent-btn:not(:disabled):hover :where(span, strong, small, i, em, b) {
+  color: var(--taotu-button-hover-color) !important;
+  -webkit-text-fill-color: var(--taotu-button-hover-color) !important;
+}
+
+.private-row-btn:not(:disabled):hover,
+.text-action:not(:disabled):hover,
+.footer-action:not(:disabled):hover,
+.clear-btn:not(:disabled):hover,
+.summary-edit:not(:disabled):hover {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--taotu-button-hover-color) !important;
+  -webkit-text-fill-color: var(--taotu-button-hover-color) !important;
+  box-shadow: none !important;
+}
+
+button.active:not(:disabled):not(.tab-btn):not(.tag-tab-btn),
+button[aria-selected="true"]:not(:disabled),
+button[aria-pressed="true"]:not(:disabled),
+button[aria-current="page"]:not(:disabled),
+input[type="button"].active:not(:disabled),
+input[type="submit"].active:not(:disabled),
+input[type="reset"].active:not(:disabled),
+a.taotu-btn.active,
+a.fluent-btn.active,
+a[role="button"].active,
+a[role="button"][aria-selected="true"],
+a[role="button"][aria-pressed="true"],
+a[role="button"][aria-current="page"],
+.taotu-btn.active:not(:disabled),
+.fluent-btn.active:not(:disabled) {
+  border-color: transparent !important;
+  background: var(--taotu-button-active-bg) !important;
+  color: var(--taotu-button-active-color) !important;
+  -webkit-text-fill-color: var(--taotu-button-active-color) !important;
+  box-shadow: 0 12px 26px rgba(245, 109, 134, 0.22) !important;
+}
+
+button.active:not(:disabled):not(.tab-btn):not(.tag-tab-btn) :where(span, strong, small, i, em, b),
+button[aria-selected="true"]:not(:disabled) :where(span, strong, small, i, em, b),
+button[aria-pressed="true"]:not(:disabled) :where(span, strong, small, i, em, b),
+button[aria-current="page"]:not(:disabled) :where(span, strong, small, i, em, b),
+input[type="button"].active:not(:disabled) :where(span, strong, small, i, em, b),
+input[type="submit"].active:not(:disabled) :where(span, strong, small, i, em, b),
+input[type="reset"].active:not(:disabled) :where(span, strong, small, i, em, b),
+a.taotu-btn.active :where(span, strong, small, i, em, b),
+a.fluent-btn.active :where(span, strong, small, i, em, b),
+a[role="button"].active :where(span, strong, small, i, em, b),
+a[role="button"][aria-selected="true"] :where(span, strong, small, i, em, b),
+a[role="button"][aria-pressed="true"] :where(span, strong, small, i, em, b),
+a[role="button"][aria-current="page"] :where(span, strong, small, i, em, b),
+.taotu-btn.active:not(:disabled) :where(span, strong, small, i, em, b),
+.fluent-btn.active:not(:disabled) :where(span, strong, small, i, em, b) {
+  color: var(--taotu-button-active-color) !important;
+  -webkit-text-fill-color: var(--taotu-button-active-color) !important;
+}
+
+button[class*="btn"]:not(:disabled):not(.tab-btn):not(.tag-tab-btn):not(.private-row-btn):not(.clear-btn):active,
+button[class*="action"]:not(:disabled):not(.text-action):not(.footer-action):not(.summary-edit):active,
+button[class*="button"]:not(:disabled):active,
+input[type="button"]:not(:disabled):active,
+input[type="submit"]:not(:disabled):active,
+input[type="reset"]:not(:disabled):active,
+a.taotu-btn:active,
+a.fluent-btn:active,
+a[role="button"]:active,
+.taotu-btn:not(:disabled):active,
+.fluent-btn:not(:disabled):active {
+  background: var(--taotu-button-active-bg) !important;
+  color: var(--taotu-button-active-color) !important;
+  -webkit-text-fill-color: var(--taotu-button-active-color) !important;
+}
+
+button[class*="btn"]:not(:disabled):not(.tab-btn):not(.tag-tab-btn):not(.private-row-btn):not(.clear-btn):active :where(span, strong, small, i, em, b),
+button[class*="action"]:not(:disabled):not(.text-action):not(.footer-action):not(.summary-edit):active :where(span, strong, small, i, em, b),
+button[class*="button"]:not(:disabled):active :where(span, strong, small, i, em, b),
+input[type="button"]:not(:disabled):active :where(span, strong, small, i, em, b),
+input[type="submit"]:not(:disabled):active :where(span, strong, small, i, em, b),
+input[type="reset"]:not(:disabled):active :where(span, strong, small, i, em, b),
+a.taotu-btn:active :where(span, strong, small, i, em, b),
+a.fluent-btn:active :where(span, strong, small, i, em, b),
+a[role="button"]:active :where(span, strong, small, i, em, b),
+.taotu-btn:not(:disabled):active :where(span, strong, small, i, em, b),
+.fluent-btn:not(:disabled):active :where(span, strong, small, i, em, b) {
+  color: var(--taotu-button-active-color) !important;
+  -webkit-text-fill-color: var(--taotu-button-active-color) !important;
+}
+
+.tab-btn:hover,
+.tag-tab-btn:hover,
+.tree-title:hover,
+.tree-subtitle:hover,
+.manual-tree-title:hover,
+.chevron-icon:hover,
+.group-node-actions button:hover,
+.manual-tree-content button:hover,
+.tag-picker button:hover {
+  box-shadow: none !important;
+}
+
+.tab-btn:active,
+.tag-tab-btn:active,
+.tree-title:active,
+.tree-subtitle:active,
+.tree-caret:active,
+.tree-tag:active,
+.manual-tree-title:active,
+.chevron-icon:active,
+.group-node-actions button:active,
+.manual-tree-content button:active,
+.tag-picker button:active {
+  box-shadow: none !important;
 }
 
 .taotu-btn-primary,

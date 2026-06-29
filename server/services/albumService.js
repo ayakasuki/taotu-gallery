@@ -5,9 +5,35 @@
 const db = require('../db');
 const logger = require('../config/logger');
 
+function normalizeAlbumName(name) {
+  return String(name || '').trim();
+}
+
+function scopedAlbumQuery(userId, name) {
+  const query = db('albums').whereRaw('LOWER(name) = LOWER(?)', [name]);
+  return userId ? query.andWhere({ user_id: userId }) : query.whereNull('user_id');
+}
+
+function createAlbumError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+async function assertAlbumNameAvailable({ name, userId = null, excludeId = null }) {
+  const normalizedName = normalizeAlbumName(name);
+  if (!normalizedName) throw createAlbumError('相册名称不能为空');
+
+  const query = scopedAlbumQuery(userId, normalizedName);
+  if (excludeId) query.whereNot({ id: excludeId });
+  const existing = await query.first();
+  if (existing) throw createAlbumError(`相册名「${normalizedName}」已存在，请换一个名称`, 409);
+  return normalizedName;
+}
+
 // 获取相册列表
 async function getAlbums(options = {}) {
-  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, search = '' } = options;
+  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, userGalleryOnly = false, search = '' } = options;
   const offset = (page - 1) * limit;
 
   let query = db('albums');
@@ -15,6 +41,8 @@ async function getAlbums(options = {}) {
   // 权限过滤
   if (filterUserId) {
     query = query.where({ user_id: filterUserId });
+  } else if (userGalleryOnly) {
+    query = query.whereNotNull('user_id');
   } else if (publicOnly) {
     query = query.where({ is_public: true });
   } else if (ownOnly && userId) {
@@ -51,6 +79,8 @@ async function getAlbums(options = {}) {
   let countQuery = db('albums').count('* as count');
   if (filterUserId) {
     countQuery = countQuery.where({ user_id: filterUserId });
+  } else if (userGalleryOnly) {
+    countQuery = countQuery.whereNotNull('user_id');
   } else if (publicOnly) {
     countQuery = countQuery.where({ is_public: true });
   } else if (ownOnly && userId) {
@@ -148,21 +178,31 @@ async function getAlbumById(albumId) {
 
 // 创建相册
 async function createAlbum(data) {
+  const normalizedName = await assertAlbumNameAvailable({ name: data.name, userId: data.user_id || null });
   const [id] = await db('albums').insert({
-    name: data.name,
+    name: normalizedName,
     description: data.description || null,
     cover_image_id: data.cover_image_id || null,
     is_public: data.is_public || false,
     user_id: data.user_id || null
   });
-  logger.info(`相册已创建: ${data.name} (ID: ${id})`);
+  logger.info(`相册已创建: ${normalizedName} (ID: ${id})`);
   return getAlbumById(id);
 }
 
 // 更新相册
 async function updateAlbum(albumId, data) {
+  const album = await db('albums').where({ id: albumId }).first();
+  if (!album) throw createAlbumError('相册不存在', 404);
+
   const updates = { updated_at: db.fn.now() };
-  if (data.name !== undefined) updates.name = data.name;
+  if (data.name !== undefined) {
+    updates.name = await assertAlbumNameAvailable({
+      name: data.name,
+      userId: album.user_id || null,
+      excludeId: albumId
+    });
+  }
   if (data.description !== undefined) updates.description = data.description;
   if (data.cover_image_id !== undefined) updates.cover_image_id = data.cover_image_id;
   if (data.is_public !== undefined) updates.is_public = data.is_public;
@@ -229,6 +269,7 @@ module.exports = {
   getAlbumById,
   createAlbum,
   updateAlbum,
+  assertAlbumNameAvailable,
   deleteAlbum,
   getRandomAlbums
 };

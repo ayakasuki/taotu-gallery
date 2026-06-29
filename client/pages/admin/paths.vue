@@ -1,281 +1,734 @@
 <template>
-  <div class="admin-paths">
-    <div class="admin-subhero">
-      <div>
-        <span class="hero-kicker">Storage Paths</span>
-        <h1 class="page-title">自定义路径管理</h1>
-        <p>维护数据库持久化的外部图库路径，支持扫描、相册和批量标签。</p>
-      </div>
-      <img src="/icons/admin/custom-paths-64x64.png" class="subhero-icon" alt="" />
-    </div>
-
-    <!-- 本地图库 -->
-    <div class="fluent-card">
-      <h3>本地图库路径</h3>
-      <div class="path-item">
-        <span class="path-value">data/gallery/</span>
-        <span class="path-status">默认图库，不可删除</span>
-      </div>
-    </div>
-
-    <!-- 自定义路径 -->
-    <div class="fluent-card" style="margin-top: var(--space-lg);">
-      <div class="section-header">
-        <h3>自定义外部路径</h3>
-        <button class="fluent-btn fluent-btn-primary" @click="showAdd = true">添加路径</button>
-      </div>
-
-      <div v-if="customPaths.length > 0" class="path-list">
-        <div v-for="(cp, idx) in customPaths" :key="idx" class="path-item">
-          <div class="path-info">
-            <span class="path-value">{{ cp.path }}</span>
-            <span class="path-meta">
-              {{ cp.recursive ? '递归子目录' : '仅当前目录' }}
-              <span v-if="cp.albumName"> · 相册: {{ cp.albumName }}</span>
-              <span v-if="getPathTagNames(cp).length > 0"> · 标签: {{ getPathTagNames(cp).join(', ') }}</span>
-            </span>
+  <div class="admin-config-page">
+    <section class="config-main-card">
+      <div class="path-header">
+        <div>
+          <h1>路径配置</h1>
+          <p>管理图库数据源路径，支持本地目录和外部存储路径</p>
+        </div>
+        <div v-if="scanToast.show" class="scan-toast" :class="{ error: scanToast.error, warning: scanToast.warning }">
+          <img :src="scanToast.error ? '/icons/admin/status-error-placeholder.svg' : (scanToast.warning ? '/icons/status/warning-64x64.png' : '/icons/admin/status-ok-placeholder.svg')" alt="" />
+          <div>
+            <strong>{{ scanToast.title }}</strong>
+            <span>{{ scanToast.message }}</span>
           </div>
-          <div class="path-actions">
-            <button class="fluent-btn fluent-btn-secondary" @click="scanPath(cp)">扫描</button>
-            <button class="fluent-btn fluent-btn-secondary" @click="removePath(idx)">删除</button>
-          </div>
+          <button type="button" @click="scanToast.show = false">×</button>
         </div>
       </div>
-      <div v-else class="empty-msg">暂无自定义路径</div>
 
-      <div class="actions-bar">
-        <button class="fluent-btn fluent-btn-primary" @click="savePaths">保存配置</button>
-        <button class="fluent-btn fluent-btn-secondary" @click="scanAll" :disabled="scanning">
-          {{ scanning ? '扫描中...' : '扫描所有路径' }}
+      <div class="path-toolbar">
+        <button type="button" class="primary-action" @click="showAdd = true">
+          <img src="/icons/actions/add-64x64.png" alt="" />添加路径
+        </button>
+        <button type="button" class="plain-action" @click="savePaths">
+          <img src="/icons/actions/save-64x64.png" alt="" />保存配置
+        </button>
+        <button type="button" class="scan-action" :disabled="scanning" @click="scanAll">
+          <img src="/icons/actions/refresh-64x64.png" alt="" />{{ scanning ? '扫描中...' : '扫描所有路径' }}
         </button>
       </div>
-      <p v-if="msg" class="result-msg">{{ msg }}</p>
-    </div>
 
-    <!-- 添加路径弹窗 -->
-    <div v-if="showAdd" class="modal-overlay" @click.self="showAdd = false">
-      <div class="modal fluent-card">
-        <h3>添加自定义路径</h3>
-
-        <div class="form-group">
-          <label>路径（绝对路径或相对路径）</label>
-          <input v-model="newPath.path" class="fluent-input" placeholder="/path/to/images" />
+      <div class="path-table default-table">
+        <div class="path-head">
+          <span>路径</span><span>类型</span><span>递归</span><span>绑定相册</span><span>绑定标签</span><span>上次扫描</span><span>状态</span><span>操作</span>
         </div>
-
-        <div class="form-group">
-          <label><input type="checkbox" v-model="newPath.recursive" /> 递归扫描子目录</label>
-        </div>
-
-        <div class="form-group">
-          <label>添加到相册</label>
-          <TaotuSelect v-model="newPath.albumMode" :options="albumModeOptions" />
-        </div>
-
-        <div class="form-group" v-if="newPath.albumMode === 'existing'">
-          <label>选择相册</label>
-          <TaotuSelect v-model="newPath.albumId" :options="albumOptions" />
-        </div>
-
-        <div class="form-group" v-if="newPath.albumMode === 'new'">
-          <label>新相册名称</label>
-          <input v-model="newPath.albumName" class="fluent-input" placeholder="输入相册名" />
-        </div>
-
-        <div class="form-group">
-          <label>批量打标签（可选）</label>
-          <TagGroupSelector
-            :tags="{ combinable: allTags.filter(t => t.combinable !== false), nonCombinable: allTags.filter(t => t.combinable === false) }"
-            :selectedTagIds="newPath.tagIds"
-            @update:selectedTagIds="newPath.tagIds = $event"
-          />
-          <div class="tag-divider"></div>
-          <div class="new-tag-inline">
-            <input v-model="newPath.newTagName" class="fluent-input-sm" placeholder="新建标签名" @keyup.enter="addNewTagToPath" />
-            <button v-if="newPath.newTagName" class="fluent-btn fluent-btn-secondary btn-sm" @click="addNewTagToPath">添加</button>
+        <div class="path-row">
+          <div class="path-cell-main">
+            <strong>data/gallery/ <em>（默认）</em></strong>
+            <small>系统默认路径，不可删除</small>
           </div>
-          <div v-if="newPath.newTagNames.length > 0" class="new-tags-preview">
-            <span v-for="(name, idx) in newPath.newTagNames" :key="idx" class="new-tag-chip">
-              {{ name }} <button @click="newPath.newTagNames.splice(idx, 1)">×</button>
+          <span><i class="type-pill type-default">默认本地</i></span>
+          <span><i class="flag-pill yes">是</i></span>
+          <span>公共图库</span>
+          <span>无</span>
+          <span>{{ formatDateTime(defaultPath.last_scanned_at) }}</span>
+          <span><i class="status-pill" :class="defaultPath.status === 'warning' ? 'warn' : 'ok'">{{ defaultPath.statusText || '正常' }}</i></span>
+          <span class="default-action">-</span>
+        </div>
+      </div>
+
+      <h2 class="subsection-title">自定义路径</h2>
+      <div class="path-table custom-table">
+        <div v-if="customPaths.length" class="path-body">
+          <div v-for="(pathItem, index) in customPaths" :key="`${pathItem.path}-${index}`" class="path-row">
+            <div class="path-cell-main single">
+              <strong>{{ pathItem.path }}</strong>
+            </div>
+            <span><i class="type-pill" :class="`type-${pathType(pathItem)}`">{{ pathTypeLabel(pathItem) }}</i></span>
+            <span><i class="flag-pill" :class="pathItem.recursive !== false ? 'yes' : 'no'">{{ pathItem.recursive !== false ? '是' : '否' }}</i></span>
+            <span>{{ albumLabel(pathItem) }}</span>
+            <span class="tag-summary">
+              <i v-for="tag in getPathTagNames(pathItem).slice(0, 2)" :key="tag"># {{ tag }}</i>
+              <em v-if="getPathTagNames(pathItem).length > 2">...</em>
+              <b v-if="!getPathTagNames(pathItem).length">无</b>
+            </span>
+            <span>{{ formatDateTime(pathItem.last_scanned_at) }}</span>
+            <span><i class="status-pill" :class="pathItem.status === 'warning' ? 'warn' : 'ok'">{{ pathItem.statusText || (pathItem.status === 'warning' ? '警告' : '正常') }}</i></span>
+            <span class="row-actions">
+              <button type="button" class="scan-row-btn" :disabled="scanning" @click="scanPath(pathItem)">
+                <img src="/icons/actions/scan-64x64.png" alt="" />扫描
+              </button>
+              <button type="button" class="delete-row-btn" @click="removePath(index)">
+                <img src="/icons/actions/trash-64x64.png" alt="" />删除
+              </button>
             </span>
           </div>
         </div>
-
-        <div class="modal-actions">
-          <button class="fluent-btn fluent-btn-primary" @click="addPath">添加</button>
-          <button class="fluent-btn fluent-btn-secondary" @click="showAdd = false">取消</button>
-        </div>
+        <div v-else class="empty-custom-paths">暂无自定义路径，点击“添加路径”创建新的图库来源。</div>
       </div>
-    </div>
+
+      <p class="path-hint">提示：修改配置后请点击「保存配置」以持久化设置。系统将按顺序扫描所有启用路径。</p>
+
+      <section v-if="showAdd" class="add-path-panel">
+        <div class="add-title-row">
+          <h2><img src="/icons/actions/add-64x64.png" alt="" />添加路径</h2>
+          <button type="button" @click="showAdd = false">×</button>
+        </div>
+
+        <div class="add-grid">
+          <div class="add-inner-card">
+            <label class="field-line">
+              <span>路径 *</span>
+              <input v-model="newPath.path" placeholder="例如：/mnt/storage/illustration/ 或 smb://nas.local/桃图资源/" />
+            </label>
+
+            <div class="switch-row">
+              <div>
+                <strong>递归扫描</strong>
+                <small>扫描子目录中的所有图片</small>
+              </div>
+              <label class="pink-switch">
+                <input v-model="newPath.recursive" type="checkbox" />
+                <i></i>
+              </label>
+            </div>
+
+            <div class="album-mode-row">
+              <strong>添加到相册</strong>
+              <label><input v-model="newPath.albumMode" type="radio" value="none" />无</label>
+              <label><input v-model="newPath.albumMode" type="radio" value="existing" />已有相册</label>
+              <label><input v-model="newPath.albumMode" type="radio" value="new" />新建相册</label>
+            </div>
+
+            <select v-if="newPath.albumMode === 'existing'" v-model="newPath.albumId" class="soft-select">
+              <option :value="null">请选择已有相册</option>
+              <option v-for="album in albums" :key="album.id" :value="album.id">{{ album.name }}</option>
+            </select>
+            <input v-if="newPath.albumMode === 'new'" v-model="newPath.albumName" class="soft-input" placeholder="请输入新相册名称" />
+
+            <div class="switch-row">
+              <div>
+                <strong>批量打标签</strong>
+                <small>为扫描到的图片批量打标签</small>
+              </div>
+              <label class="pink-switch muted-switch">
+                <input v-model="newPath.enableTags" type="checkbox" />
+                <i></i>
+              </label>
+            </div>
+          </div>
+
+          <div class="add-inner-card tags-card">
+            <label class="field-line">
+              <span>标签分组</span>
+              <select v-model="selectedGroupId">
+                <option value="">请选择标签分组</option>
+                <option v-for="group in tagGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+              </select>
+            </label>
+
+            <div class="existing-tag-picker">
+              <span>已有标签</span>
+              <div>
+                <button
+                  v-for="tag in selectableGroupTags"
+                  :key="tag.id"
+                  type="button"
+                  :class="{ selected: isPathTagSelected(tag.id) }"
+                  @click="togglePathTag(tag.id)"
+                >
+                  {{ tag.display_name || tag.name }}
+                </button>
+                <em v-if="!selectedGroupId">请选择标签分组后选择已有标签</em>
+                <em v-else-if="!selectableGroupTags.length">该分组暂无可用标签</em>
+              </div>
+            </div>
+
+            <label class="field-line">
+              <span>新建标签名</span>
+              <input v-model="newPath.newTagName" :disabled="!newPath.enableTags" placeholder="输入后按回车创建新标签" @keyup.enter="addNewTagToPath" />
+            </label>
+
+            <div class="new-tag-preview">
+              <span>新标签预览</span>
+              <div>
+                <button v-for="tag in selectedPreviewTags" :key="tag" type="button" @click="removePreviewTag(tag)">
+                  {{ tag }} ×
+                </button>
+                <em v-if="!selectedPreviewTags.length">按回车添加标签</em>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="add-footer">
+          <button type="button" class="cancel-add" @click="showAdd = false">取消</button>
+          <button type="button" class="confirm-add" @click="addPath">添加</button>
+        </div>
+      </section>
+    </section>
+
+    <aside class="config-side">
+      <section class="side-card database-card">
+        <h2><img src="/icons/admin/database-64x64.png" alt="" />数据库状态（只读）</h2>
+        <div class="db-info-panel">
+          <div><span>数据库类型</span><b>{{ dbStatus.type || '-' }}</b></div>
+          <div><span>版本</span><b>{{ compactVersion(dbStatus.version) }}</b></div>
+          <div><span>总图片数</span><b>{{ formatNumber(dbStatus.stats?.totalImages) }}</b></div>
+          <div><span>相册数</span><b>{{ formatNumber(dbStatus.stats?.totalAlbums) }}</b></div>
+          <div><span>标签数</span><b>{{ formatNumber(dbStatus.stats?.totalTags) }}</b></div>
+          <div><span>用户数</span><b>{{ formatNumber(dbStatus.stats?.totalUsers) }}</b></div>
+          <p>只读模式：数据库 {{ dbStatus.database || dbStatus.path || '-' }}</p>
+        </div>
+      </section>
+
+      <section class="side-card display-card">
+        <h2><img src="/icons/admin/gallery-settings-64x64.png" alt="" />图库默认展示模式</h2>
+        <p>设置图库页面的默认展示样式</p>
+        <div class="display-choice-row">
+          <button type="button" :class="{ active: displayMode === 'grid' }" @click="setDisplayMode('grid')">
+            <img src="/icons/gallery/grid-64x64.png" alt="" /><span>网格</span>
+          </button>
+          <button type="button" :class="{ active: displayMode === 'waterfall' }" @click="setDisplayMode('waterfall')">
+            <img src="/icons/gallery/waterfall-64x64.png" alt="" /><span>瀑布流</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="side-card token-card">
+        <h2><img src="/icons/admin/api-settings-64x64.png" alt="" />API Token 管理</h2>
+        <p>用于第三方应用访问你的图库数据</p>
+        <div v-if="primaryToken" class="token-mini-card">
+          <div>
+            <strong>{{ primaryToken.label || '默认 Token' }}</strong>
+            <span>创建于 {{ formatDate(primaryToken.created_at) }}</span>
+            <code>{{ tokenVisible[primaryToken.id] ? primaryToken.token : maskToken(primaryToken.token) }}</code>
+          </div>
+          <button type="button" @click="toggleToken(primaryToken.id)">
+            <img :src="tokenVisible[primaryToken.id] ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+          </button>
+          <button type="button" @click="tokenMenuOpen = !tokenMenuOpen">
+            <span aria-hidden="true">···</span>
+          </button>
+          <div v-if="tokenMenuOpen" class="token-action-menu">
+            <button type="button" @click="copyToken(primaryToken.token)">复制 Token</button>
+            <button type="button" class="danger" @click="deleteToken(primaryToken.id)">删除 Token</button>
+          </div>
+        </div>
+        <div v-else class="token-empty">暂无 Token</div>
+        <div v-if="newToken" class="new-token-inline">
+          <button type="button" @click="newToken = ''">×</button>
+          <span>新 Token 仅显示一次</span>
+          <code>{{ newToken }}</code>
+        </div>
+        <button type="button" class="generate-token-btn" @click="createToken">＋ 生成新 Token</button>
+        <NuxtLink to="/api-docs" class="api-doc-link">查看使用文档 →</NuxtLink>
+      </section>
+    </aside>
   </div>
 </template>
 
 <script setup>
-import TagGroupSelector from '~/components/tags/TagGroupSelector.vue'
-
 definePageMeta({ layout: 'admin' })
 
 const api = useApi()
 const customPaths = ref([])
+const defaultPath = ref({ status: 'normal', statusText: '正常', last_scanned_at: null })
 const albums = ref([])
 const allTags = ref([])
+const rawTagGroups = ref([])
+const tokens = ref([])
+const newToken = ref('')
+const tokenVisible = reactive({})
+const dbStatus = ref({ stats: {} })
+const displayMode = ref('grid')
+const uploadConfig = ref({ showUrlAfterUpload: true })
 const showAdd = ref(false)
 const scanning = ref(false)
-const msg = ref('')
+const selectedGroupId = ref('')
+const tokenMenuOpen = ref(false)
+const scanToast = reactive({ show: false, error: false, warning: false, title: '', message: '' })
 
 const newPath = reactive({
   path: '',
   recursive: true,
-  albumMode: 'none',
+  albumMode: 'existing',
   albumId: null,
   albumName: '',
+  enableTags: false,
   tagIds: [],
   newTagName: '',
   newTagNames: []
 })
-const albumModeOptions = [
-  { label: '无（直接加入图库）', value: 'none' },
-  { label: '选择已有相册', value: 'existing' },
-  { label: '新建相册', value: 'new' }
-]
-const albumOptions = computed(() => [
-  { label: '请选择', value: null },
-  ...albums.value.map(album => ({ label: album.name, value: album.id }))
-])
 
-onMounted(async () => {
-  await loadConfig()
-  await loadAlbums()
-  await loadTags()
+const selectedPreviewTags = computed(() => {
+  const existing = allTags.value
+    .filter(tag => (newPath.tagIds || []).includes(tag.id))
+    .map(tag => tag.display_name || tag.name)
+  return [...existing, ...(newPath.newTagNames || [])]
 })
 
-const loadConfig = async () => {
-  try {
-    const data = await api.get('/api/admin/gallery/config')
-    customPaths.value = data.customPaths || []
-  } catch {}
+const primaryToken = computed(() => tokens.value[0] || null)
+
+const tagGroups = computed(() => buildPathTagGroups(rawTagGroups.value))
+
+const selectableGroupTags = computed(() => {
+  const group = tagGroups.value.find(item => String(item.id) === String(selectedGroupId.value))
+  if (!group) return []
+
+  const tagMap = new Map(allTags.value.map(tag => [mutualIdKey(tag.id), tag]))
+  const seen = new Set()
+  return getGroupAllTagIds(group)
+    .filter(isSupportedPathTagId)
+    .map(id => tagMap.get(mutualIdKey(id)))
+    .filter(Boolean)
+    .filter(tag => {
+      const key = mutualIdKey(tag.id)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+})
+
+watch(selectedGroupId, (groupId) => {
+  if (groupId) newPath.enableTags = true
+})
+
+onMounted(async () => {
+  await Promise.all([loadConfig(), loadAlbums(), loadTags(), loadTagGroups(), loadTokens(), loadDatabaseStatus()])
+})
+
+async function loadConfig() {
+  const data = await api.get('/api/admin/gallery/config')
+  defaultPath.value = data.defaultPath || defaultPath.value
+  customPaths.value = data.customPaths || []
+  displayMode.value = data.display?.mode === 'waterfall' ? 'waterfall' : 'grid'
+  uploadConfig.value = data.upload || { showUrlAfterUpload: true }
 }
 
-const loadAlbums = async () => {
-  try {
-    const data = await api.get('/api/admin/albums')
-    albums.value = data.albums || []
-  } catch {}
+async function loadAlbums() {
+  const data = await api.get('/api/admin/albums', { limit: 200 })
+  albums.value = data.albums || []
 }
 
-const loadTags = async () => {
-  try {
-    const data = await api.get('/api/admin/tags')
-    allTags.value = [...(data.combinable || []), ...(data.nonCombinable || [])]
-  } catch {}
+async function loadTags() {
+  const data = await api.get('/api/admin/tags')
+  allTags.value = [...(data.combinable || []), ...(data.nonCombinable || [])].filter(tag => !String(tag.id).startsWith('__'))
 }
 
-const getPathTagNames = (cp) => {
+async function loadTagGroups() {
+  const data = await api.get('/api/admin/tag-groups')
+  rawTagGroups.value = (data.groups || []).filter(group => !group.system)
+}
+
+async function loadTokens() {
+  const data = await api.get('/api/admin/api/tokens')
+  tokens.value = (data.tokens || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+}
+
+async function loadDatabaseStatus() {
+  dbStatus.value = await api.get('/api/admin/database/status')
+}
+
+function resetNewPath() {
+  newPath.path = ''
+  newPath.recursive = true
+  newPath.albumMode = 'existing'
+  newPath.albumId = null
+  newPath.albumName = ''
+  newPath.enableTags = false
+  newPath.tagIds = []
+  newPath.newTagName = ''
+  newPath.newTagNames = []
+  selectedGroupId.value = ''
+}
+
+function getPathTagNames(pathItem) {
   const selectedNames = allTags.value
-    .filter(t => (cp.tagIds || []).includes(t.id))
-    .map(t => t.display_name || t.name)
-  return selectedNames.concat(cp.newTagNames || cp.tagNames || [])
+    .filter(tag => (pathItem.tagIds || []).includes(tag.id))
+    .map(tag => tag.display_name || tag.name)
+  return selectedNames.concat(pathItem.newTagNames || pathItem.tagNames || [])
 }
 
-const addNewTagToPath = () => {
+function addNewTagToPath() {
+  if (!newPath.enableTags) newPath.enableTags = true
   const name = newPath.newTagName.trim()
   if (!name || newPath.newTagNames.includes(name)) return
+  const existing = allTags.value.find(tag => String(tag.name || '').toLowerCase() === name.toLowerCase())
+  if (existing) {
+    showToast('添加失败', `公共标签名「${name}」已存在，请从已有标签中选择`, true)
+    return
+  }
   newPath.newTagNames.push(name)
   newPath.newTagName = ''
 }
 
-const addPath = () => {
-  if (!newPath.path) return alert('请输入路径')
+function removePreviewTag(name) {
+  newPath.newTagNames = newPath.newTagNames.filter(item => item !== name)
+  const tag = allTags.value.find(item => (item.display_name || item.name) === name)
+  if (tag) newPath.tagIds = newPath.tagIds.filter(id => id !== tag.id)
+}
 
-  const entry = {
-    path: newPath.path,
+function isPathTagSelected(tagId) {
+  return (newPath.tagIds || []).some(id => mutualIdKey(id) === mutualIdKey(tagId))
+}
+
+function togglePathTag(tagId) {
+  if (!isSupportedPathTagId(tagId)) return
+  newPath.enableTags = true
+  const normalizedId = Number(tagId)
+  if (isPathTagSelected(normalizedId)) {
+    newPath.tagIds = newPath.tagIds.filter(id => mutualIdKey(id) !== mutualIdKey(normalizedId))
+  } else {
+    newPath.tagIds.push(normalizedId)
+  }
+}
+
+function buildPathTagGroups(groups = []) {
+  const normalizedGroups = groups.map(group => ({
+    ...group,
+    tagIds: (group.tagIds || []).filter(isSupportedPathTagId).map(Number),
+    subgroups: (group.subgroups || []).map(subgroup => ({
+      ...subgroup,
+      tagIds: (subgroup.tagIds || []).filter(isSupportedPathTagId).map(Number)
+    }))
+  }))
+
+  const groupedKeys = new Set()
+  for (const group of normalizedGroups) {
+    for (const id of getGroupAllTagIds(group)) groupedKeys.add(mutualIdKey(id))
+  }
+
+  const ungroupedIds = allTags.value
+    .filter(tag => isSupportedPathTagId(tag.id))
+    .filter(tag => !groupedKeys.has(mutualIdKey(tag.id)))
+    .map(tag => Number(tag.id))
+
+  if (ungroupedIds.length > 0) {
+    normalizedGroups.push({
+      id: '__ungrouped__',
+      name: '未分组',
+      tagIds: ungroupedIds,
+      subgroups: [],
+      isVirtual: true
+    })
+  }
+
+  return normalizedGroups
+}
+
+function getGroupAllTagIds(group) {
+  const ids = [...(group.tagIds || [])]
+  for (const subgroup of group.subgroups || []) ids.push(...(subgroup.tagIds || []))
+  return [...new Set(ids.map(id => Number(id)).filter(Number.isInteger))]
+}
+
+function isSupportedPathTagId(id) {
+  return typeof id === 'number' || /^\d+$/.test(String(id))
+}
+
+function mutualIdKey(id) {
+  return /^u\d+$/i.test(String(id)) ? `u${parseInt(String(id).slice(1))}` : String(Number(id))
+}
+
+function addPath() {
+  if (!newPath.path.trim()) {
+    showToast('添加失败', '请输入路径后再添加', true)
+    return
+  }
+  if (newPath.albumMode === 'new') {
+    const albumName = newPath.albumName.trim()
+    if (!albumName) {
+      showToast('添加失败', '请输入新相册名称', true)
+      return
+    }
+    const existingAlbum = albums.value.find(album => String(album.name || '').toLowerCase() === albumName.toLowerCase())
+    if (existingAlbum) {
+      showToast('添加失败', `相册名「${albumName}」已存在，请从已有相册中选择`, true)
+      return
+    }
+  }
+  customPaths.value.push({
+    path: newPath.path.trim(),
     recursive: newPath.recursive,
     albumMode: newPath.albumMode,
     albumId: newPath.albumMode === 'existing' ? newPath.albumId : null,
-    albumName: newPath.albumMode === 'new' ? newPath.albumName : '',
-    tagIds: [...newPath.tagIds],
-    newTagNames: [...newPath.newTagNames]
-  }
-
-  // 显示用
-  entry.tagNames = allTags.value
-    .filter(t => newPath.tagIds.includes(t.id))
-    .map(t => t.display_name || t.name)
-    .concat(newPath.newTagNames)
-
-  customPaths.value.push(entry)
-
-  // 重置
-  newPath.path = ''; newPath.recursive = true; newPath.albumMode = 'none'
-  newPath.albumId = null; newPath.albumName = ''
-  newPath.tagIds = []; newPath.newTagName = ''; newPath.newTagNames = []
+    albumName: newPath.albumMode === 'new' ? newPath.albumName.trim() : '',
+    tagIds: newPath.enableTags ? [...newPath.tagIds] : [],
+    newTagNames: newPath.enableTags ? [...newPath.newTagNames] : [],
+    status: 'normal',
+    statusText: '待保存',
+    last_scanned_at: null
+  })
+  resetNewPath()
   showAdd.value = false
 }
 
-const removePath = (idx) => {
-  customPaths.value.splice(idx, 1)
+function removePath(index) {
+  if (!confirm('确定删除此路径配置？')) return
+  customPaths.value.splice(index, 1)
 }
 
-const savePaths = async () => {
-  try {
-    await api.put('/api/admin/gallery/config', { customPaths: customPaths.value })
-    msg.value = '路径配置已保存'
-  } catch (err) { msg.value = '保存失败: ' + err.message }
+async function savePaths() {
+  await api.put('/api/admin/gallery/config', {
+    customPaths: customPaths.value.map(pathItem => ({
+      path: pathItem.path,
+      recursive: pathItem.recursive !== false,
+      albumMode: pathItem.albumMode || 'none',
+      albumId: pathItem.albumId || null,
+      albumName: pathItem.albumName || null,
+      tagIds: pathItem.tagIds || [],
+      newTagNames: pathItem.newTagNames || []
+    }))
+  })
+  showToast('保存完成', '路径配置已持久化保存')
+  await loadConfig()
 }
 
-const scanPath = async (cp) => {
-  scanning.value = true; msg.value = ''
+async function scanPath(pathItem) {
+  scanning.value = true
   try {
     const data = await api.post('/api/admin/gallery/scan-path', {
-      path: cp.path,
-      recursive: cp.recursive,
-      albumId: cp.albumId || null,
-      albumName: cp.albumName || null,
-      tagIds: cp.tagIds || [],
-      newTags: cp.newTagNames || []
+      path: pathItem.path,
+      recursive: pathItem.recursive !== false,
+      albumId: pathItem.albumId || null,
+      albumName: pathItem.albumName || null,
+      tagIds: pathItem.tagIds || [],
+      newTags: pathItem.newTagNames || []
     })
-    msg.value = `扫描完成: 新增 ${data.added}, 跳过 ${data.skipped}`
-  } catch (err) { msg.value = '扫描失败: ' + err.message }
-  finally { scanning.value = false }
+    showToast('扫描完成', `成功扫描 1 个路径，新增 ${data.added || 0} 张图片`)
+    await Promise.all([loadConfig(), loadDatabaseStatus()])
+  } catch (err) {
+    showToast('扫描失败', err?.data?.error || err.message || '路径扫描失败', true)
+  } finally {
+    scanning.value = false
+  }
 }
 
-const scanAll = async () => {
-  scanning.value = true; msg.value = ''
+async function scanAll() {
+  scanning.value = true
   try {
     const data = await api.post('/api/admin/gallery/scan')
-    msg.value = `扫描完成: 新增 ${data.added}, 跳过 ${data.skipped}`
-  } catch (err) { msg.value = '扫描失败: ' + err.message }
-  finally { scanning.value = false }
+    const skippedPaths = Array.isArray(data.errors) ? data.errors.length : 0
+    const suffix = skippedPaths ? `，${skippedPaths} 个路径跳过或失败` : ''
+    showToast(skippedPaths ? '扫描完成（有警告）' : '扫描完成', `成功扫描 ${data.pathCount || 0} 个路径，新增 ${data.added || 0} 张图片${suffix}`, false, Boolean(skippedPaths))
+    await Promise.all([loadConfig(), loadDatabaseStatus()])
+  } catch (err) {
+    showToast('扫描失败', err?.data?.error || err.message || '扫描所有路径失败', true)
+  } finally {
+    scanning.value = false
+  }
+}
+
+async function setDisplayMode(mode) {
+  displayMode.value = mode === 'waterfall' ? 'waterfall' : 'grid'
+  await api.put('/api/admin/gallery/config', {
+    display: { mode: displayMode.value },
+    upload: uploadConfig.value
+  })
+  showToast('保存完成', `图库默认展示模式已切换为${displayMode.value === 'grid' ? '网格' : '瀑布流'}`)
+}
+
+async function createToken() {
+  const label = tokens.value.length ? `Token ${tokens.value.length + 1}` : '默认 Token'
+  const data = await api.post('/api/admin/api/tokens', { label })
+  newToken.value = data.token
+  await loadTokens()
+}
+
+async function copyToken(token) {
+  try {
+    await navigator.clipboard.writeText(token)
+    tokenMenuOpen.value = false
+    showToast('复制完成', 'Token 已复制到剪贴板')
+  } catch {
+    showToast('复制失败', '浏览器阻止了剪贴板访问', true)
+  }
+}
+
+async function deleteToken(id) {
+  if (!confirm('确定删除此 Token？删除后使用它的第三方应用将无法继续访问图库数据。')) return
+  await api.del(`/api/admin/api/tokens/${id}`)
+  tokenMenuOpen.value = false
+  if (primaryToken.value?.id === id) newToken.value = ''
+  await loadTokens()
+  showToast('删除完成', 'Token 已删除')
+}
+
+function toggleToken(id) {
+  tokenVisible[id] = !tokenVisible[id]
+}
+
+function showToast(title, message, error = false, warning = false) {
+  scanToast.title = title
+  scanToast.message = message
+  scanToast.error = error
+  scanToast.warning = warning
+  scanToast.show = true
+}
+
+function pathType(pathItem) {
+  const value = String(pathItem.path || '').toLowerCase()
+  if (pathItem.type === 'default') return 'default'
+  if (pathItem.type) return pathItem.type
+  if (value.startsWith('smb://')) return 'smb'
+  if (value.startsWith('s3://')) return 's3'
+  if (value.startsWith('ftp://')) return 'ftp'
+  return 'local'
+}
+
+function pathTypeLabel(pathItem) {
+  const labels = { default: '默认本地', local: '本地', smb: 'SMB', s3: 'S3', ftp: 'FTP' }
+  return labels[pathType(pathItem)] || '本地'
+}
+
+function albumLabel(pathItem) {
+  if (pathItem.albumMode === 'new') return pathItem.albumName || '新建相册'
+  if (pathItem.albumId) return albums.value.find(album => album.id === pathItem.albumId)?.name || pathItem.albumName || '-'
+  return pathItem.albumName || '公共图库'
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat('zh-CN').format(Number(value || 0))
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleDateString('zh-CN')
+}
+
+function formatDateTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function compactVersion(value) {
+  return String(value || '-').replace(/-.+$/, '')
+}
+
+function maskToken(value) {
+  const token = String(value || '')
+  if (!token) return '-'
+  if (token.length <= 12) return token
+  return `${token.slice(0, 6)}_${'*'.repeat(Math.min(18, token.length - 10))}_${token.slice(-6)}`
 }
 </script>
 
 <style scoped>
-.page-title { font-size: 24px; font-weight: 600; margin-bottom: var(--space-xl); }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); }
-.path-list { display: flex; flex-direction: column; gap: var(--space-sm); }
-.path-item { display: flex; justify-content: space-between; align-items: center; padding: var(--space-md); border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); }
-.path-info { display: flex; flex-direction: column; gap: 4px; }
-.path-value { font-family: monospace; font-size: 14px; }
-.path-meta { font-size: 12px; color: var(--fluent-text-secondary); }
-.path-actions { display: flex; gap: var(--space-sm); }
-.empty-msg { text-align: center; padding: var(--space-xl); color: var(--fluent-text-secondary); }
-.actions-bar { display: flex; gap: var(--space-md); margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--fluent-border); }
-.result-msg { margin-top: var(--space-md); font-size: 13px; color: var(--fluent-blue); }
-.form-group { margin-bottom: var(--space-lg); }
-.form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: var(--space-sm); }
-.fluent-input { width: 100%; padding: 8px 12px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 14px; box-sizing: border-box; }
-.tag-selector-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-sm); }
-.tag-chip { padding: 3px 10px; border: 1px solid var(--fluent-border); border-radius: 14px; font-size: 12px; cursor: pointer; transition: all var(--transition-fast); }
-.tag-chip:hover { background: var(--fluent-hover); }
-.tag-chip.selected { background: var(--fluent-blue); color: white; border-color: var(--fluent-blue); }
-.new-tag-inline { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); }
-.fluent-input-sm { flex: 1; padding: 5px 10px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 13px; }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
-.tag-divider { border-top: 1px solid var(--fluent-border); margin: var(--space-md) 0; }
-.new-tags-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-sm); }
-.new-tag-chip { font-size: 12px; padding: 2px 8px; background: #e6f4ea; color: #107c10; border-radius: 12px; display: flex; align-items: center; gap: 4px; }
-.new-tag-chip button { background: none; border: none; cursor: pointer; font-size: 14px; color: #107c10; padding: 0; line-height: 1; }
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { width: 550px; padding: var(--space-xl); }
-.modal h3 { margin-bottom: var(--space-lg); }
-.modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-lg); }
+.admin-config-page { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; color: #59677f; }
+.admin-config-page::before { content: ''; position: fixed; inset: 64px 0 0 220px; z-index: -1; pointer-events: none; background: linear-gradient(135deg, rgba(255, 248, 252, 0.9), rgba(245, 251, 255, 0.94) 46%, rgba(252, 248, 255, 0.86)); }
+.config-main-card, .side-card, .add-inner-card { border: 1px solid rgba(226, 230, 241, 0.76); background: rgba(255,255,255,0.66); box-shadow: 0 18px 42px rgba(84, 94, 120, 0.08); backdrop-filter: blur(22px) saturate(1.08); }
+.config-main-card { position: relative; min-height: calc(100vh - 108px); padding: 20px; border-radius: 14px; }
+.path-header { display: flex; justify-content: space-between; gap: 18px; min-height: 66px; }
+.path-header h1 { margin: 0; color: #29364e; font-size: 24px; line-height: 1.1; font-weight: 900; }
+.path-header p { margin: 8px 0 0; color: #8b96aa; font-size: 13px; font-weight: 800; }
+.scan-toast { width: 300px; min-height: 58px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(73, 198, 151, 0.28); border-left: 3px solid #42c391; border-radius: 9px; background: rgba(247, 255, 251, 0.88); box-shadow: 0 16px 34px rgba(70, 140, 120, 0.1); }
+.scan-toast.error { border-color: rgba(236, 95, 120, 0.28); border-left-color: #ec6b86; background: rgba(255, 246, 249, 0.9); }
+.scan-toast.warning { border-color: rgba(232, 172, 75, 0.3); border-left-color: #e3a13f; background: rgba(255, 251, 240, 0.92); }
+.scan-toast img { width: 18px; height: 18px; } .scan-toast strong { display: block; color: #2fba86; font-size: 13px; font-weight: 900; } .scan-toast.error strong { color: #df6680; }
+.scan-toast.warning strong { color: #c88727; }
+.scan-toast span { color: #8b96aa; font-size: 12px; font-weight: 800; } .scan-toast button { border: none; background: transparent; color: #98a3b7; font-size: 18px; cursor: pointer; }
+.path-toolbar { display: flex; gap: 12px; margin: 12px 0 20px; }
+.path-toolbar button, .row-actions button, .add-footer button, .generate-token-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; padding: 0 14px; border-radius: 7px; font-size: 13px; font-weight: 900; white-space: nowrap; cursor: pointer; transition: transform 0.16s ease; }
+.path-toolbar button:active, .row-actions button:active, .add-footer button:active, .generate-token-btn:active { transform: scale(0.985); }
+.path-toolbar img, .row-actions img { width: 15px; height: 15px; object-fit: contain; }
+.primary-action, .confirm-add { border: none; background: linear-gradient(90deg, #f45f93, #ff78a9); color: white; box-shadow: 0 10px 22px rgba(244, 95, 147, 0.2); }
+.plain-action, .cancel-add { border: 1px solid rgba(218, 224, 238, 0.92); background: rgba(255,255,255,0.72); color: #66728a; }
+.scan-action { border: 1px solid rgba(153, 123, 244, 0.36); background: rgba(248, 244, 255, 0.82); color: #8d72e8; }
+.path-table { border: 1px solid rgba(226, 230, 241, 0.82); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.42); }
+.path-head, .path-row { display: grid; grid-template-columns: minmax(180px, 1.45fr) 82px 62px 110px minmax(116px, 0.95fr) 146px 70px 112px; align-items: center; gap: 10px; padding: 0 13px; }
+.path-head { min-height: 38px; color: #7d879c; font-size: 12px; font-weight: 900; background: rgba(255,255,255,0.5); border-bottom: 1px solid rgba(226, 230, 241, 0.76); }
+.path-row { min-height: 58px; border-bottom: 1px solid rgba(226, 230, 241, 0.66); color: #5f6a82; font-size: 12px; font-weight: 800; }
+.path-row:last-child { border-bottom: none; }
+.path-cell-main { display: grid; gap: 5px; min-width: 0; }
+.path-cell-main strong { overflow: hidden; color: #455169; font-size: 13px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.path-cell-main.single strong { font-weight: 800; }
+.path-cell-main em { color: #ff6f9d; font-style: normal; }
+.path-cell-main small { color: #9ba5b8; font-size: 12px; font-weight: 800; }
+.subsection-title { margin: 18px 0 9px; color: #59657c; font-size: 13px; font-weight: 900; }
+.type-pill, .flag-pill, .status-pill, .tag-summary i { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-style: normal; font-weight: 900; white-space: nowrap; }
+.type-default { background: #ffe8f1; color: #ff6f9d; } .type-local { background: #f1eaff; color: #8c72e8; } .type-smb { background: #e7f2ff; color: #4d94df; } .type-s3 { background: #fff0e9; color: #d77b54; } .type-ftp { background: #e8f4ff; color: #4c91d9; }
+.flag-pill.yes { background: #e7f8ee; color: #44b875; } .flag-pill.no { background: #ffecef; color: #e87482; }
+.status-pill.ok { background: #e7f8ee; color: #44b875; } .status-pill.warn { background: #fff3dc; color: #c78a2a; }
+.tag-summary { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.tag-summary i { background: #f2f4f8; color: #8b96aa; } .tag-summary em, .tag-summary b { color: #9aa4b7; font-style: normal; font-weight: 900; }
+.row-actions { display: flex; justify-content: flex-end; gap: 7px; min-width: 108px; }
+.row-actions button { flex: 0 0 52px; width: 52px; min-height: 26px; padding: 0 5px; gap: 4px; border-radius: 6px; font-size: 12px; line-height: 1; }
+.row-actions img { width: 13px; height: 13px; }
+.scan-row-btn { border: 1px solid rgba(153, 123, 244, 0.28); background: rgba(247, 243, 255, 0.82); color: #8c72e8; }
+.delete-row-btn { border: 1px solid rgba(255, 111, 157, 0.26); background: rgba(255, 241, 246, 0.86); color: #ff6f9d; }
+.default-action { justify-self: center; color: #8792a8; font-size: 17px; }
+.empty-custom-paths { padding: 32px 14px; text-align: center; color: #98a3b7; font-size: 13px; font-weight: 900; }
+.path-hint { margin: 13px 0 0; color: #9aa4b7; font-size: 12px; font-weight: 800; }
+.add-path-panel { margin: 16px -8px -8px; padding: 16px; border: 1px solid rgba(255, 111, 157, 0.34); border-radius: 14px; background: linear-gradient(135deg, rgba(255, 246, 250, 0.9), rgba(255,255,255,0.72)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); }
+.add-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.add-title-row h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: #3c4962; font-size: 16px; font-weight: 900; } .add-title-row img { width: 18px; height: 18px; } .add-title-row button { border: none; background: transparent; color: #7f899d; font-size: 22px; cursor: pointer; }
+.add-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; }
+.add-inner-card { min-height: 174px; padding: 13px; border-radius: 9px; }
+.field-line { display: grid; gap: 6px; margin-bottom: 12px; color: #5f6c84; font-size: 12px; font-weight: 900; }
+.field-line input, .field-line select, .soft-select, .soft-input { width: 100%; min-height: 34px; padding: 0 11px; border: 1px solid rgba(218, 224, 238, 0.9); border-radius: 7px; background: rgba(255,255,255,0.66); color: #63708a; outline: none; box-sizing: border-box; }
+.field-line input::placeholder, .soft-input::placeholder { color: #bdc5d3; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 14px; }
+.switch-row strong, .album-mode-row strong { color: #61708a; font-size: 12px; font-weight: 900; }
+.switch-row small { display: block; margin-top: 4px; color: #a0aabc; font-size: 11px; font-weight: 800; }
+.pink-switch input { display: none; } .pink-switch i { position: relative; display: block; width: 34px; height: 18px; border-radius: 999px; background: #dfe5ee; }
+.pink-switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(80,90,110,0.22); transition: transform 0.18s ease; }
+.pink-switch input:checked + i { background: #ff6f9d; } .pink-switch input:checked + i::after { transform: translateX(16px); }
+.album-mode-row { display: grid; grid-template-columns: 120px repeat(3, max-content); gap: 14px; align-items: center; margin-bottom: 10px; color: #68758d; font-size: 12px; font-weight: 900; }
+.album-mode-row input { width: 14px; height: 14px; margin-right: 6px; accent-color: #ff6f9d; }
+.existing-tag-picker, .new-tag-preview { display: grid; gap: 7px; margin-bottom: 12px; color: #5f6c84; font-size: 12px; font-weight: 900; }
+.existing-tag-picker div, .new-tag-preview div { min-height: 48px; display: flex; align-content: flex-start; flex-wrap: wrap; gap: 7px; padding: 9px; border: 1px solid rgba(218, 224, 238, 0.9); border-radius: 8px; background: rgba(255,255,255,0.58); }
+.existing-tag-picker button, .new-tag-preview button { min-height: 24px; padding: 0 9px; border: 1px solid rgba(255, 111, 157, 0.38); border-radius: 6px; background: rgba(255, 255, 255, 0.72); color: #7f899d; font-size: 12px; font-weight: 900; white-space: nowrap; cursor: pointer; }
+.existing-tag-picker button.selected, .new-tag-preview button { border-color: rgba(255, 111, 157, 0.56); background: rgba(255, 246, 250, 0.82); color: #ff6f9d; }
+.existing-tag-picker em, .new-tag-preview em { color: #b0b9c7; font-style: normal; }
+.add-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 14px; }
+.add-footer button { min-width: 88px; min-height: 36px; }
+.config-side { display: grid; gap: 16px; }
+.side-card { padding: 16px; border-radius: 13px; }
+.side-card h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; color: #3f4c64; font-size: 15px; font-weight: 900; }
+.side-card h2 img { width: 20px; height: 20px; object-fit: contain; }
+.side-card > p { margin: -3px 0 14px; color: #8f9aaf; font-size: 12px; font-weight: 800; }
+.db-info-panel { padding: 12px; border: 1px solid rgba(226, 230, 241, 0.74); border-radius: 9px; background: rgba(255,255,255,0.52); }
+.db-info-panel div { display: flex; justify-content: space-between; gap: 12px; min-height: 28px; color: #8792a7; font-size: 12px; font-weight: 900; }
+.db-info-panel b { color: #5c6880; font-weight: 900; text-align: right; }
+.db-info-panel p { margin: 8px 0 0; padding-top: 12px; border-top: 1px solid rgba(226, 230, 241, 0.8); color: #9aa4b7; font-size: 11px; font-weight: 900; line-height: 1.6; }
+.display-choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.display-choice-row button { min-height: 76px; display: grid; place-items: center; gap: 6px; border: 1px solid rgba(226, 230, 241, 0.84); border-radius: 8px; background: rgba(255,255,255,0.62); color: #6f7a90; font-size: 13px; font-weight: 900; cursor: pointer; }
+.display-choice-row button.active { border-color: rgba(255, 111, 157, 0.7); background: rgba(255, 241, 247, 0.82); color: #ff6f9d; }
+.display-choice-row img { width: 25px; height: 25px; object-fit: contain; }
+.token-mini-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 28px 28px; gap: 7px; align-items: center; padding: 11px; border: 1px solid rgba(226, 230, 241, 0.74); border-radius: 8px; background: rgba(255,255,255,0.58); }
+.token-mini-card strong, .token-mini-card span, .token-mini-card code { display: block; }
+.token-mini-card strong { color: #5c6880; font-size: 12px; font-weight: 900; }
+.token-mini-card span { margin: 4px 0 5px; color: #9aa4b7; font-size: 11px; font-weight: 800; }
+.token-mini-card code { overflow: hidden; color: #63708a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.token-mini-card button { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid rgba(226, 230, 241, 0.84); border-radius: 6px; background: rgba(255,255,255,0.68); cursor: pointer; }
+.token-mini-card button span { color: #8a94a8; font-size: 16px; line-height: 1; letter-spacing: 0; transform: translateY(-2px); }
+.token-mini-card button img { width: 14px; height: 14px; object-fit: contain; }
+.token-action-menu { position: absolute; top: 42px; right: 8px; z-index: 5; min-width: 112px; padding: 6px; border: 1px solid rgba(226, 230, 241, 0.9); border-radius: 8px; background: rgba(255,255,255,0.96); box-shadow: 0 16px 32px rgba(72, 84, 112, 0.14); }
+.token-action-menu button { width: 100%; height: 28px; justify-content: flex-start; padding: 0 8px; border: none; background: transparent; color: #657188; font-size: 12px; font-weight: 900; }
+.token-action-menu button:hover { background: rgba(247, 243, 255, 0.9); color: #8b72e8; }
+.token-action-menu button.danger:hover { background: rgba(255, 241, 246, 0.92); color: #ff6f9d; }
+.token-empty { padding: 16px; border: 1px solid rgba(226, 230, 241, 0.74); border-radius: 8px; color: #9aa4b7; text-align: center; font-size: 12px; font-weight: 900; }
+.new-token-inline { position: relative; display: grid; gap: 5px; margin-top: 10px; padding: 10px 28px 10px 10px; border: 1px solid rgba(245, 177, 77, 0.28); border-radius: 8px; background: rgba(255, 250, 235, 0.84); color: #a86f1d; font-size: 12px; font-weight: 900; }
+.new-token-inline button { position: absolute; top: 6px; right: 8px; border: none; background: transparent; color: #b78332; cursor: pointer; }
+.new-token-inline code { overflow-wrap: anywhere; color: #7d5a22; font-size: 11px; }
+.generate-token-btn { width: 100%; margin-top: 14px; border: 1px solid rgba(153, 123, 244, 0.35); background: rgba(248, 244, 255, 0.78); color: #8b72e8; }
+.api-doc-link { display: inline-flex; margin-top: 13px; color: #8b72e8; font-size: 12px; font-weight: 900; text-decoration: none; }
+button:disabled { opacity: 0.66; cursor: default; }
+@media (max-width: 1380px) { .admin-config-page { grid-template-columns: minmax(0, 1fr) 280px; } .path-head, .path-row { grid-template-columns: minmax(170px, 1.3fr) 76px 56px 98px minmax(96px, 0.8fr) 126px 64px 108px; gap: 8px; padding: 0 10px; } }
+@media (max-width: 1180px) { .admin-config-page { grid-template-columns: 1fr; } .config-side { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>

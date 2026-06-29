@@ -4,7 +4,7 @@
       <div class="register-card fluent-card">
       <div class="register-brand">
         <img v-if="brandLogo" :src="brandLogo" class="brand-logo" alt="" />
-        <span v-else class="brand-logo fallback">桃</span>
+        <span v-else-if="brandReady" class="brand-logo fallback">桃</span>
         <div>
           <h1 class="title">创建账号</h1>
           <p class="subtitle">加入{{ siteName }}，发现更多美好</p>
@@ -63,9 +63,6 @@
           <p class="form-hint">发送邮箱验证码会消耗当前人机验证码，发送后请填写新的图片验证码再注册。</p>
         </div>
 
-        <p v-if="error" class="error-msg">{{ error }}</p>
-        <p v-if="success" class="success-msg">{{ success }}</p>
-
         <button class="fluent-btn fluent-btn-primary register-btn" @click="handleRegister" :disabled="loading">
           {{ loading ? '注册中...' : '注册' }}
         </button>
@@ -109,7 +106,8 @@ definePageMeta({ layout: false })
 
 const api = useApi()
 const router = useRouter()
-const config = useRuntimeConfig()
+const { showAdminToast } = useAdminToast()
+const { readSiteConfigCache, writeSiteConfigCache, writeCurrentUserCache, normalizeAssetUrl } = useUiCache()
 
 const form = reactive({
   username: '',
@@ -130,22 +128,33 @@ const registrationOpen = ref(false)
 const emailVerification = ref(false)
 const siteName = ref('桃图智库')
 const brandLogo = ref('')
+const brandReady = ref(false)
 const captchaSvg = ref('')
 const countdown = ref(0)
 let countdownTimer = null
 
 onMounted(async () => {
+  const cachedSiteConfig = readSiteConfigCache()
+  if (cachedSiteConfig) {
+    siteName.value = cachedSiteConfig.siteName || '桃图智库'
+    brandLogo.value = normalizeAssetUrl(cachedSiteConfig.icon)
+    brandReady.value = true
+    registrationOpen.value = !!cachedSiteConfig.registration?.enabled
+    emailVerification.value = !!cachedSiteConfig.registration?.emailVerification
+  }
   try {
     const siteConfig = await api.get('/api/admin/site-config/public')
     siteName.value = siteConfig.siteName || '桃图智库'
-    const logo = siteConfig.logo || siteConfig.icon
-    brandLogo.value = logo ? `${config.public.apiBase || ''}${logo}` : ''
+    brandLogo.value = normalizeAssetUrl(siteConfig.icon)
+    brandReady.value = true
     registrationOpen.value = !!siteConfig.registration?.enabled
     emailVerification.value = !!siteConfig.registration?.emailVerification
+    writeSiteConfigCache(siteConfig)
     if (registrationOpen.value) await loadCaptcha()
   } catch (err) {
-    error.value = err.data?.error || '读取注册设置失败'
+    setError(err.data?.error || '读取注册设置失败')
     registrationOpen.value = false
+    brandReady.value = true
   } finally {
     configLoading.value = false
   }
@@ -156,6 +165,14 @@ onBeforeUnmount(() => {
 })
 
 const getErrorMessage = (err, fallback) => err?.data?.error || err?.message || fallback
+const setError = (message) => {
+  error.value = message
+  showAdminToast(message, 'error')
+}
+const setSuccess = (message) => {
+  success.value = message
+  showAdminToast(message, 'success')
+}
 
 const loadCaptcha = async () => {
   captchaLoading.value = true
@@ -165,7 +182,7 @@ const loadCaptcha = async () => {
     form.captchaCode = ''
     captchaSvg.value = data.svg
   } catch (err) {
-    error.value = getErrorMessage(err, '验证码加载失败')
+    setError(getErrorMessage(err, '验证码加载失败'))
     captchaSvg.value = ''
   } finally {
     captchaLoading.value = false
@@ -188,8 +205,8 @@ const startCountdown = (seconds = 120) => {
 const sendEmailCode = async () => {
   error.value = ''
   success.value = ''
-  if (!form.email) { error.value = '请先填写邮箱'; return }
-  if (!form.captchaCode) { error.value = '请先填写人机验证码'; return }
+  if (!form.email) { setError('请先填写邮箱'); return }
+  if (!form.captchaCode) { setError('请先填写人机验证码'); return }
 
   sendingCode.value = true
   try {
@@ -198,11 +215,11 @@ const sendEmailCode = async () => {
       captchaId: form.captchaId,
       captchaCode: form.captchaCode
     })
-    success.value = data.message || '验证码已发送'
+    setSuccess(data.message || '验证码已发送')
     startCountdown(data.ttl || 120)
     await loadCaptcha()
   } catch (err) {
-    error.value = getErrorMessage(err, '验证码发送失败')
+    setError(getErrorMessage(err, '验证码发送失败'))
     await loadCaptcha()
   } finally {
     sendingCode.value = false
@@ -212,13 +229,13 @@ const sendEmailCode = async () => {
 const handleRegister = async () => {
   error.value = ''
   success.value = ''
-  if (!form.username || !form.password) { error.value = '请填写用户名和密码'; return }
-  if (form.password !== form.confirmPassword) { error.value = '两次密码不一致'; return }
-  if (form.password.length < 6) { error.value = '密码至少6位'; return }
-  if (!form.captchaCode) { error.value = '请填写人机验证码'; return }
+  if (!form.username || !form.password) { setError('请填写用户名和密码'); return }
+  if (form.password !== form.confirmPassword) { setError('两次密码不一致'); return }
+  if (form.password.length < 6) { setError('密码至少6位'); return }
+  if (!form.captchaCode) { setError('请填写人机验证码'); return }
   if (emailVerification.value) {
-    if (!form.email) { error.value = '请填写邮箱'; return }
-    if (!form.emailCode) { error.value = '请填写邮箱验证码'; return }
+    if (!form.email) { setError('请填写邮箱'); return }
+    if (!form.emailCode) { setError('请填写邮箱验证码'); return }
   }
 
   loading.value = true
@@ -233,10 +250,11 @@ const handleRegister = async () => {
     })
     if (data.token) {
       localStorage.setItem('jwt_token', data.token)
+      writeCurrentUserCache(data.user)
       router.push('/')
     }
   } catch (err) {
-    error.value = getErrorMessage(err, '注册失败')
+    setError(getErrorMessage(err, '注册失败'))
     await loadCaptcha()
   } finally {
     loading.value = false
@@ -297,8 +315,6 @@ const handleRegister = async () => {
 .code-row .fluent-input { flex: 1; min-width: 0; }
 .code-row .fluent-btn { white-space: nowrap; min-width: 104px; }
 .form-hint { font-size: 12px; color: var(--fluent-text-secondary); margin-top: var(--space-xs); }
-.error-msg { color: var(--taotu-danger); font-size: 13px; margin-bottom: var(--space-md); }
-.success-msg { color: var(--taotu-success); font-size: 13px; margin-bottom: var(--space-md); }
 .register-btn { width: 100%; padding: 10px; font-size: 15px; }
 .closed-msg { text-align: center; padding: var(--space-xl) 0; }
 .closed-msg p { margin-bottom: var(--space-lg); color: var(--fluent-text-secondary); }

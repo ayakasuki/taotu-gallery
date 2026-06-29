@@ -8,9 +8,9 @@
 }
 
 :root {
-  --taotu-pink: #f85f9a;
+  --taotu-pink: #f54c73;
   --taotu-pink-2: #ff8fba;
-  --taotu-pink-soft: #fff0f6;
+  --taotu-pink-soft: #ffffff;
   --taotu-purple: #9b7cff;
   --taotu-purple-soft: #f3efff;
   --taotu-mint: #48cfae;
@@ -39,6 +39,11 @@
   --taotu-shadow: 0 18px 48px rgba(85, 74, 118, 0.12);
   --taotu-shadow-lg: 0 30px 80px rgba(85, 74, 118, 0.16);
   --taotu-blur: 22px;
+  --taotu-button-hover-border: #f06599;
+  --taotu-button-hover-color: #000000;
+  --taotu-button-hover-bg: transparent;
+  --taotu-button-active-bg: linear-gradient(160deg, #ff8fa3, #f56d86);
+  --taotu-button-active-color: #ffffff;
   --taotu-radius-xs: 6px;
   --taotu-radius-sm: 10px;
   --taotu-radius-md: 14px;

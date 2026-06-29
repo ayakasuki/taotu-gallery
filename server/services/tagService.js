@@ -36,6 +36,34 @@ function parseMutualIds(value) {
     .filter(id => id !== null);
 }
 
+function createTagError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+function normalizeTagName(name) {
+  return String(name || '').trim();
+}
+
+function assertNoDuplicatePublicTagNames(tagsPayload) {
+  const publicTags = [...(tagsPayload.combinable || []), ...(tagsPayload.nonCombinable || [])]
+    .filter(tag => tag && !tag.isSystemTag && !tag.isUserTag && !tag.isPublicUserTag);
+  const seen = new Map();
+
+  for (const tag of publicTags) {
+    const name = normalizeTagName(tag.name);
+    if (!name) throw createTagError('公共标签名不能为空');
+
+    const key = name.toLowerCase();
+    const previous = seen.get(key);
+    if (previous && String(previous.id) !== String(tag.id)) {
+      throw createTagError(`公共标签名「${name}」已存在，请换一个名称`, 409);
+    }
+    seen.set(key, tag);
+  }
+}
+
 // 校验不可组合标签冲突
 function validateNonCombinableConflict(tagIds, allTags) {
   const selectedTags = tagIds.map(id => allTags.find(t => t.id === id)).filter(Boolean);
@@ -166,6 +194,7 @@ async function getAlbumTags(albumId) {
 
 // 同步标签配置（对比差异，执行部分或全部重标签）
 async function syncTagConfig(newTags, options = {}) {
+  assertNoDuplicatePublicTagNames(newTags);
   const oldTags = await configService.readTags();
   const threshold = config.tagDiffThreshold;
 

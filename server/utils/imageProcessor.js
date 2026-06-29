@@ -19,19 +19,20 @@ async function generateThumbnails(imagePath, options = {}) {
 
   const mediumW = options.mediumWidth || config.thumbnails.medium.width;
   const mediumH = options.mediumHeight || config.thumbnails.medium.height;
+  const quality = Math.min(100, Math.max(40, Number(options.quality || 85)));
 
   // 缩略图
   const thumbPath = path.join(thumbDir, `${baseName}_thumb${ext}`);
   await sharp(imagePath)
     .resize(config.thumbnails.small.width, config.thumbnails.small.height, { fit: 'inside' })
-    .jpeg({ quality: 80 })
+    .jpeg({ quality: Math.min(quality, 85) })
     .toFile(thumbPath);
 
   // 中等图（质量稍高）
   const mediumPath = path.join(thumbDir, `${baseName}_medium${ext}`);
   await sharp(imagePath)
     .resize(mediumW, mediumH, { fit: 'inside' })
-    .jpeg({ quality: 90 })
+    .jpeg({ quality })
     .toFile(mediumPath);
 
   return { thumbPath, mediumPath };
@@ -75,16 +76,32 @@ async function getImageMeta(imagePath) {
   };
 }
 
-// 检查图片分辨率是否达标
-function checkResolution(width, height, minLevel) {
-  const levels = {
-    '480p': { w: 640, h: 480 },
-    '720p': { w: 1280, h: 720 },
-    '1080p': { w: 1920, h: 1080 }
-  };
-  const level = levels[minLevel];
-  if (!level) return false;
-  return width >= level.w || height >= level.h;
+function normalizeResolutionLevel(level) {
+  const raw = String(level || '1080p').trim().toLowerCase();
+  const numeric = parseInt(raw, 10);
+  if (raw.includes('below') || raw.includes('under') || raw.includes('低于') || raw.includes('以下')) return 'below1080p';
+  if (raw.includes('4k') || numeric >= 2160) return '4k';
+  if (raw.includes('2k') || numeric >= 1440) return '2k';
+  if (Number.isFinite(numeric) && numeric < 1080) return 'below1080p';
+  return '1080p';
+}
+
+function getResolutionBucket(width, height) {
+  const w = Number(width);
+  const h = Number(height);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+
+  const longSide = Math.max(w, h);
+  const shortSide = Math.min(w, h);
+  if (longSide > 3840) return '4k';
+  if (longSide > 2560) return '2k';
+  if (shortSide >= 1080) return '1080p';
+  return 'below1080p';
+}
+
+// 检查图片是否属于指定分辨率档位：1080p 以下 / 1080p / 2K / 4K+
+function checkResolution(width, height, level) {
+  return getResolutionBucket(width, height) === normalizeResolutionLevel(level);
 }
 
 // 检测图片是否包含特定颜色
@@ -115,6 +132,8 @@ module.exports = {
   generateThumbnails,
   getImageMeta,
   calculateOrientation,
+  getResolutionBucket,
+  normalizeResolutionLevel,
   checkResolution,
   checkColorPresence
 };

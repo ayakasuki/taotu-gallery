@@ -18,6 +18,26 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 });
 
+// 管理概览页聚合数据
+router.get('/overview', authMiddleware, async (req, res, next) => {
+  try {
+    const overview = await statsService.getOverviewDashboard(req.user);
+    res.json(overview);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 运维监控页聚合数据
+router.get('/ops', authMiddleware, async (req, res, next) => {
+  try {
+    const overview = await statsService.getOperationsDashboard();
+    res.json(overview);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // API 调用量统计
 router.get('/api-calls', authMiddleware, async (req, res, next) => {
   try {

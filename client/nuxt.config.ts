@@ -12,7 +12,16 @@ export default defineNuxtConfig({
       title: '桃图智库', // 默认标题，会被布局动态覆盖
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'description', content: '探索美好的图像世界。' },
+        { name: 'robots', content: 'index,follow,max-image-preview:large' },
+        { property: 'og:site_name', content: '桃图智库' },
+        { property: 'og:title', content: '桃图智库' },
+        { property: 'og:description', content: '探索美好的图像世界。' },
+        { property: 'og:type', content: 'website' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:title', content: '桃图智库' },
+        { name: 'twitter:description', content: '探索美好的图像世界。' }
       ]
     }
   },

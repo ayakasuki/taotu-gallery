@@ -18,15 +18,14 @@
         <label><input type="checkbox" v-model="config.showUrlAfterUpload" /> 上传成功后展示 URL</label>
       </div>
       <button class="fluent-btn fluent-btn-primary" @click="save">保存</button>
-      <p v-if="msg" class="result-msg">{{ msg }}</p>
     </div>
   </div>
 </template>
 
 <script setup>
 definePageMeta({ layout: 'admin' })
+const { showAdminToast } = useAdminToast()
 const config = reactive({ displayMode: 'grid', showUrlAfterUpload: true })
-const msg = ref('')
 const displayModeOptions = [
   { label: '网格', value: 'grid' },
   { label: '瀑布流', value: 'waterfall' }
@@ -48,8 +47,8 @@ const save = async () => {
       display: { mode: config.displayMode === 'waterfall' ? 'waterfall' : 'grid' },
       upload: { showUrlAfterUpload: config.showUrlAfterUpload }
     })
-    msg.value = '已保存'
-  } catch (err) { msg.value = '失败: ' + err.message }
+    showAdminToast('配置已保存', 'success')
+  } catch (err) { showAdminToast('保存出错: ' + (err?.data?.error || err.message), 'error') }
 }
 </script>
 

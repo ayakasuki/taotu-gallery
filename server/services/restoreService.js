@@ -7,34 +7,78 @@ const unzipper = require('unzipper');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const execAsync = promisify(exec);
+const { spawn } = require('child_process');
 const db = require('../db');
 const config = require('../config');
 const pathUtils = require('../utils/pathUtils');
 const logger = require('../config/logger');
+const backupService = require('./backupService');
+const configService = require('./configService');
+
+function normalizeRestoreOptions(options = {}) {
+  if (Array.isArray(options.restoreItems)) {
+    const selected = new Set(options.restoreItems);
+    const restoreConfigItems = ['tags', 'paths', 'conditions', 'siteConfig']
+      .filter(item => selected.has(item) || selected.has('config'));
+
+    return {
+      restoreDatabase: selected.has('database'),
+      restoreGallery: selected.has('gallery'),
+      restoreCustomPaths: selected.has('customPaths'),
+      restoreConfig: restoreConfigItems.length > 0,
+      restoreConfigItems
+    };
+  }
+
+  return {
+    restoreDatabase: options.restoreDatabase !== false,
+    restoreGallery: options.restoreGallery !== false,
+    restoreCustomPaths: options.restoreCustomPaths === true,
+    restoreConfig: options.restoreConfig === true,
+    restoreConfigItems: options.restoreConfig === true ? ['tags', 'paths', 'conditions', 'siteConfig'] : []
+  };
+}
+
+async function inspectBackup(filename) {
+  const manifest = await backupService.readBackupManifest(filename);
+  const backupPath = backupService.getSafeBackupPath(filename);
+  const stat = await fs.stat(backupPath);
+  return {
+    filename,
+    size: stat.size,
+    created_at: stat.mtime,
+    manifest,
+    restorableItems: manifest.contents || []
+  };
+}
 
 // 从备份包恢复
 async function restoreFromBackup(backupPath, options = {}) {
-  const {
-    restoreDatabase = true,
-    restoreGallery = true,
-    restoreCustomPaths = true,
-    restoreConfig = true
-  } = options;
+  const safeBackupPath = backupService.getSafeBackupPath(path.basename(backupPath));
+  if (path.resolve(backupPath) !== safeBackupPath) {
+    throw { statusCode: 400, message: '备份文件路径无效' };
+  }
 
-  if (!fsSync.existsSync(backupPath)) {
+  const {
+    restoreDatabase,
+    restoreGallery,
+    restoreCustomPaths,
+    restoreConfig,
+    restoreConfigItems
+  } = normalizeRestoreOptions(options);
+
+  if (!fsSync.existsSync(safeBackupPath)) {
     throw { statusCode: 404, message: '备份文件不存在' };
   }
 
   // 解压到临时目录
   const tempDir = path.join(config.backupsDir, '.restore_temp');
+  await fs.rm(tempDir, { recursive: true, force: true });
   await fs.mkdir(tempDir, { recursive: true });
 
   try {
     // 解压
-    await extractZip(backupPath, tempDir);
+    await extractZip(safeBackupPath, tempDir);
     logger.info(`备份已解压到: ${tempDir}`);
 
     // 查找项目根目录（压缩包内可能是 "项目名/" 的形式）
@@ -43,27 +87,24 @@ async function restoreFromBackup(backupPath, options = {}) {
 
     const results = {};
 
-    // 1. 恢复配置文件
-    if (restoreConfig) {
-      results.config = await restoreConfigFiles(rootDir);
-    }
-
-    // 2. 恢复数据库
+    // 数据库恢复包含整站数据：网站配置、条件标签、标签、图片元数据与关联等。
     if (restoreDatabase) {
       results.database = await restoreDatabaseFromDump(rootDir);
     }
 
-    // 3. 恢复本地图库
+    // 本地图库只恢复真实文件，不恢复数据库记录或标签关系。
     if (restoreGallery) {
       results.gallery = await restoreGalleryFiles(rootDir);
     }
 
-    // 4. 恢复自定义路径图片
     if (restoreCustomPaths) {
       results.customPaths = await restoreCustomPathFiles(rootDir);
     }
 
-    // 5. 关键步骤：路径相对化
+    if (restoreConfig) {
+      results.config = await restoreConfigFiles(rootDir, restoreConfigItems);
+    }
+
     if (restoreDatabase) {
       results.pathNormalization = await normalizeAllImagePaths();
     }
@@ -113,59 +154,127 @@ async function findProjectRoot(extractDir) {
 }
 
 // 恢复配置文件
-async function restoreConfigFiles(rootDir) {
+async function readJsonIfExists(filePath) {
+  if (!fsSync.existsSync(filePath)) return null;
+  const content = await fs.readFile(filePath, 'utf8');
+  return JSON.parse(content);
+}
+
+async function restoreConfigFiles(rootDir, restoreConfigItems = []) {
   const configSrcDir = path.join(rootDir, 'config');
   if (!fsSync.existsSync(configSrcDir)) {
     logger.warn('备份中未找到配置文件目录');
-    return { restored: 0 };
+    return { restored: 0, items: [] };
   }
 
   let restored = 0;
-  const configFiles = ['tags.json', 'paths.json', 'conditions.json', 'site.json'];
+  const restoredItems = [];
+  const selected = new Set(restoreConfigItems);
 
-  for (const file of configFiles) {
-    const srcPath = path.join(configSrcDir, file);
-    const destPath = path.join(config.configDir, file);
-
-    if (fsSync.existsSync(srcPath)) {
-      await fs.copyFile(srcPath, destPath);
+  if (selected.has('tags')) {
+    const tags = await readJsonIfExists(path.join(configSrcDir, 'tags.json'));
+    if (tags) {
+      await configService.writeTags(tags);
       restored++;
-      logger.info(`配置文件已恢复: ${file}`);
+      restoredItems.push('tags');
+    }
+
+    const tagGroups = await readJsonIfExists(path.join(configSrcDir, 'tag_groups.json'));
+    if (tagGroups) {
+      await configService.writeTagGroups(tagGroups);
+      restored++;
+      restoredItems.push('tag_groups');
     }
   }
 
-  return { restored };
+  if (selected.has('paths')) {
+    const pathsData = await readJsonIfExists(path.join(configSrcDir, 'paths.json'));
+    if (pathsData) {
+      await configService.writePaths(pathsData);
+      restored++;
+      restoredItems.push('paths');
+    }
+  }
+
+  if (selected.has('conditions')) {
+    const conditions = await readJsonIfExists(path.join(configSrcDir, 'conditions.json'));
+    if (conditions) {
+      await configService.writeConditions(conditions);
+      restored++;
+      restoredItems.push('conditions');
+    }
+  }
+
+  if (selected.has('siteConfig')) {
+    const siteConfig = await readJsonIfExists(path.join(configSrcDir, 'site.json'));
+    if (siteConfig) {
+      await configService.writeSiteConfig(siteConfig);
+      restored++;
+      restoredItems.push('siteConfig');
+    }
+  }
+
+  logger.info(`配置快照已恢复: ${restoredItems.join(', ') || '无'}`);
+  return { restored, items: restoredItems };
 }
 
 // 从 SQL dump 恢复数据库
 async function restoreDatabaseFromDump(rootDir) {
   const dumpPath = path.join(rootDir, 'database', 'taotu_gallery.sql');
   if (!fsSync.existsSync(dumpPath)) {
-    logger.warn('备份中未找到数据库 dump');
-    return { restored: false };
+    throw { statusCode: 400, message: '备份中未找到数据库 dump' };
   }
 
   try {
-    const cmd = `mysql -u ${process.env.DB_USER} -p'${process.env.DB_PASSWORD}' ${process.env.DB_NAME} < "${dumpPath}"`;
-    await execAsync(cmd);
+    const args = [
+      `--host=${process.env.DB_HOST}`,
+      `--port=${process.env.DB_PORT || 3306}`,
+      `--user=${process.env.DB_USER}`,
+      `--password=${Object.prototype.hasOwnProperty.call(process.env, 'DB_PASSWORD') ? process.env.DB_PASSWORD : ''}`,
+      process.env.DB_NAME
+    ];
+    await runMysqlRestore(args, dumpPath);
     logger.info('数据库已恢复');
     return { restored: true };
   } catch (err) {
     logger.error(`数据库恢复失败: ${err.message}`);
-    return { restored: false, error: err.message };
+    throw err;
   }
+}
+
+async function runMysqlRestore(args, dumpPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('mysql', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const input = fsSync.createReadStream(dumpPath);
+    let stderr = '';
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr || `mysql exited with code ${code}`));
+    });
+    input.on('error', reject);
+    input.pipe(child.stdin);
+  });
 }
 
 // 恢复本地图库文件
 async function restoreGalleryFiles(rootDir) {
   const gallerySrc = path.join(rootDir, 'gallery');
-  if (!fsSync.existsSync(gallerySrc)) {
-    logger.warn('备份中未找到图库目录');
-    return { restored: 0 };
-  }
+  const uploadsSrc = path.join(rootDir, 'uploads');
 
   let restored = 0;
-  restored = await copyDirectoryRecursive(gallerySrc, config.galleryDir);
+  if (fsSync.existsSync(gallerySrc)) {
+    restored += await copyDirectoryRecursive(gallerySrc, config.galleryDir);
+  }
+  if (fsSync.existsSync(uploadsSrc)) {
+    restored += await copyDirectoryRecursive(uploadsSrc, config.uploadsDir);
+  }
+
+  if (!restored) logger.warn('备份中未找到图库或上传目录');
   logger.info(`图库文件已恢复: ${restored} 个文件`);
   return { restored };
 }
@@ -284,6 +393,7 @@ async function verifyRestoredPaths() {
 }
 
 module.exports = {
+  inspectBackup,
   restoreFromBackup,
   normalizeAllImagePaths,
   verifyRestoredPaths

@@ -11,12 +11,19 @@ const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConfl
 const router = express.Router();
 
 // 可选认证（公共图库不需要登录，但登录后可看自己的）
-function optionalAuth(req, res, next) {
+async function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const jwt = require('jsonwebtoken');
     try {
-      req.user = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
+      const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
+      const user = await db('users')
+        .where({ id: decoded.id })
+        .select('id', 'username', 'role', 'is_disabled')
+        .first();
+      if (user && !user.is_disabled) {
+        req.user = { ...decoded, id: user.id, username: user.username, role: user.role };
+      }
     } catch {}
   }
   next();
@@ -25,7 +32,7 @@ function optionalAuth(req, res, next) {
 // 图片列表（内部用，返回完整数据）
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
-    const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnly, userId: targetUserId } = req.query;
+    const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnly, userId: targetUserId, userGallery } = req.query;
     const tagIds = parseTagIds(tags);
     await assertNoTagFilterConflict(tagIds);
     const userId = req.user?.id || null;
@@ -42,6 +49,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
       ownOnly: mine === 'true' && userId,
       isAdmin,
       filterUserId: targetUserId ? parseInt(targetUserId) : null,
+      userGalleryOnly: userGallery === 'true',
       internal: true
     });
     res.json(result);

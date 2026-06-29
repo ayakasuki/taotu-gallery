@@ -90,7 +90,7 @@
                 <button class="view-all-btn" type="button" @click="activeSection = 'images'">查看全部</button>
               </div>
               <div v-if="recentUploads.length > 0" class="recent-grid">
-                <NuxtLink v-for="img in recentUploads" :key="img.id" class="recent-card" :to="'/image/' + img.id">
+                <NuxtLink v-for="img in recentUploads" :key="img.id" class="recent-card" :to="{ path: '/image', query: { id: img.id } }">
                   <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
                   <span>{{ formatRelativeTime(img.created_at) }}</span>
                 </NuxtLink>
@@ -390,7 +390,9 @@
                 <div class="manual-image-grid">
                   <button v-for="img in manualImages" :key="img.id" type="button" class="manual-image-card" :class="{ selected: manualSelected.includes(img.id) }" @click="toggleManualSelect(img.id)">
                     <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
-                    <span v-if="manualSelected.includes(img.id)" class="manual-check-mark">✓</span>
+                    <span v-if="manualSelected.includes(img.id)" class="manual-check-mark">
+                      <img src="/icons/选中.png" alt="" />
+                    </span>
                   </button>
                   <div v-if="manualImages.length === 0" class="manual-empty">暂无图片</div>
                 </div>
@@ -740,6 +742,7 @@ import TagSelector from '~/components/tags/TagSelector.vue'
 const api = useApi()
 const config = useRuntimeConfig()
 const router = useRouter()
+const { readCurrentUserCache, writeCurrentUserCache } = useUiCache()
 
 const activeSection = ref('overview')
 const user = ref(null)
@@ -916,7 +919,10 @@ onMounted(async () => {
   if (!token) { router.push('/login'); return }
   browserInfo.value = detectBrowserInfo()
   try {
+    const cachedUser = readCurrentUserCache()
+    if (cachedUser) user.value = cachedUser
     user.value = await api.get('/api/admin/auth/me')
+    writeCurrentUserCache(user.value)
     await Promise.all([loadDashboardOverview(), loadMyTags(), loadMyAlbums(), loadTokens()])
     await Promise.all([loadMyImages(), loadManualImages()])
   } catch {} finally { loading.value = false }
@@ -925,7 +931,10 @@ onMounted(async () => {
 const loadDashboardOverview = async () => {
   try {
     const data = await api.get('/api/internal/dashboard/overview')
-    if (data.user) user.value = data.user
+    if (data.user) {
+      user.value = data.user
+      writeCurrentUserCache(data.user)
+    }
     Object.assign(dashboardStats, {
       images: Number(data.stats?.images || 0),
       storage: Number(data.stats?.storage || 0),
@@ -1213,6 +1222,7 @@ const uploadAvatar = async (event) => {
   try {
     const res = await api.request('/api/admin/auth/upload-avatar', { method: 'POST', body: fd })
     user.value = { ...user.value, avatar: res.url }
+    writeCurrentUserCache(user.value)
     avatarMessage.value = '头像已上传'
   } catch (err) {
     avatarError.value = err.data?.error || err.message || '头像上传失败'
@@ -2968,16 +2978,18 @@ const buildPageItems = (current, total) => {
   right: 5px;
   width: 20px;
   height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   border-radius: 5px;
-  background: #ff78a5;
-  color: #fff;
-  font-size: 14px;
-  line-height: 1;
-  font-weight: 900;
+  background: rgba(255,255,255,0.92);
+  padding: 2px;
   box-shadow: 0 6px 12px rgba(242, 96, 151, 0.22);
+}
+.manual-check-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 .manual-pagination-row {
   height: 38px;

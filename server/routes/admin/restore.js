@@ -4,10 +4,19 @@
 const express = require('express');
 const authMiddleware = require('../../middleware/auth');
 const restoreService = require('../../services/restoreService');
-const path = require('path');
-const config = require('../../config');
+const backupService = require('../../services/backupService');
 
 const router = express.Router();
+
+// 解析备份包可恢复内容
+router.get('/inspect/:filename', authMiddleware, async (req, res, next) => {
+  try {
+    const result = await restoreService.inspectBackup(req.params.filename);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // 从备份恢复
 router.post('/', authMiddleware, async (req, res, next) => {
@@ -17,7 +26,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
       return res.status(400).json({ error: '请提供备份文件名' });
     }
 
-    const backupPath = path.join(config.backupsDir, filename);
+    const backupPath = backupService.getSafeBackupPath(filename);
     const result = await restoreService.restoreFromBackup(backupPath, options);
     res.json({ message: '恢复完成', ...result });
   } catch (err) {

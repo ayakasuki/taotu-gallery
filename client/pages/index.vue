@@ -323,7 +323,7 @@ onBeforeUnmount(() => {
 
 const loadUsers = async () => {
   try {
-    const data = await api.get('/api/admin/users')
+    const data = await api.get('/api/admin/users', { all: true })
     users.value = data.users || []
   } catch {}
 }
@@ -615,13 +615,13 @@ const handleItemClick = (image) => {
     return
   }
   if (gallerySource.value !== 'mine') {
-    navigateTo(`/image/${image.id}`)
+    navigateTo({ path: '/image', query: { id: image.id } })
     return
   }
   if (selectedIds.value.length > 0) {
     toggleSelect(image.id)
   } else {
-    navigateTo(`/image/${image.id}`)
+    navigateTo({ path: '/image', query: { id: image.id } })
   }
 }
 
@@ -701,7 +701,7 @@ const moveToAlbum = async () => {
 
 .gallery-sidebar {
   position: sticky;
-  top: 86px;
+  top: 80px;
   align-self: start;
   max-height: calc(100vh - 112px);
   overflow-y: auto;
@@ -709,6 +709,7 @@ const moveToAlbum = async () => {
   border-radius: 16px;
   scrollbar-width: thin;
   scrollbar-color: rgba(124, 133, 156, 0.22) transparent;
+  margin: 0px 30px 0px 30px;
 }
 
 .filter-section {
@@ -811,9 +812,17 @@ const moveToAlbum = async () => {
 }
 
 .source-row.active {
-  background: var(--taotu-pink-soft);
-  color: var(--taotu-pink);
+  background: linear-gradient(160deg, rgb(255, 143, 163), rgb(245, 109, 134));
+  color: #ffffff;
   border-color: rgba(248,95,154,0.12);
+}
+
+.source-row:hover:not(.active) {
+  color: #000000;
+}
+
+.source-row:hover:not(.active) b {
+  color: #000000;
 }
 
 .source-row b {
@@ -857,6 +866,10 @@ const moveToAlbum = async () => {
   border-color: rgba(248, 95, 154, 0.46);
   background: rgba(255, 240, 246, 0.86);
   color: var(--taotu-pink);
+}
+
+.mode-card:hover:not(.active) {
+  color: #000000;
 }
 
 .tag-tree {
@@ -915,6 +928,13 @@ const moveToAlbum = async () => {
 .tree-title.selected,
 .tree-subtitle.selected {
   color: var(--taotu-pink);
+}
+
+.tree-title:hover,
+.tree-subtitle:hover,
+.tree-title:hover b,
+.tree-subtitle:hover b {
+  color: #000000;
 }
 
 .tree-caret {
@@ -1000,6 +1020,10 @@ const moveToAlbum = async () => {
   border-color: rgba(248, 95, 154, 0.32);
   background: var(--taotu-pink-soft);
   color: var(--taotu-pink);
+}
+
+.tree-tag:hover:not(.disabled) {
+  color: #000000;
 }
 
 .tree-tag.disabled {

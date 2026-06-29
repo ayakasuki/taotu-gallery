@@ -5,12 +5,41 @@ const db = require('../../db');
 const router = express.Router();
 
 // 数据库连接状态
-router.get('/status', authMiddleware, async (req, res) => {
+router.get('/status', authMiddleware, async (req, res, next) => {
   try {
-    await db.raw('SELECT 1');
-    res.json({ connected: true, message: '数据库连接正常' });
+    const [versionResult] = await db.raw('SELECT VERSION() as version');
+    const versionRow = Array.isArray(versionResult) ? versionResult[0] : versionResult?.[0];
+    const [
+      imageCount,
+      albumCount,
+      publicTagCount,
+      userTagCount,
+      userCount
+    ] = await Promise.all([
+      db('images').count('* as count').first(),
+      db('albums').count('* as count').first(),
+      db('tags').count('* as count').first(),
+      db('user_tags').count('* as count').first(),
+      db('users').count('* as count').first()
+    ]);
+
+    res.json({
+      connected: true,
+      message: '数据库连接正常',
+      type: 'MySQL',
+      version: versionRow?.version || '',
+      database: process.env.DB_NAME || '',
+      host: process.env.DB_HOST || '',
+      path: process.env.DB_NAME || '',
+      stats: {
+        totalImages: Number(imageCount?.count || 0),
+        totalAlbums: Number(albumCount?.count || 0),
+        totalTags: Number(publicTagCount?.count || 0) + Number(userTagCount?.count || 0),
+        totalUsers: Number(userCount?.count || 0)
+      }
+    });
   } catch (err) {
-    res.json({ connected: false, message: err.message });
+    next(err);
   }
 });
 

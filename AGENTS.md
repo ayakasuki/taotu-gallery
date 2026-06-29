@@ -35,7 +35,7 @@
 6. **图片 URL 哈希化** — 对外路径为 `image/日期/16位hash.ext`，不暴露真实路径。
 7. **API 内外分离** — `/api/internal/*` 前端内部用，`/api/*` 对外 API，不暴露本地路径。
 8. **标签 ID 全局唯一** — `tags` 表自增 ID，`user_tags` 表自增 ID（加 `u` 前缀区分），`tag_groups` 子分组 `sid` 全局唯一。
-9. **条件标签写入 image_tags 时** — `tag_id` 引用 `tags` 表的 ID（通过 `cond_type_name` 查找），不是 `conditions` 表的 ID。
+9. **条件标签写入 image_tags 时** — `tag_id` 引用 `tags` 表的 ID，不是 `conditions` 表的 ID；优先使用 `conditions.tag_id`，旧数据才回退 `cond_type_name` 查找。
 10. **嵌入代码 12 种组合** — 4 格式（源/HTML/BBCode/Markdown）× 3 尺寸（缩略/中等/完整）。
 11. **首页展示只保留网格/瀑布流** — 禁止恢复静态/轮播入口；后台图库展示配置、`SortFilter`、`useGallery` 都必须只接受 `grid` / `waterfall`。
 12. **网格也是贴合式图片墙** — 网格模式不是 CSS Grid 行布局，必须使用最短列定位；横图按 1:1，竖图同宽按比例增高，避免行高空洞。
@@ -57,6 +57,13 @@
 28. **SMTP 配置在数据库** — `site_config.smtp` 存 SMTP，测试邮件/注册邮件/忘记密码邮件统一走 `mailService.js`。
 29. **前台不能自定义后端地址** — 已删除 `/settings` 和 connection-check 插件；前后端连接由部署与后台维护，不再允许用户在前台写 backend_url。
 30. **备案号在 site_config** — `recordNumber` 由网站配置保存，公开配置接口返回，默认布局页脚展示。
+31. **条件标签定时扫描必须增量** — 定时任务、上传后、路径扫描后只处理尚未拥有对应条件标签的候选图片；只有后台“立即扫描所有图片”允许 force 全量重扫。
+32. **分辨率条件档位互斥** — `below1080p` / `1080p` / `2k` / `4k` 四档覆盖全部图片；4K 档包含 4K 以上，不再细分 8K。
+33. **默认网站背景** — 新部署无背景配置时公开配置返回 `/site_bg.png`；已有自定义背景刷新时不能先闪默认图再切自定义图。
+34. **背景模糊与遮罩** — 首页背景模糊通过 `.taotu-shell` 的 `backdrop-filter` 实现，`.taotu-shell` 不再叠加额外背景色；背景明暗由 `site_config.background.overlayTop/overlayBottom` 控制。
+35. **公告通知必须数据库驱动** — 公告存 `announcements`，已读状态存 `announcement_reads`；后台删除公告后用户通知同步消失。
+36. **备份恢复必须真实可用** — 数据库备份导出整库，本地图库备份包含真实图片文件；恢复前必须读取 manifest 并让用户选择实际支持的恢复项。
+37. **全局提示统一 toast** — 登录、后台配置、图片/标签/条件等普通成功失败提示统一复用导航下方胶囊 toast；不要再新增散落的行内 alert。
 
 ## 项目结构
 
@@ -69,7 +76,7 @@
 │   ├── middleware/       # auth / errorHandler / apiToken / apiLogger
 │   ├── routes/api/      # 对外 API（images/albums/tags/embed/upload）
 │   ├── routes/internal/ # 前端内部 API（images/albums）
-│   ├── routes/admin/    # 管理 API（17+ 端点）
+│   ├── routes/admin/    # 管理 API（18+ 端点）
 │   ├── services/        # 业务逻辑（startupService 负责首启自检/迁移）
 │   ├── utils/           # pathUtils / imageProcessor / tagDiff
 │   └── validators/      # 请求校验
@@ -90,7 +97,7 @@
 └── tmp/                 # 文档
 ```
 
-## 数据库（12+ 张表）
+## 数据库（18+ 张表）
 
 | 表 | 用途 |
 |---|------|
@@ -110,6 +117,8 @@
 | `upload_logs` | 上传日志 |
 | `api_logs` | API 调用日志 |
 | `site_metrics` | 网站统计指标 |
+| `announcements` | 公告中心内容、草稿、置顶 |
+| `announcement_reads` | 用户公告已读状态 |
 
 ## 开发命令
 
@@ -133,46 +142,28 @@ pm2 logs                     # 查看日志
 
 Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开发计划.md`。
 
-## 当前实现状态（v0.3.1-Pre）
+## 当前实现状态（v0.3.1-pre-fix）
 
-> v0.3.1-Pre 是用户端与访客端基础 UI 迭代记录版。当前仍有部分图标占位，管理后台整体视觉暂未同步重构；待图标替换和后台 UI 一起完成后再发布正式版本。
+> v0.3.1-pre-fix 是 0.3.1 正式版发布前的稳定化提交：前台、普通用户端和主要管理后台页面已完成新版浅色玻璃拟态重构，部分图标仍允许使用占位资源，等待最终图标替换。
 
-- 访客端和普通用户端已统一为新版玻璃拟态视觉：默认布局、导航、页脚、首页图库、相册、图片详情、上传、API 文档、登录、注册和仪表盘均已大幅重构。
-- 新增并集中使用 `client/public/icons/` 图标资产和 `client/public/fonts/` 字体资源；当前图标允许存在占位，后续正式版统一替换。
-- 首页图库保留网格/瀑布流两种模式，继续读取 `/api/gallery/config` 的公开展示配置，未登录访客也会按后台保存的默认展示模式进入。
-- 相册列表和相册详情页已重构用户端 UI，支持相册卡片、列表/网格视图、封面设置、图片选择、分页与相册内图片管理。
-- 上传页已重构为新版上传工作台，保留文件上传、URL 上传、批量上传、新建私有标签、上传成功链接展示与批量复制；成功文件会从待上传队列移除。
-- 图片详情页和 API 文档页已重构为新版用户端样式，保留嵌入代码、随机图片 API、Token 认证、复制/下载等原有能力。
-- 登录、注册、忘记密码页面已统一视觉，继续支持图片验证码、邮箱验证码、开放注册开关和 Redis 验证码 TTL。
-- 普通用户仪表盘现在只保留四个侧边栏入口：统计、图片管理、标签设置、账户与安全；相册管理从仪表盘移除，统一到相册页完成。
-- 仪表盘统计页读取 `/api/internal/dashboard/overview`，展示用户图片数、存储配额、私有标签、相册数、最近上传、存储圆环和账号摘要。
-- 仪表盘图片管理已改为表格管理面板，支持我的图库、相册筛选、文件名搜索、私有标签筛选、批量公开/取消公开/删除、公开状态切换、编辑私有标签和分页。
-- 仪表盘标签设置同屏展示私有标签管理与人工标签：私有标签支持分页、当前页全选、批量删除、新建/编辑弹窗、可组合/互斥；人工标签支持选图、选择已有私有标签或回车创建新标签后打标。
-- 账户与安全整合原用户页和 API Token 页，支持头像 hover 上传、账号信息统计、旧密码改密、密码显隐切换、成功/失败提示、Token 遮罩列表、每页 3 条分页和一次性新 Token 展示。
-- 后端配套新增用户头像上传接口 `/api/admin/auth/upload-avatar`、上传静态资源服务 `/uploads/*`、Dashboard overview 内部接口，并让当前用户 Token 列表返回遮罩展示所需字段。
-- 管理后台本轮仅做少量全局样式/图标/配置适配，尚未按用户端新版 UI 整体重构。
-
-- 首页图库已重构为网格/瀑布流两种模式；后台默认展示配置只允许 `grid` / `waterfall`，公开接口 `/api/gallery/config` 决定访客默认模式。
-- 网格模式使用最短列贴合布局，不再用 CSS Grid 行布局；横图 1:1，竖图同宽按比例增高，浏览数显示在左上角。
-- 瀑布流模式使用最短列布局，悬停信息只显示当前图片，且不显示浏览数角标。
+- 访客端和普通用户端已统一新版视觉：默认布局、导航、页脚、首页图库、相册、图片详情、上传、API 文档、登录、注册和仪表盘均已重构。
+- 管理后台主要入口已重构：概览、图片管理、标签设置、条件标签、站点配置、综合配置、运维监控、用户管理、公告中心，侧边栏入口已按新信息架构合并。
+- 综合配置整合原路径配置、图库管理、数据库只读状态和 API Token；运维监控整合统计、备份恢复和 WebDAV 云同步。
+- 备份恢复已改为真实备份包：整库导出、本地图库真实图片目录打包、manifest 恢复项解析、恢复前弹窗选择恢复内容。
+- 公告中心使用 `announcements` / `announcement_reads`，前台导航通知胶囊支持未读计数、置顶公告、详情弹窗，后台删除公告后用户通知同步消失。
+- 默认网站背景为 `client/public/site_bg.png`；公开配置无自定义背景时返回 `/site_bg.png`，有自定义背景时不能刷新闪默认图。
+- 站点配置背景模糊使用 `.taotu-shell` 的 `backdrop-filter`，遮罩颜色保存在 `site_config.background.overlayTop/overlayBottom`；不要给 `.taotu-shell` 再叠额外背景色。
+- 首页图库只保留 `grid` / `waterfall`，公开接口 `/api/gallery/config` 决定访客默认模式；网格和瀑布流都使用最短列贴合布局。
+- 普通用户仪表盘保留统计、图片管理、标签设置、账户与安全；相册管理统一回到相册页完成。
+- 图片管理支持图库来源、用户/相册联动、文件名搜索、标签筛选；管理员编辑平台标签时不得覆盖图片所属用户已有私有标签。
+- 标签管理支持公共/私有标签、多选批量操作、分组树和人工标签；普通用户私有标签互斥必须保持用户隔离。
+- 条件标签使用 `conditions.tag_id` 稳定关联 `tags.id`；定时扫描、上传后、路径扫描后都必须增量跳过已标记图片，手动立即扫描才全量 force。
+- 分辨率条件档位为 `below1080p`、`1080p`、`2k`、`4k`；横图、竖图、正方图按 `0.9-1.1` 正方容差互斥判定。
+- SMTP、公开域名、备案号、注册开关、背景、WebDAV、默认展示、配额等全部写入 `site_config`。
 - 服务启动会自动校验 `.env`、检查/创建数据库、执行 Knex 迁移；空用户表时创建首个管理员，密码来自 `DEFAULT_ADMIN_PASSWORD` 或启动日志随机值。
-- 普通用户仪表盘已改为子菜单结构，图片管理/标签设置为普通用户权限裁剪版。普通用户没有批量导入和系统设置入口。
-- 仪表盘用户页显示绑定邮箱，并提供旧密码 + 新密码 + 重复新密码的改密卡片。
-- 登录页支持忘记密码弹窗：用户名 + 图片验证码发送绑定邮箱验证码，再用邮箱验证码 + 新图片验证码重置密码。
-- 注册页读取公开站点配置；开放注册后显示表单，支持图片验证码和可选邮箱验证码。
-- SMTP、公开域名、备案号、注册开关等全部写入 `site_config`，网站页脚显示备案号。
-- Redis 用于图片验证码、注册验证码、忘记密码验证码；邮箱验证码是 2 个数字 + 3 个英文乱序，120 秒过期。
-- 前台 `/settings` 和自定义后端 API 地址逻辑已删除，`useApi` 只使用部署配置/相对路径。
-- 图片管理支持图库来源、相册、文件名、标签筛选；管理员后台图片编辑区分平台标签与图片所属用户私有标签。
-- 用户上传可创建并立即应用自己的私有标签；个人图片编辑允许空选择保存，表示清空自己的私有标签。
-- 用户私有标签支持可组合/互斥字段；普通用户只能管理自己的私有标签互斥，管理员后台不能被绕过关联其他用户私有标签。
-- 标签管理支持多选批量操作：管理员后台可批量设公共/删除；仪表盘可批量删除，管理员自己的仪表盘可批量设公共。
-- `/api/tags` 必须返回 `mutually_exclusive_with`，否则图库/API 页无法禁用互斥标签。
-- `TagSelector.vue`、`TagGroupSelector.vue`、`TagGroupSelectorFlat.vue` 都需要支持多互斥 ID；修改其中一个时要检查另外两个。
-- `server/utils/tagConflict.js` 是 API 查询参数互斥校验的公共入口。新增标签筛选 API 时优先复用它。
-- 上传成功链接卡片在 `client/pages/upload.vue`，成功文件会从待上传队列移除，继续选择文件为追加而不是重复上传。
-- 条件标签写入统一使用 `conditionTagService.insertConditionTag()`，避免把 `conditions.id` 错写进 `image_tags.tag_id`。
-- 自定义路径读取/保存逻辑在 `configService.readPaths/writePaths` 与后台路径页，数据库表为 `custom_paths`。
+- `/api/tags` 必须返回 `mutually_exclusive_with`，图库/API 参数互斥校验统一走 `server/utils/tagConflict.js`。
+- 上传成功链接卡片在 `client/pages/upload.vue`，成功文件会从待上传队列移除，继续选择文件为追加。
+- 自定义路径读取/保存逻辑在 `configService.readPaths/writePaths` 与后台综合配置页，数据库表为 `custom_paths`。
 
 ## 提交前检查
 
@@ -184,8 +175,13 @@ node --check server/services/mailService.js
 node --check server/services/redisService.js
 node --check server/routes/admin/auth.js
 node --check server/routes/admin/tagConvert.js
+node --check server/routes/admin/announcements.js
+node --check server/routes/admin/conditions.js
+node --check server/routes/api/announcements.js
 node --check server/routes/api/images.js
 node --check server/routes/api/embed.js
+node --check server/services/conditionTagService.js
+node --check server/db/migrations/20240120000001_add_conditions_tag_id.js
 node --check server/routes/internal/dashboard.js
 node --check server/routes/internal/images.js
 node --check server/utils/tagConflict.js

@@ -8,8 +8,29 @@ const db = require('../../db');
 
 const router = express.Router();
 
+function normalizeTagName(name) {
+  return String(name || '').trim();
+}
+
+function createDuplicateTagError(message) {
+  const err = new Error(message);
+  err.statusCode = 409;
+  return err;
+}
+
+function assertNoDuplicateInputTags(tagNames) {
+  const seen = new Set();
+  for (const rawName of tagNames || []) {
+    const name = normalizeTagName(rawName);
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) throw createDuplicateTagError(`新建标签「${name}」重复，请保留一个`);
+    seen.add(key);
+  }
+}
+
 // 单上传 / 批量上传（需登录）
-router.post('/', authMiddleware, uploadService.upload.array('files', 100), async (req, res, next) => {
+router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, next) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: '请选择要上传的文件' });
@@ -28,16 +49,19 @@ router.post('/', authMiddleware, uploadService.upload.array('files', 100), async
     const albumId = req.body.album_id ? parseInt(req.body.album_id) : null;
     let tags = req.body.tags ? JSON.parse(req.body.tags) : [];
     const newTags = req.body.newTags ? JSON.parse(req.body.newTags) : [];
+    assertNoDuplicateInputTags(newTags);
     const user = await db('users').where({ id: userId }).first();
     const isAdmin = user?.role === 'admin';
 
     // 处理新标签：管理员创建公共标签，普通用户创建自己的私有标签
     if (newTags.length > 0) {
-      for (const tagName of newTags) {
+      for (const rawTagName of newTags) {
+        const tagName = normalizeTagName(rawTagName);
+        if (!tagName) continue;
         if (isAdmin) {
-          const existing = await db('tags').where({ name: tagName }).first();
+          const existing = await db('tags').whereRaw('LOWER(name) = LOWER(?)', [tagName]).first();
           if (existing) {
-            tags.push(existing.id);
+            throw createDuplicateTagError(`公共标签名「${tagName}」已存在，请从已有标签中选择`);
           } else {
             const maxRow = await db('tags').max('id as maxId').first();
             const newId = (maxRow?.maxId || 0) + 1;
@@ -48,9 +72,12 @@ router.post('/', authMiddleware, uploadService.upload.array('files', 100), async
             tags.push(newId);
           }
         } else {
-          const existing = await db('user_tags').where({ user_id: userId, name: tagName }).first();
+          const existing = await db('user_tags')
+            .where({ user_id: userId })
+            .whereRaw('LOWER(name) = LOWER(?)', [tagName])
+            .first();
           if (existing) {
-            tags.push(`u${existing.id}`);
+            throw createDuplicateTagError(`私有标签名「${tagName}」已存在，请从已有标签中选择`);
           } else {
             const [id] = await db('user_tags').insert({
               user_id: userId,

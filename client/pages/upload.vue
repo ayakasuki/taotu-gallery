@@ -304,6 +304,12 @@ const uploadTagOptions = computed(() => {
 const addNewTag = () => {
   const name = newTagName.value.trim()
   if (!name || uploadConfig.newTags.includes(name)) return
+  const existing = availableTags.value.combinable.concat(availableTags.value.nonCombinable)
+    .find(tag => String(tag.name || '').toLowerCase() === name.toLowerCase())
+  if (existing) {
+    alert(`${isAdmin.value ? '公共标签' : '私有标签'}名「${name}」已存在，请从已有标签中选择`)
+    return
+  }
   uploadConfig.newTags.push(name)
   newTagName.value = ''
 }
@@ -628,19 +634,23 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   height: 18px;
 }
 
+.tab-btn:hover {
+  color: #000000;
+}
+
 .tab-btn.active {
-  color: #f15c96;
+  color: #f54c73;
 }
 
 .tab-btn.active::after {
   content: '';
   position: absolute;
-  left: 10%;
-  right: 10%;
+  left: 20%;
+  right: 20%;
   bottom: 0;
-  height: 2px;
+  height: 4px;
   border-radius: 999px;
-  background: #f15c96;
+  background: #f54c73;
 }
 
 .upload-drop-card {

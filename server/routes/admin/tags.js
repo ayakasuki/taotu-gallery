@@ -28,6 +28,91 @@ async function requireAdmin(req, res) {
   return user;
 }
 
+function normalizeTagName(name) {
+  return String(name || '').trim();
+}
+
+function normalizeNewTagNames(names) {
+  if (!Array.isArray(names)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const rawName of names) {
+    const name = normalizeTagName(rawName);
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+  return result;
+}
+
+async function ensureUserPrivateTags(db, userId, names = []) {
+  const normalizedNames = normalizeNewTagNames(names);
+  if (!userId || normalizedNames.length === 0) return [];
+
+  const ids = [];
+  for (const name of normalizedNames) {
+    const existing = await db('user_tags')
+      .where({ user_id: userId })
+      .whereRaw('LOWER(name) = LOWER(?)', [name])
+      .first();
+    if (existing) {
+      ids.push(`u${existing.id}`);
+      continue;
+    }
+
+    const [id] = await db('user_tags').insert({
+      user_id: userId,
+      name,
+      display_name: name,
+      combinable: true,
+      is_public: false,
+      mutually_exclusive_with: null
+    });
+    ids.push(`u${id}`);
+  }
+  return ids;
+}
+
+async function ensurePlatformTags(db, names = []) {
+  const normalizedNames = normalizeNewTagNames(names);
+  if (normalizedNames.length === 0) return [];
+
+  const ids = [];
+  for (const name of normalizedNames) {
+    const existing = await db('tags')
+      .whereRaw('LOWER(name) = LOWER(?)', [name])
+      .first();
+    if (existing) {
+      ids.push(existing.id);
+      continue;
+    }
+
+    const [id] = await db('tags').insert({
+      name,
+      display_name: name,
+      combinable: true,
+      mutually_exclusive_with: null,
+      tag_type: 'manual',
+      is_public: true
+    });
+    ids.push(id);
+  }
+  return ids;
+}
+
+function normalizePlatformTagIds(ids = []) {
+  const result = [];
+  for (const rawId of ids) {
+    if (typeof rawId === 'string' && rawId.startsWith('u')) return null;
+    const id = Number.parseInt(rawId, 10);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    if (!result.includes(id)) result.push(id);
+  }
+  return result;
+}
+
 // 获取标签配置（管理员：公共标签 + 自己的私有标签）
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
@@ -74,6 +159,47 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 });
 
+// 创建单个公共平台标签（图片编辑弹窗回车创建使用）
+router.post('/create', authMiddleware, async (req, res, next) => {
+  try {
+    const db = require('../../db');
+    const adminUser = await requireAdmin(req, res);
+    if (!adminUser) return;
+
+    const name = normalizeTagName(req.body.name);
+    if (!name) return res.status(400).json({ error: '标签名不能为空' });
+
+    const existing = await db('tags')
+      .whereRaw('LOWER(name) = LOWER(?)', [name])
+      .first();
+    if (existing) {
+      return res.status(409).json({ error: `公共标签名「${name}」已存在，请换一个名称` });
+    }
+
+    const [id] = await db('tags').insert({
+      name,
+      display_name: req.body.display_name || name,
+      combinable: req.body.combinable !== false,
+      mutually_exclusive_with: null,
+      tag_type: 'manual',
+      is_public: true
+    });
+    const saved = await db('tags').where({ id }).first();
+    res.json({
+      id: saved.id,
+      name: saved.name,
+      display_name: saved.display_name || saved.name,
+      combinable: !!saved.combinable,
+      mutually_exclusive_with: saved.mutually_exclusive_with,
+      is_public: !!saved.is_public,
+      isPublicTag: true
+    });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: '公共标签名已存在，请换一个名称' });
+    next(err);
+  }
+});
+
 // 更新标签配置
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
@@ -115,25 +241,20 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
 // 立即标签 - 人工标签
 router.post('/run/manual', authMiddleware, async (req, res, next) => {
   try {
-    const { imageIds, albumIds, tagIds, overwrite } = req.body;
-
-    if (!tagIds) {
-      return res.status(400).json({ error: '请选择要应用的标签' });
+    const { imageIds, albumIds, tagIds = [], newTagNames = [], overwrite } = req.body;
+    const db = require('../../db');
+    const rawTagIds = Array.isArray(tagIds) ? tagIds : [];
+    const targetImageIds = [...(imageIds || [])];
+    if (albumIds && albumIds.length > 0) {
+      const albumImages = await db('images').whereIn('album_id', albumIds).select('id');
+      targetImageIds.push(...albumImages.map(img => img.id));
+    }
+    if (targetImageIds.length === 0) {
+      return res.status(400).json({ error: '请选择图片' });
     }
 
-    const db = require('../../db');
     const user = await db('users').where({ id: req.user.id }).first();
     if (user?.role !== 'admin') {
-      const targetImageIds = [...(imageIds || [])];
-      if (albumIds && albumIds.length > 0) {
-        const albumImages = await db('images').whereIn('album_id', albumIds).select('id');
-        targetImageIds.push(...albumImages.map(img => img.id));
-      }
-
-      if (targetImageIds.length === 0) {
-        return res.status(400).json({ error: '请选择自己的图片' });
-      }
-
       const ownedCountRow = await db('images')
         .whereIn('id', targetImageIds)
         .andWhere({ uploader_id: req.user.id })
@@ -142,11 +263,20 @@ router.post('/run/manual', authMiddleware, async (req, res, next) => {
       if (Number(ownedCountRow.count) !== new Set(targetImageIds).size) {
         return res.status(403).json({ error: '普通用户只能给自己的图片打标签' });
       }
+    }
 
-      const userTagIds = tagIds
+    if (rawTagIds.length === 0 && normalizeNewTagNames(newTagNames).length === 0) {
+      return res.status(400).json({ error: '请选择要应用的标签' });
+    }
+
+    let finalTagIds = [];
+    let createdTagIds = [];
+
+    if (user?.role !== 'admin') {
+      const userTagIds = rawTagIds
         .filter(id => typeof id === 'string' && id.startsWith('u'))
         .map(id => parseInt(id.substring(1)));
-      if (userTagIds.length !== tagIds.length) {
+      if (userTagIds.length !== rawTagIds.length) {
         return res.status(403).json({ error: '普通用户只能应用自己的私有标签' });
       }
       const validRows = userTagIds.length > 0
@@ -155,23 +285,38 @@ router.post('/run/manual', authMiddleware, async (req, res, next) => {
       if (validRows.length !== userTagIds.length) {
         return res.status(403).json({ error: '包含无权使用的私有标签' });
       }
+      createdTagIds = await ensureUserPrivateTags(db, req.user.id, newTagNames);
+      finalTagIds = [...rawTagIds, ...createdTagIds];
+    } else {
+      const platformTagIds = normalizePlatformTagIds(rawTagIds);
+      if (platformTagIds === null) {
+        return res.status(400).json({ error: '人工标签只能应用平台标签，请勿混入用户私有标签' });
+      }
+      if (platformTagIds.length > 0) {
+        const existingRows = await db('tags').whereIn('id', platformTagIds).select('id');
+        if (existingRows.length !== platformTagIds.length) {
+          return res.status(400).json({ error: '包含不存在的平台标签' });
+        }
+      }
+      createdTagIds = await ensurePlatformTags(db, newTagNames);
+      finalTagIds = [...platformTagIds, ...createdTagIds];
     }
 
     const results = [];
 
     if (imageIds && imageIds.length > 0) {
-      const imgResults = await manualTagService.tagImages(imageIds, tagIds, overwrite, req.user.id);
+      const imgResults = await manualTagService.tagImages(imageIds, finalTagIds, overwrite, req.user.id);
       results.push(...imgResults);
     }
 
     if (albumIds && albumIds.length > 0) {
       for (const albumId of albumIds) {
-        const albumResults = await manualTagService.tagAlbumImages(albumId, tagIds, overwrite, req.user.id);
+        const albumResults = await manualTagService.tagAlbumImages(albumId, finalTagIds, overwrite, req.user.id);
         results.push(...albumResults);
       }
     }
 
-    res.json({ message: '人工标签完成', results });
+    res.json({ message: '人工标签完成', results, createdTagIds });
   } catch (err) {
     next(err);
   }
@@ -180,7 +325,7 @@ router.post('/run/manual', authMiddleware, async (req, res, next) => {
 // 管理员为图片维护图片所属用户的私有标签
 router.post('/run/user-private', authMiddleware, async (req, res, next) => {
   try {
-    const { imageIds = [], userId, tagIds = [], overwrite = true } = req.body;
+    const { imageIds = [], userId, tagIds = [], newTagNames = [], overwrite = true } = req.body;
     const db = require('../../db');
     const user = await db('users').where({ id: req.user.id }).first();
     if (user?.role !== 'admin') return res.status(403).json({ error: '仅管理员可操作' });
@@ -200,9 +345,10 @@ router.post('/run/user-private', authMiddleware, async (req, res, next) => {
       return res.status(403).json({ error: '只能维护图片所属用户的私有标签' });
     }
 
-    const userTagIds = Array.isArray(tagIds) ? tagIds
+    const rawTagIds = Array.isArray(tagIds) ? tagIds : [];
+    const userTagIds = rawTagIds
       .map(id => typeof id === 'string' && id.startsWith('u') ? parseInt(id.substring(1)) : parseInt(id))
-      .filter(Boolean) : [];
+      .filter(Boolean);
     let validTagIds = [];
     if (userTagIds.length > 0) {
       const ownedTags = await db('user_tags')
@@ -214,6 +360,11 @@ router.post('/run/user-private', authMiddleware, async (req, res, next) => {
         return res.status(403).json({ error: '包含不属于该用户的私有标签' });
       }
     }
+    const createdTagIds = await ensureUserPrivateTags(db, targetUserId, newTagNames);
+    validTagIds = [
+      ...validTagIds,
+      ...createdTagIds.map(id => parseInt(String(id).replace(/^u/, ''), 10)).filter(Boolean)
+    ];
 
     if (overwrite) {
       await db('image_tags')
@@ -242,9 +393,10 @@ router.post('/run/user-private', authMiddleware, async (req, res, next) => {
 // 立即标签 - 条件标签
 router.post('/run/condition', authMiddleware, async (req, res, next) => {
   try {
-    const { conditionIds, overwrite } = req.body;
-    const result = await conditionTagService.tagImagesByConditions(null, conditionIds, overwrite);
-    res.json({ message: '条件标签完成', ...result });
+    const { conditionIds, overwrite, force } = req.body;
+    const shouldForce = force === true || overwrite === true;
+    const result = await conditionTagService.tagImagesByConditions(null, conditionIds, shouldForce, { force: shouldForce });
+    res.json({ message: result.message || '条件标签完成', ...result });
   } catch (err) {
     next(err);
   }

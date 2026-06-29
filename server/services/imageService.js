@@ -73,6 +73,16 @@ function buildImageUrls(image) {
   };
 }
 
+async function attachAlbumName(image) {
+  if (!image?.album_id) {
+    image.album_name = null;
+    return image;
+  }
+  const album = await db('albums').where({ id: image.album_id }).select('name').first();
+  image.album_name = album?.name || null;
+  return image;
+}
+
 function splitTagFilters(tagIds) {
   const ids = tagIds || [];
   const systemTagIds = ids.filter(id => id === SYSTEM_TAG_IDS.untagged || id === SYSTEM_TAG_IDS.tagged);
@@ -122,7 +132,7 @@ async function getImages(options = {}) {
     page = 1, limit = 20,
     sort = 'created_at', order = 'desc',
     tagIds, albumId, orientation, search,
-    userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null,
+    userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, userGalleryOnly = false,
     internal = false
   } = options;
 
@@ -152,6 +162,8 @@ async function getImages(options = {}) {
       query = query.where({ uploader_id: userId });
     } else if (filterUserId) {
       query = query.where({ uploader_id: filterUserId });
+    } else if (userGalleryOnly) {
+      query = query.whereNotNull('uploader_id');
     } else if (isAdmin) {
       // 管理员默认看所有
     } else if (userId) {
@@ -165,6 +177,7 @@ async function getImages(options = {}) {
   if (albumId) {
     if (ownOnly && userId) query = query.where({ uploader_id: userId });
     else if (filterUserId) query = query.where({ uploader_id: filterUserId });
+    else if (userGalleryOnly) query = query.whereNotNull('uploader_id');
   }
   if (orientation) query = query.where({ orientation });
   if (search) query = query.where('filename', 'like', `%${search}%`);
@@ -197,6 +210,8 @@ async function getImages(options = {}) {
       countQuery = countQuery.where({ uploader_id: userId });
     } else if (filterUserId) {
       countQuery = countQuery.where({ uploader_id: filterUserId });
+    } else if (userGalleryOnly) {
+      countQuery = countQuery.whereNotNull('uploader_id');
     } else if (isAdmin) {
       // 管理员看所有
     } else if (userId) {
@@ -210,11 +225,21 @@ async function getImages(options = {}) {
   if (albumId) {
     if (ownOnly && userId) countQuery = countQuery.where({ uploader_id: userId });
     else if (filterUserId) countQuery = countQuery.where({ uploader_id: filterUserId });
+    else if (userGalleryOnly) countQuery = countQuery.whereNotNull('uploader_id');
   }
   countQuery = applyTagFilters(countQuery, tagIds);
   const [{ count }] = await countQuery;
 
   for (const image of images) {
+    await attachAlbumName(image);
+    if (image.uploader_id) {
+      const uploader = await db('users').where({ id: image.uploader_id }).select('username', 'avatar').first();
+      image.uploader_name = uploader?.username || `用户 ${image.uploader_id}`;
+      image.uploader_avatar = uploader?.avatar || null;
+    } else {
+      image.uploader_name = '系统导入';
+      image.uploader_avatar = null;
+    }
     const publicTags = await db('image_tags')
       .join('tags', 'image_tags.tag_id', 'tags.id')
       .where('image_tags.image_id', image.id)
@@ -242,6 +267,7 @@ async function getImageById(imageId, internal = false) {
   if (!image) return null;
 
   await db('images').where({ id: imageId }).increment('view_count', 1);
+  await attachAlbumName(image);
 
   image.tags = await db('image_tags')
     .join('tags', 'image_tags.tag_id', 'tags.id')

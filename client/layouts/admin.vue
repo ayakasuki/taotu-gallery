@@ -3,7 +3,7 @@
     <header class="admin-topbar">
       <NuxtLink to="/admin" class="admin-brand">
         <img v-if="logoUrl" :src="logoUrl" class="taotu-icon brand-icon" alt="" />
-        <span v-else class="brand-fallback">桃</span>
+        <span v-else-if="siteConfigReady" class="brand-fallback">桃</span>
         <span>{{ siteName }}</span>
         <small>管理后台</small>
       </NuxtLink>
@@ -17,12 +17,15 @@
         <NuxtLink to="/admin" class="topnav-link active">管理</NuxtLink>
       </nav>
 
-      <div class="admin-user">
-        <img src="/icons/nav/notification-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
-        <img v-if="avatarUrl" :src="avatarUrl" class="taotu-icon avatar" alt="" />
-        <span v-else class="avatar fallback">{{ username.slice(0, 1).toUpperCase() }}</span>
-        <span>{{ username }}</span>
-        <img src="/icons/nav/chevron-down-64x64.png" class="taotu-icon taotu-icon-16" alt="" />
+      <div class="admin-user-slot">
+        <NavNoticeUser
+          :is-logged-in="true"
+          :user="currentUserInfo"
+          :avatar-url="avatarUrl"
+          :fallback-ready="currentUserReady"
+          username-fallback="管理员"
+          @logout="handleLogout"
+        />
       </div>
     </header>
 
@@ -58,10 +61,21 @@
 
 <script setup>
 const api = useApi()
+const {
+  readSiteConfigCache,
+  writeSiteConfigCache,
+  readCurrentUserCache,
+  writeCurrentUserCache,
+  clearCurrentUserCache,
+  normalizeAssetUrl
+} = useUiCache()
 const username = ref('管理员')
 const siteName = ref('桃图智库')
 const logoUrl = ref('')
 const avatarUrl = ref('')
+const currentUserInfo = ref({ username: '管理员' })
+const siteConfigReady = ref(false)
+const currentUserReady = ref(false)
 
 const menuGroups = [
   {
@@ -69,8 +83,7 @@ const menuGroups = [
     items: [
       { to: '/admin', label: '概览', icon: '/icons/admin/overview-64x64.png' },
       { to: '/admin/images', label: '图片管理', icon: '/icons/admin/image-management-64x64.png' },
-      { to: '/admin/paths', label: '自定义路径', icon: '/icons/admin/custom-paths-64x64.png' },
-      { to: '/admin/database', label: '数据库', icon: '/icons/admin/database-64x64.png' }
+      { to: '/admin/paths', label: '综合配置', icon: '/icons/admin/custom-paths-64x64.png' }
     ]
   },
   {
@@ -84,54 +97,92 @@ const menuGroups = [
   {
     title: '用户与权限',
     items: [
-      { to: '/admin/users', label: '用户管理', icon: '/icons/admin/users-64x64.png' },
-      { to: '/admin/api', label: 'API 设置', icon: '/icons/admin/api-settings-64x64.png' }
+      { to: '/admin/users', label: '用户管理', icon: '/icons/admin/users-64x64.png' }
     ]
   },
   {
     title: '站点设置',
     items: [
-      { to: '/admin/gallery', label: '图库设置', icon: '/icons/admin/gallery-settings-64x64.png' },
-      { to: '/admin/site-config', label: '网站配置', icon: '/icons/admin/site-config-64x64.png' }
+      { to: '/admin/site-config', label: '网站配置', icon: '/icons/admin/site-config-64x64.png' },
+      { to: '/admin/announcements', label: '公告中心', icon: '/icons/admin/announcements-64x64.svg' }
     ]
   },
   {
     title: '运维工具',
     items: [
-      { to: '/admin/stats', label: '统计监控', icon: '/icons/admin/stats-64x64.png' },
-      { to: '/admin/backup', label: '备份恢复', icon: '/icons/admin/backup-64x64.png' },
-      { to: '/admin/cloud-sync', label: '云同步', icon: '/icons/admin/cloud-sync-64x64.png' }
+      { to: '/admin/stats', label: '运维监控', icon: '/icons/admin/stats-64x64.png' }
     ]
   }
 ]
 
-const normalizeAssetUrl = (url) => {
-  if (!url) return ''
-  if (/^https?:\/\//i.test(url)) return url
-  return `${useRuntimeConfig().public.apiBase || ''}${url}`
+const applySiteConfig = (siteConfig = {}) => {
+  siteName.value = siteConfig.siteName || '桃图智库'
+  logoUrl.value = normalizeAssetUrl(siteConfig.icon)
+  siteConfigReady.value = true
+}
+
+const applyCurrentUser = (currentUser = {}) => {
+  username.value = currentUser.username || currentUser.name || username.value
+  avatarUrl.value = normalizeAssetUrl(currentUser.avatar)
+  currentUserInfo.value = { ...currentUser, username: username.value }
+  currentUserReady.value = true
+}
+
+const handleSiteConfigUpdated = (event) => {
+  if (event.detail) applySiteConfig(event.detail)
+}
+
+const handleCurrentUserUpdated = (event) => {
+  if (event.detail) applyCurrentUser(event.detail)
 }
 
 onMounted(async () => {
+  const cachedSiteConfig = readSiteConfigCache()
+  if (cachedSiteConfig) applySiteConfig(cachedSiteConfig)
+  const cachedUser = readCurrentUserCache()
+  if (cachedUser) applyCurrentUser(cachedUser)
+  window.addEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
+  window.addEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
+
   const token = localStorage.getItem('jwt_token')
-  if (!token) return
+  if (!token) {
+    clearCurrentUserCache()
+    username.value = '管理员'
+    avatarUrl.value = ''
+    currentUserReady.value = true
+    return
+  }
   try {
     const payload = JSON.parse(atob(token.split('.')[1]))
-    username.value = payload.username || payload.name || '管理员'
+    if (!cachedUser || cachedUser.id !== payload.id) {
+      username.value = payload.username || payload.name || '管理员'
+      currentUserInfo.value = { ...payload, username: username.value }
+    }
   } catch {}
+  currentUserReady.value = !!cachedUser?.avatar
   try {
     const [siteConfig, me] = await Promise.all([
       api.get('/api/admin/site-config/public'),
       api.get('/api/admin/auth/me')
     ])
-    siteName.value = siteConfig.siteName || '桃图智库'
-    logoUrl.value = normalizeAssetUrl(siteConfig.logo || siteConfig.icon)
-    username.value = me.username || username.value
-    avatarUrl.value = normalizeAssetUrl(me.avatar)
-  } catch {}
+    applySiteConfig(siteConfig)
+    applyCurrentUser(me)
+    writeSiteConfigCache(siteConfig)
+    writeCurrentUserCache(me)
+  } catch {
+    currentUserReady.value = true
+  }
+})
+
+onBeforeUnmount(() => {
+  if (!import.meta.client) return
+  window.removeEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
+  window.removeEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
 })
 
 const handleLogout = () => {
   localStorage.removeItem('jwt_token')
+  clearCurrentUserCache()
   navigateTo('/login')
 }
 </script>
@@ -214,31 +265,10 @@ const handleLogout = () => {
   color: var(--taotu-pink);
 }
 
-.admin-user {
+.admin-user-slot {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 10px;
-  color: var(--taotu-text);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.avatar.fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-purple));
-  color: white;
-  font-size: 13px;
-  font-weight: 900;
 }
 
 .admin-body {
@@ -299,13 +329,27 @@ const handleLogout = () => {
   font-weight: 800;
   cursor: pointer;
   transition: all var(--taotu-transition);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .sidebar-link:hover,
 .sidebar-link.router-link-active,
 .sidebar-action:hover {
-  background: rgba(255, 240, 246, 0.9);
+  background: rgba(255, 255, 255, 1);
   color: var(--taotu-pink);
+}
+
+.sidebar-link:focus,
+.sidebar-link:focus-visible,
+.sidebar-action:focus,
+.sidebar-action:focus-visible {
+  outline: none;
+}
+
+.sidebar-link:active,
+.sidebar-action:active {
+  transform: scale(0.985);
 }
 
 .sidebar-footer {

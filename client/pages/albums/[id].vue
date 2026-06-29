@@ -89,7 +89,7 @@
               type="button"
               class="image-tile"
               :style="{ width: `${item.width}px` }"
-              @click="navigateTo(`/image/${item.image.id}`)"
+              @click="openAlbumImage(item.image.id)"
             >
               <img :src="imageUrl(item.image)" :alt="item.image.alt || item.image.filename || '图片'" loading="lazy" />
               <span class="view-chip">
@@ -106,7 +106,7 @@
             :key="img.id"
             type="button"
             class="image-tile"
-            @click="navigateTo(`/image/${img.id}`)"
+            @click="openAlbumImage(img.id)"
           >
             <img :src="imageUrl(img)" :alt="img.alt || img.filename || '图片'" loading="lazy" />
             <span class="view-chip">
@@ -250,6 +250,10 @@ const getAlbumCoverUrl = (target) => {
 }
 
 const imageUrl = (img) => normalizeAssetUrl(img.medium_url || img.thumb_url || img.url)
+
+const openAlbumImage = (id) => {
+  navigateTo({ path: '/image', query: { id, ablum_id: route.params.id } })
+}
 
 const formatDate = (value) => {
   if (!value) return '-'

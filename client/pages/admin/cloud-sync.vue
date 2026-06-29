@@ -16,7 +16,6 @@
           {{ syncing ? '同步中...' : '立即同步' }}
         </button>
       </div>
-      <p v-if="msg" class="result-msg" :class="{ error: isError }">{{ msg }}</p>
     </div>
     <div class="fluent-card" style="margin-top: var(--space-lg);">
       <h3>可同步内容</h3>
@@ -32,8 +31,9 @@
 
 <script setup>
 definePageMeta({ layout: 'admin' })
+const { showAdminToast } = useAdminToast()
 const config = reactive({ url: '', username: '', password: '', remotePath: '/gallery-sync/' })
-const msg = ref(''); const isError = ref(false); const testing = ref(false); const syncing = ref(false)
+const testing = ref(false); const syncing = ref(false)
 
 onMounted(async () => {
   try {
@@ -49,27 +49,27 @@ const saveConfig = async () => {
   try {
     const api = useApi()
     await api.put('/api/admin/cloud-sync/config', { ...config, configured: true })
-    msg.value = '配置已保存'; isError.value = false
-  } catch (err) { msg.value = '保存失败: ' + err.message; isError.value = true }
+    showAdminToast('配置已保存', 'success')
+  } catch (err) { showAdminToast('保存出错: ' + (err?.data?.error || err.message), 'error') }
 }
 
 const testConnection = async () => {
-  testing.value = true; msg.value = ''
+  testing.value = true
   try {
     const api = useApi()
     const data = await api.post('/api/admin/cloud-sync/test')
-    msg.value = data.message; isError.value = !data.success
-  } catch (err) { msg.value = '测试失败: ' + err.message; isError.value = true }
+    showAdminToast(data.message || (data.success ? '连接成功' : '连接失败'), data.success ? 'success' : 'error')
+  } catch (err) { showAdminToast('测试失败: ' + (err?.data?.error || err.message), 'error') }
   finally { testing.value = false }
 }
 
 const runSync = async () => {
-  syncing.value = true; msg.value = ''
+  syncing.value = true
   try {
     const api = useApi()
     const data = await api.post('/api/admin/cloud-sync/run')
-    msg.value = `同步完成: 上传 ${data.uploaded}, 下载 ${data.downloaded}`; isError.value = false
-  } catch (err) { msg.value = '同步失败: ' + err.message; isError.value = true }
+    showAdminToast(`同步完成: 上传 ${data.uploaded}, 下载 ${data.downloaded}`, 'success')
+  } catch (err) { showAdminToast('同步失败: ' + (err?.data?.error || err.message), 'error') }
   finally { syncing.value = false }
 }
 </script>

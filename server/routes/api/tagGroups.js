@@ -8,6 +8,14 @@ const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
+function tagIdVariants(id) {
+  const raw = String(id);
+  const variants = [id, raw];
+  if (/^\d+$/.test(raw)) variants.push(Number(raw));
+  if (/^u\d+$/i.test(raw)) variants.push(`u${parseInt(raw.slice(1), 10)}`);
+  return variants;
+}
+
 function resolveUser(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -38,8 +46,8 @@ router.get('/', async (req, res, next) => {
       const allSystemTags = await db('tags').select('id');
       const allUserTags = await db('user_tags').select('id');
       visibleTagIds = new Set([
-        ...allSystemTags.map(t => t.id),
-        ...allUserTags.map(t => t.id)
+        ...allSystemTags.flatMap(t => tagIdVariants(t.id)),
+        ...allUserTags.flatMap(t => tagIdVariants(`u${t.id}`))
       ]);
     } else if (userId) {
       // 普通用户：公共系统标签 + 自己的所有用户标签
@@ -48,8 +56,8 @@ router.get('/', async (req, res, next) => {
       }).select('id');
       const myUserTags = await db('user_tags').where({ user_id: userId }).select('id');
       visibleTagIds = new Set([
-        ...publicSystemTags.map(t => t.id),
-        ...myUserTags.map(t => t.id)
+        ...publicSystemTags.flatMap(t => tagIdVariants(t.id)),
+        ...myUserTags.flatMap(t => tagIdVariants(`u${t.id}`))
       ]);
     } else {
       // 未登录：只看公共系统标签 + 公共用户标签
@@ -58,14 +66,14 @@ router.get('/', async (req, res, next) => {
       }).select('id');
       const publicUserTags = await db('user_tags').where({ is_public: true }).select('id');
       visibleTagIds = new Set([
-        ...publicTags.map(t => t.id),
-        ...publicUserTags.map(t => t.id)
+        ...publicTags.flatMap(t => tagIdVariants(t.id)),
+        ...publicUserTags.flatMap(t => tagIdVariants(`u${t.id}`))
       ]);
     }
 
     // 过滤分组中的标签
     const filterTagIds = (tagIds) => {
-      return (tagIds || []).filter(id => visibleTagIds.has(id));
+      return (tagIds || []).filter(id => tagIdVariants(id).some(value => visibleTagIds.has(value)));
     };
 
     const filteredGroups = groupData.groups.map(group => ({

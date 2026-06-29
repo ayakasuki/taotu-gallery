@@ -30,6 +30,29 @@ function stringifyIds(ids) {
   return unique.length > 0 ? unique.map(id => `u${id}`).join(',') : null;
 }
 
+function normalizeTagName(name) {
+  return String(name || '').trim();
+}
+
+function createUserTagError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+async function assertUserTagNameAvailable(userId, name, excludeId = null) {
+  const normalizedName = normalizeTagName(name);
+  if (!normalizedName) throw createUserTagError('标签名不能为空');
+
+  const query = db('user_tags')
+    .where({ user_id: userId })
+    .whereRaw('LOWER(name) = LOWER(?)', [normalizedName]);
+  if (excludeId) query.whereNot({ id: excludeId });
+  const existing = await query.first();
+  if (existing) throw createUserTagError(`私有标签名「${normalizedName}」已存在，请换一个名称`, 409);
+  return normalizedName;
+}
+
 async function syncOwnedMutualGroup(userId, sourceId, mutualIds, sourceCombinable = true) {
   const ownedRows = await db('user_tags').where({ user_id: userId }).select('id', 'combinable', 'mutually_exclusive_with');
   const ownedIds = new Set(ownedRows.map(row => row.id));
@@ -101,12 +124,12 @@ router.get('/', authMiddleware, async (req, res, next) => {
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     const { name, display_name, combinable, mutually_exclusive_with } = req.body;
-    if (!name) return res.status(400).json({ error: '标签名不能为空' });
+    const normalizedName = await assertUserTagNameAvailable(req.user.id, name);
 
     const [id] = await db('user_tags').insert({
       user_id: req.user.id,
-      name,
-      display_name: display_name || name,
+      name: normalizedName,
+      display_name: display_name || normalizedName,
       combinable: combinable !== false,
       is_public: false,
       mutually_exclusive_with: null
@@ -114,9 +137,9 @@ router.post('/', authMiddleware, async (req, res, next) => {
     const mutualIds = parseMutualIds(mutually_exclusive_with, { requireUserPrefix: true });
     if (mutualIds.length > 0) await syncOwnedMutualGroup(req.user.id, id, mutualIds, combinable !== false);
     const saved = await db('user_tags').where({ id, user_id: req.user.id }).first();
-    res.json({ id, name, display_name: display_name || name, combinable: !!saved.combinable, mutually_exclusive_with: saved.mutually_exclusive_with });
+    res.json({ id, name: normalizedName, display_name: display_name || normalizedName, combinable: !!saved.combinable, mutually_exclusive_with: saved.mutually_exclusive_with });
   } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: '标签名已存在' });
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: '私有标签名已存在，请换一个名称' });
     next(err);
   }
 });
@@ -199,12 +222,17 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
   try {
     const tag = await db('user_tags').where({ id: req.params.id, user_id: req.user.id }).first();
     if (!tag) return res.status(404).json({ error: '标签不存在' });
+    const tagId = parseInt(req.params.id, 10);
+    const nextName = req.body.name !== undefined
+      ? await assertUserTagNameAvailable(req.user.id, req.body.name, tagId)
+      : tag.name;
 
     await db('user_tags').where({ id: req.params.id }).update({
+      name: nextName,
       display_name: req.body.display_name || tag.display_name,
       combinable: req.body.combinable !== undefined ? req.body.combinable : tag.combinable
     });
-    await syncOwnedMutualGroup(req.user.id, parseInt(req.params.id), parseMutualIds(req.body.mutually_exclusive_with, { requireUserPrefix: true }), req.body.combinable !== undefined ? req.body.combinable : tag.combinable);
+    await syncOwnedMutualGroup(req.user.id, tagId, parseMutualIds(req.body.mutually_exclusive_with, { requireUserPrefix: true }), req.body.combinable !== undefined ? req.body.combinable : tag.combinable);
     res.json({ message: '已更新' });
   } catch (err) { next(err); }
 });

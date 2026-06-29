@@ -3,7 +3,7 @@
     <div class="login-card fluent-card">
       <div class="brand-block">
         <img v-if="brandLogo" :src="brandLogo" class="brand-logo" alt="" />
-        <span v-else class="brand-logo fallback">桃</span>
+        <span v-else-if="brandReady" class="brand-logo fallback">桃</span>
         <h1 class="brand-name">{{ siteName }}</h1>
       </div>
       <h2 class="login-title">欢迎回来</h2>
@@ -18,8 +18,6 @@
         <label class="form-label">密码</label>
         <input v-model="form.password" type="password" class="fluent-input" placeholder="请输入密码" @keyup.enter="handleLogin" />
       </div>
-
-      <p v-if="error" class="error-msg">{{ error }}</p>
 
       <button class="fluent-btn fluent-btn-primary login-btn" @click="handleLogin" :disabled="loading">
         {{ loading ? '登录中...' : '登录' }}
@@ -105,11 +103,13 @@ definePageMeta({ layout: false })
 
 const api = useApi()
 const router = useRouter()
-const config = useRuntimeConfig()
+const { showAdminToast } = useAdminToast()
+const { readSiteConfigCache, writeSiteConfigCache, writeCurrentUserCache, normalizeAssetUrl } = useUiCache()
 
 const form = reactive({ username: '', password: '' })
 const siteName = ref('桃图智库')
 const brandLogo = ref('')
+const brandReady = ref(false)
 const error = ref('')
 const loading = ref(false)
 const showForgot = ref(false)
@@ -145,17 +145,27 @@ onBeforeUnmount(() => {
 const getErrorMessage = (err, fallback) => err?.data?.error || err?.message || fallback
 
 onMounted(async () => {
+  const cachedSiteConfig = readSiteConfigCache()
+  if (cachedSiteConfig) {
+    siteName.value = cachedSiteConfig.siteName || '桃图智库'
+    brandLogo.value = normalizeAssetUrl(cachedSiteConfig.icon)
+    brandReady.value = true
+  }
   try {
     const siteConfig = await api.get('/api/admin/site-config/public')
     siteName.value = siteConfig.siteName || '桃图智库'
-    const logo = siteConfig.logo || siteConfig.icon
-    brandLogo.value = logo ? `${config.public.apiBase || ''}${logo}` : ''
-  } catch {}
+    brandLogo.value = normalizeAssetUrl(siteConfig.icon)
+    brandReady.value = true
+    writeSiteConfigCache(siteConfig)
+  } catch {
+    brandReady.value = true
+  }
 })
 
 const handleLogin = async () => {
   if (!form.username || !form.password) {
     error.value = '请输入用户名和密码'
+    showAdminToast(error.value, 'error')
     return
   }
 
@@ -170,11 +180,13 @@ const handleLogin = async () => {
 
     if (data.token) {
       localStorage.setItem('jwt_token', data.token)
+      writeCurrentUserCache(data.user)
       if (data.user.role === 'admin') router.push('/admin')
       else router.push('/')
     }
   } catch (err) {
     error.value = err.data?.error || '登录失败，请检查用户名和密码'
+    showAdminToast(error.value, 'error')
   } finally {
     loading.value = false
   }

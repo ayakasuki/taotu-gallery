@@ -58,6 +58,13 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+async function registrationCapacityReached(siteConfig) {
+  const maxUsers = Number(siteConfig.registration?.maxUsers || 0);
+  if (!Number.isFinite(maxUsers) || maxUsers <= 0) return false;
+  const row = await db('users').where({ role: 'user' }).count('* as count').first();
+  return Number(row?.count || 0) >= maxUsers;
+}
+
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -73,6 +80,12 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[ch]));
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) return String(forwarded).split(',')[0].trim();
+  return req.ip || req.connection?.remoteAddress || '';
 }
 
 function buildCaptchaSvg(code) {
@@ -160,7 +173,14 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: '用户名或密码错误' });
     }
 
-    await db('users').where({ id: user.id }).update({ last_login_at: db.fn.now() });
+    if (user.is_disabled) {
+      return res.status(403).json({ error: '用户已被禁用，请咨询管理员' });
+    }
+
+    await db('users').where({ id: user.id }).update({
+      last_login_at: db.fn.now(),
+      last_login_ip: getClientIp(req)
+    });
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
@@ -170,7 +190,7 @@ router.post('/login', async (req, res, next) => {
 
     res.json({
       token,
-      user: { id: user.id, username: user.username, role: user.role, email: user.email }
+      user: { id: user.id, username: user.username, role: user.role, email: user.email, avatar: user.avatar || null }
     });
   } catch (err) {
     next(err);
@@ -196,6 +216,9 @@ router.post('/register-code', async (req, res, next) => {
     const siteConfig = await configService.readSiteConfig();
     if (!siteConfig.registration?.enabled) {
       return res.status(403).json({ error: '注册功能未开放' });
+    }
+    if (await registrationCapacityReached(siteConfig)) {
+      return res.status(403).json({ error: '注册用户数已达到上限' });
     }
     if (!siteConfig.registration?.emailVerification) {
       return res.status(400).json({ error: '当前未启用邮箱验证' });
@@ -243,6 +266,9 @@ router.post('/register', async (req, res, next) => {
     if (!siteConfig.registration?.enabled) {
       return res.status(403).json({ error: '注册功能未开放' });
     }
+    if (await registrationCapacityReached(siteConfig)) {
+      return res.status(403).json({ error: '注册用户数已达到上限' });
+    }
 
     await verifyCaptcha(captchaId, captchaCode);
 
@@ -283,7 +309,7 @@ router.post('/register', async (req, res, next) => {
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id, username, role: 'user', email: normalizedEmail || null } });
+    res.json({ token, user: { id, username, role: 'user', email: normalizedEmail || null, avatar: null } });
   } catch (err) {
     next(err);
   }

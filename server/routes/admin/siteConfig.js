@@ -11,6 +11,23 @@ const uploadsDir = path.resolve(__dirname, '../../../data/uploads');
 const tmpUploadDir = path.join(uploadsDir, 'tmp');
 if (!fs.existsSync(tmpUploadDir)) fs.mkdirSync(tmpUploadDir, { recursive: true });
 
+const defaultBackground = {
+  type: 'default',
+  value: '/site_bg.png',
+  blur: 0,
+  overlayTop: 'rgba(255, 255, 255, 0.08)',
+  overlayBottom: 'rgba(255, 246, 250, 0.42)'
+};
+
+function withDefaultBackground(background = {}) {
+  const merged = { ...defaultBackground, ...(background || {}) };
+  if (!merged.value) {
+    merged.type = 'default';
+    merged.value = defaultBackground.value;
+  }
+  return merged;
+}
+
 function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: '需要管理员权限' });
@@ -26,10 +43,10 @@ router.get('/public', async (req, res, next) => {
       siteName: siteConfig.siteName || '桃图智库',
       publicDomain: siteConfig.publicDomain || '',
       recordNumber: siteConfig.recordNumber || '',
-      registration: siteConfig.registration || { enabled: false, emailVerification: false },
-      background: siteConfig.background || { type: 'none', value: '' },
+      registration: siteConfig.registration || { enabled: false, emailVerification: false, maxUsers: 0 },
+      background: withDefaultBackground(siteConfig.background),
       icon: siteConfig.icon || null,
-      logo: siteConfig.logo || null,
+      logo: null,
       mediumSize: siteConfig.mediumSize || { width: 1500, height: 1500 }
     });
   } catch (err) { next(err); }
@@ -47,7 +64,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res, next) => {
 router.put('/', authMiddleware, requireAdmin, async (req, res, next) => {
   try {
     const siteConfig = await configService.readSiteConfig();
-    const updated = { ...siteConfig, ...req.body };
+    const updated = { ...siteConfig, ...req.body, logo: null };
     await configService.writeSiteConfig(updated);
     res.json({ message: '网站配置已更新' });
   } catch (err) { next(err); }
@@ -74,25 +91,10 @@ router.post('/upload-icon', authMiddleware, requireAdmin, multer({ dest: tmpUplo
 
     const siteConfig = await configService.readSiteConfig();
     siteConfig.icon = `/uploads/site_icon${ext}`;
+    siteConfig.logo = null;
     await configService.writeSiteConfig(siteConfig);
 
     res.json({ url: `/uploads/site_icon${ext}` });
-  } catch (err) { next(err); }
-});
-
-// 上传网站 Logo
-router.post('/upload-logo', authMiddleware, requireAdmin, multer({ dest: tmpUploadDir }).single('file'), async (req, res, next) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: '请选择文件' });
-    const ext = path.extname(req.file.originalname) || '.png';
-    const destPath = path.join(uploadsDir, `site_logo${ext}`);
-    fs.renameSync(req.file.path, destPath);
-
-    const siteConfig = await configService.readSiteConfig();
-    siteConfig.logo = `/uploads/site_logo${ext}`;
-    await configService.writeSiteConfig(siteConfig);
-
-    res.json({ url: `/uploads/site_logo${ext}` });
   } catch (err) { next(err); }
 });
 
@@ -106,7 +108,12 @@ router.post('/upload-bg', authMiddleware, requireAdmin, multer({ dest: tmpUpload
 
     const url = `/uploads/site_bg${ext}`;
     const siteConfig = await configService.readSiteConfig();
-    siteConfig.background = { type: 'upload', value: url };
+    siteConfig.background = {
+      ...defaultBackground,
+      ...(siteConfig.background || {}),
+      type: 'upload',
+      value: url
+    };
     await configService.writeSiteConfig(siteConfig);
 
     res.json({ url });

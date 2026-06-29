@@ -28,6 +28,26 @@ router.put('/config', authMiddleware, async (req, res, next) => {
   }
 });
 
+// 获取最近同步状态
+router.get('/status', authMiddleware, async (req, res, next) => {
+  try {
+    const status = await cloudSyncService.getSyncStatus();
+    res.json(status);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 获取最近同步日志
+router.get('/logs', authMiddleware, async (req, res, next) => {
+  try {
+    const logs = await cloudSyncService.getSyncLogs();
+    res.json({ logs });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 测试连接
 router.post('/test', authMiddleware, async (req, res, next) => {
   try {

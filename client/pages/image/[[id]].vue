@@ -24,31 +24,35 @@
         </NuxtLink>
       </div>
 
-      <div class="size-switcher" aria-label="图片尺寸">
-        <button
-          v-for="size in sizeOptions"
-          :key="size.key"
-          class="size-btn"
-          :class="{ active: currentSize === size.key }"
-          @click="currentSize = size.key"
-        >
-          <img :src="size.icon" class="detail-icon icon-16" alt="" />
-          <span>{{ size.label }}</span>
-        </button>
+      <div class="size-switcher-row">
+        <div class="size-switcher" aria-label="图片尺寸">
+          <button
+            v-for="size in sizeOptions"
+            :key="size.key"
+            class="size-btn"
+            :class="{ active: currentSize === size.key }"
+            @click="currentSize = size.key"
+          >
+            <img :src="size.icon" class="detail-icon icon-16" alt="" />
+            <span>{{ size.label }}</span>
+          </button>
+        </div>
       </div>
 
       <div class="detail-grid">
-        <aside class="thumb-rail">
-          <button
-            v-for="item in railImages"
-            :key="item.id"
-            class="thumb-card"
-            :class="{ active: Number(item.id) === Number(image.id) }"
-            @click="openImage(item.id)"
-          >
-            <img :src="imageSrc(item.thumb_url || item.medium_url || item.url)" :alt="item.filename || item.alt || '图片'" />
-          </button>
-          <button class="load-more-thumbs" :disabled="thumbLoading || !thumbHasMore" @click="loadMoreThumbs">
+        <aside ref="thumbRailRef" class="thumb-rail">
+          <TransitionGroup name="thumb-slide" tag="div" class="thumb-list">
+            <button
+              v-for="item in visibleRailImages"
+              :key="item.id"
+              class="thumb-card"
+              :class="{ active: Number(item.id) === Number(image.id) }"
+              @click="openImage(item.id)"
+            >
+              <img :src="imageSrc(item.thumb_url || item.medium_url || item.url)" :alt="item.filename || item.alt || '图片'" />
+            </button>
+          </TransitionGroup>
+          <button class="load-more-thumbs" :disabled="thumbLoading || !canAdvanceRail" @click="advanceThumbRail">
             <img src="/icons/image/load-more-64x64.png" class="detail-icon icon-16" alt="" />
           </button>
         </aside>
@@ -59,13 +63,18 @@
           </button>
           <section ref="viewerRef" class="image-viewer">
             <img
+              ref="imageRef"
               :src="currentImageUrl"
               :alt="imageTitle"
-              :style="{ transform: `scale(${zoom})` }"
+              :class="{ 'is-loaded': viewerImageLoaded, 'is-pannable': zoom > 1, 'is-panning': isPanning }"
+              :style="viewerImageStyle"
+              draggable="false"
+              @load="onViewerImageLoad"
+              @pointerdown="startPan"
               @dblclick="resetZoom"
             />
           </section>
-          <button class="side-nav next" :disabled="!nextImage" @click="goSibling(1)" title="下一张">
+          <button class="side-nav next" :disabled="!canGoNext" @click="goSibling(1)" title="下一张">
             <img src="/icons/image/next-64x64.png" class="detail-icon icon-22" alt="" />
           </button>
 
@@ -185,21 +194,37 @@
 
 <script setup>
 const route = useRoute()
+const router = useRouter()
 const config = useRuntimeConfig()
 const api = useApi()
 
 const image = ref(null)
 const loading = ref(true)
 const viewerRef = ref(null)
+const imageRef = ref(null)
+const thumbRailRef = ref(null)
 const zoom = ref(1)
 const currentSize = ref('full')
+const currentImageId = ref(null)
 const railImages = ref([])
+const railStartIndex = ref(0)
+const railVisibleCount = ref(7)
 const thumbPage = ref(1)
 const thumbTotal = ref(0)
 const thumbLoading = ref(false)
+const thumbEndReached = ref(false)
 const showAllTags = ref(false)
+const viewerImageLoaded = ref(false)
+const viewerReady = ref(false)
+const isPanning = ref(false)
+const pan = reactive({ x: 0, y: 0 })
 const tagPreviewCount = 5
-const thumbPageSize = 6
+const thumbFetchSize = 48
+const mobileRailMax = 8
+let railResizeObserver = null
+let panDrag = null
+let momentumFrame = 0
+let panVelocity = { x: 0, y: 0 }
 const sizeOptions = [
   { key: 'thumb', label: '缩略图', icon: '/icons/image/thumbnail-64x64.png' },
   { key: 'medium', label: '中等', icon: '/icons/image/medium-64x64.png' },
@@ -218,7 +243,14 @@ const currentImageUrl = computed(() => {
 })
 const tagList = computed(() => image.value?.tags || [])
 const visibleTags = computed(() => showAllTags.value ? tagList.value : tagList.value.slice(0, tagPreviewCount))
-const thumbHasMore = computed(() => railImages.value.length < thumbTotal.value)
+const thumbHasMore = computed(() => !thumbEndReached.value && railImages.value.length < thumbTotal.value)
+const visibleRailImages = computed(() => railImages.value.slice(railStartIndex.value, railStartIndex.value + railVisibleCount.value))
+const canAdvanceRail = computed(() => {
+  return railStartIndex.value < getMaxRailStart() || thumbHasMore.value
+})
+const viewerImageStyle = computed(() => ({
+  transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom.value})`
+}))
 
 const activeIndex = computed(() => railImages.value.findIndex(item => Number(item.id) === Number(image.value?.id)))
 const prevImage = computed(() => activeIndex.value > 0 ? railImages.value[activeIndex.value - 1] : null)
@@ -226,6 +258,7 @@ const nextImage = computed(() => {
   const idx = activeIndex.value
   return idx >= 0 && idx < railImages.value.length - 1 ? railImages.value[idx + 1] : null
 })
+const canGoNext = computed(() => !!nextImage.value || thumbHasMore.value)
 
 const orientationText = computed(() => {
   const map = { landscape: '横图', portrait: '竖图', square: '正方形' }
@@ -248,26 +281,69 @@ const embedRows = computed(() => {
   ]
 })
 
-watch(() => route.params.id, async () => {
-  await loadImage()
-})
-
 const imageSrc = (url) => {
   if (!url) return ''
   if (/^https?:\/\//i.test(url)) return url
   return `${config.public.apiBase || ''}${url}`
 }
 
-const loadImage = async () => {
-  loading.value = true
+const routeImageId = () => route.query.id || route.params.id
+const routeAlbumScopeId = () => {
+  const raw = route.query.ablum_id || route.query.album_id
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+const redirectLegacyPath = async () => {
+  if (!route.params.id || route.path === '/image') return false
+  await router.replace({ path: '/image', query: { ...route.query, id: String(route.params.id) } })
+  return true
+}
+
+const syncImageUrl = async (id) => {
+  if (!id || route.path !== '/image') return
+  if (String(route.query.id || '') === String(id)) return
+  await router.push({ path: '/image', query: { ...route.query, id: String(id) } })
+}
+
+const resetThumbRail = () => {
+  railImages.value = []
+  railStartIndex.value = 0
+  thumbPage.value = 1
+  thumbTotal.value = 0
+  thumbEndReached.value = false
+}
+
+const reloadThumbRail = async () => {
+  resetThumbRail()
+  await loadThumbs()
+}
+
+const selectImage = async (id, { updateUrl = true, align = 'visible' } = {}) => {
+  if (!id || Number(id) === Number(currentImageId.value)) {
+    await ensureImageInRail(id)
+    if (align === 'top') alignRailToActive('top')
+    else alignRailToActive('visible')
+    return
+  }
+  currentImageId.value = Number(id)
   showAllTags.value = false
+  viewerImageLoaded.value = false
   resetZoom()
+  if (!image.value) loading.value = true
   try {
-    image.value = await api.get(`/api/internal/images/${route.params.id}`)
-    ensureCurrentInRail()
+    const data = await api.get(`/api/internal/images/${id}`)
+    image.value = data
+    currentImageId.value = Number(data.id || id)
+    const foundInRail = await ensureImageInRail(currentImageId.value)
+    if (foundInRail) syncCurrentInRail()
+    else prependCurrentToRail()
+    alignRailToActive(align)
+    if (updateUrl) await syncImageUrl(currentImageId.value)
   } catch (err) {
     console.error('获取图片详情失败:', err)
-    image.value = null
+    if (!image.value) image.value = null
   } finally {
     loading.value = false
   }
@@ -277,16 +353,36 @@ const loadThumbs = async ({ append = false } = {}) => {
   if (thumbLoading.value) return
   thumbLoading.value = true
   try {
-    const data = await api.get('/api/internal/images', {
+    if (!append) thumbEndReached.value = false
+    const beforeLength = railImages.value.length
+    const params = {
       page: thumbPage.value,
-      limit: thumbPageSize,
+      limit: thumbFetchSize,
       sort: 'created_at',
       order: 'desc'
-    })
-    thumbTotal.value = Number(data.total) || 0
+    }
+    const albumScopeId = routeAlbumScopeId()
+    if (albumScopeId) params.album = albumScopeId
+    const data = await api.get('/api/internal/images', params)
     const incoming = data.images || []
-    railImages.value = append ? mergeImages(railImages.value, incoming) : mergeImages(incoming, [])
-    ensureCurrentInRail()
+    const apiTotal = Number(data.total)
+    const hasReliableTotal = Number.isFinite(apiTotal) && apiTotal > 0
+    const nextImages = append ? mergeImages(railImages.value, incoming) : mergeImages(incoming, [])
+
+    railImages.value = nextImages
+    thumbTotal.value = hasReliableTotal ? apiTotal : nextImages.length
+
+    const addedCount = nextImages.length - (append ? beforeLength : 0)
+    const reachedByShortPage = incoming.length < thumbFetchSize
+    const reachedByTotal = hasReliableTotal && nextImages.length >= apiTotal
+    const reachedByNoGrowth = append && addedCount <= 0
+    if (reachedByShortPage || reachedByTotal || reachedByNoGrowth) {
+      thumbEndReached.value = true
+      if (!hasReliableTotal || nextImages.length < apiTotal) thumbTotal.value = nextImages.length
+    }
+
+    syncCurrentInRail()
+    clampRailStart()
   } catch (err) {
     console.error('加载缩略图列表失败:', err)
   } finally {
@@ -294,10 +390,52 @@ const loadThumbs = async ({ append = false } = {}) => {
   }
 }
 
-const loadMoreThumbs = async () => {
-  if (!thumbHasMore.value || thumbLoading.value) return
-  thumbPage.value += 1
-  await loadThumbs({ append: true })
+const ensureRailIndexLoaded = async (index) => {
+  while (railImages.value.length <= index && thumbHasMore.value && !thumbLoading.value) {
+    const beforeLength = railImages.value.length
+    thumbPage.value += 1
+    await loadThumbs({ append: true })
+    if (railImages.value.length <= beforeLength) break
+  }
+}
+
+const ensureRailWindowLoaded = async (startIndex) => {
+  await ensureRailIndexLoaded(startIndex + railVisibleCount.value - 1)
+}
+
+const ensureImageInRail = async (id) => {
+  if (!id) return false
+  while (railImages.value.findIndex(item => Number(item.id) === Number(id)) < 0 && thumbHasMore.value && !thumbLoading.value) {
+    const beforeLength = railImages.value.length
+    thumbPage.value += 1
+    await loadThumbs({ append: true })
+    if (railImages.value.length <= beforeLength) break
+  }
+  return railImages.value.some(item => Number(item.id) === Number(id))
+}
+
+const getMaxRailStart = () => Math.max(0, railImages.value.length - railVisibleCount.value)
+
+const getAdvanceRailStart = () => {
+  const idx = activeIndex.value
+  if (idx < 0) return railStartIndex.value
+  return railStartIndex.value < idx ? idx : idx + 1
+}
+
+const advanceThumbRail = async () => {
+  if (thumbLoading.value || !canAdvanceRail.value) return
+  const idx = activeIndex.value
+  if (idx < 0) {
+    await ensureRailWindowLoaded(railStartIndex.value)
+    return
+  }
+  const targetStart = getAdvanceRailStart()
+  await ensureRailWindowLoaded(targetStart)
+  railStartIndex.value = Math.min(targetStart, getMaxRailStart())
+  clampRailStart()
+  if (railStartIndex.value <= idx) return
+  const target = railImages.value[railStartIndex.value]
+  if (target) await selectImage(target.id, { updateUrl: true, align: 'top' })
 }
 
 const mergeImages = (base, extra) => {
@@ -309,33 +447,168 @@ const mergeImages = (base, extra) => {
   })
 }
 
-const ensureCurrentInRail = () => {
+const syncCurrentInRail = () => {
   if (!image.value) return
-  if (!railImages.value.some(item => Number(item.id) === Number(image.value.id))) {
-    railImages.value = [image.value, ...railImages.value]
+  const existingIndex = railImages.value.findIndex(item => Number(item.id) === Number(image.value.id))
+  if (existingIndex >= 0) {
+    railImages.value = railImages.value.map((item, index) => index === existingIndex ? { ...item, ...image.value } : item)
   }
 }
 
-const openImage = (id) => {
-  if (Number(id) === Number(route.params.id)) return
-  navigateTo(`/image/${id}`)
+const prependCurrentToRail = () => {
+  if (!image.value || railImages.value.some(item => Number(item.id) === Number(image.value.id))) return
+  const albumScopeId = routeAlbumScopeId()
+  if (albumScopeId && Number(image.value.album_id) !== albumScopeId) return
+  railImages.value = [image.value, ...railImages.value]
+  railStartIndex.value = 0
 }
 
-const goSibling = (direction) => {
-  const target = direction < 0 ? prevImage.value : nextImage.value
-  if (target) openImage(target.id)
+const clampRailStart = () => {
+  const maxStart = Math.max(0, railImages.value.length - railVisibleCount.value)
+  railStartIndex.value = Math.max(0, Math.min(railStartIndex.value, maxStart))
+}
+
+const alignRailToActive = (mode = 'visible') => {
+  const idx = activeIndex.value
+  if (idx < 0) return
+  if (mode === 'top') {
+    railStartIndex.value = idx
+  } else if (idx < railStartIndex.value) {
+    railStartIndex.value = idx
+  } else if (idx >= railStartIndex.value + railVisibleCount.value) {
+    railStartIndex.value = idx - railVisibleCount.value + 1
+  }
+  clampRailStart()
+}
+
+const openImage = async (id) => {
+  if (Number(id) === Number(currentImageId.value)) return
+  await selectImage(id, { updateUrl: true, align: 'visible' })
+}
+
+const goSibling = async (direction) => {
+  const idx = activeIndex.value
+  if (idx < 0) return
+  const targetIndex = idx + direction
+  if (direction > 0) await ensureRailIndexLoaded(targetIndex)
+  const target = railImages.value[targetIndex]
+  if (target) await selectImage(target.id, { updateUrl: true, align: 'visible' })
 }
 
 const zoomIn = () => {
   zoom.value = Math.min(3, Number((zoom.value + 0.1).toFixed(2)))
+  nextTick(() => setPan(pan.x, pan.y))
 }
 
 const zoomOut = () => {
   zoom.value = Math.max(0.3, Number((zoom.value - 0.1).toFixed(2)))
+  nextTick(() => setPan(pan.x, pan.y))
 }
 
 function resetZoom() {
+  cancelMomentum()
   zoom.value = 1
+  pan.x = 0
+  pan.y = 0
+}
+
+const clampPan = (x, y) => {
+  if (zoom.value <= 1 || !viewerRef.value || !imageRef.value) return { x: 0, y: 0 }
+  const viewerRect = viewerRef.value.getBoundingClientRect()
+  const baseWidth = imageRef.value.offsetWidth || imageRef.value.naturalWidth || 0
+  const baseHeight = imageRef.value.offsetHeight || imageRef.value.naturalHeight || 0
+  const scaledWidth = baseWidth * zoom.value
+  const scaledHeight = baseHeight * zoom.value
+  const maxX = Math.max(0, (scaledWidth - viewerRect.width) / 2)
+  const maxY = Math.max(0, (scaledHeight - viewerRect.height) / 2)
+  return {
+    x: Math.max(-maxX, Math.min(maxX, x)),
+    y: Math.max(-maxY, Math.min(maxY, y))
+  }
+}
+
+const setPan = (x, y) => {
+  const next = clampPan(x, y)
+  pan.x = next.x
+  pan.y = next.y
+}
+
+const cancelMomentum = () => {
+  if (momentumFrame) cancelAnimationFrame(momentumFrame)
+  momentumFrame = 0
+}
+
+const startMomentum = () => {
+  cancelMomentum()
+  let vx = panVelocity.x
+  let vy = panVelocity.y
+  const step = () => {
+    if (Math.abs(vx) < 0.08 && Math.abs(vy) < 0.08) {
+      momentumFrame = 0
+      return
+    }
+    const beforeX = pan.x
+    const beforeY = pan.y
+    setPan(pan.x + vx, pan.y + vy)
+    if (pan.x === beforeX) vx *= -0.18
+    if (pan.y === beforeY) vy *= -0.18
+    vx *= 0.92
+    vy *= 0.92
+    momentumFrame = requestAnimationFrame(step)
+  }
+  momentumFrame = requestAnimationFrame(step)
+}
+
+const movePan = (event) => {
+  if (!panDrag) return
+  event.preventDefault()
+  const now = performance.now()
+  const dx = event.clientX - panDrag.startX
+  const dy = event.clientY - panDrag.startY
+  setPan(panDrag.originX + dx, panDrag.originY + dy)
+  const dt = Math.max(1, now - panDrag.lastTime)
+  panVelocity = {
+    x: ((event.clientX - panDrag.lastX) / dt) * 16,
+    y: ((event.clientY - panDrag.lastY) / dt) * 16
+  }
+  panDrag.lastX = event.clientX
+  panDrag.lastY = event.clientY
+  panDrag.lastTime = now
+}
+
+const endPan = () => {
+  if (!panDrag) return
+  panDrag = null
+  isPanning.value = false
+  window.removeEventListener('pointermove', movePan)
+  window.removeEventListener('pointerup', endPan)
+  window.removeEventListener('pointercancel', endPan)
+  if (zoom.value > 1) startMomentum()
+}
+
+const startPan = (event) => {
+  if (zoom.value <= 1) return
+  event.preventDefault()
+  cancelMomentum()
+  isPanning.value = true
+  panVelocity = { x: 0, y: 0 }
+  panDrag = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: pan.x,
+    originY: pan.y,
+    lastX: event.clientX,
+    lastY: event.clientY,
+    lastTime: performance.now()
+  }
+  window.addEventListener('pointermove', movePan, { passive: false })
+  window.addEventListener('pointerup', endPan)
+  window.addEventListener('pointercancel', endPan)
+}
+
+const onViewerImageLoad = () => {
+  viewerImageLoaded.value = true
+  nextTick(() => setPan(pan.x, pan.y))
 }
 
 const toggleFullscreen = async () => {
@@ -402,9 +675,84 @@ const tagTone = (index, tag) => {
   return tones[Math.abs(seed) % tones.length]
 }
 
+const updateRailVisibleCount = () => {
+  if (!import.meta.client) return
+  if (window.innerWidth <= 900) {
+    railVisibleCount.value = Math.max(1, Math.min(railImages.value.length || mobileRailMax, mobileRailMax))
+    clampRailStart()
+    return
+  }
+  const thumbSize = 88
+  const thumbGap = 10
+  const railHeight = thumbRailRef.value?.clientHeight || 745
+  const listHeight = thumbRailRef.value?.querySelector?.('.thumb-list')?.clientHeight || 0
+  const estimatedListHeight = railHeight - 24 - 34 - thumbGap
+  const available = Math.max(thumbSize, listHeight || estimatedListHeight)
+  railVisibleCount.value = Math.max(1, Math.floor((available + thumbGap + 2) / (thumbSize + thumbGap)))
+  clampRailStart()
+}
+
+const observeThumbRail = () => {
+  if (!import.meta.client || !('ResizeObserver' in window) || !thumbRailRef.value) return
+  railResizeObserver?.disconnect()
+  railResizeObserver = new ResizeObserver(updateRailVisibleCount)
+  railResizeObserver.observe(thumbRailRef.value)
+  const listEl = thumbRailRef.value.querySelector?.('.thumb-list')
+  if (listEl) railResizeObserver.observe(listEl)
+}
+
+const handlePopState = async () => {
+  const id = routeImageId()
+  if (id && Number(id) !== Number(currentImageId.value)) await selectImage(id, { updateUrl: false, align: 'visible' })
+}
+
+watch(() => [route.query.id, route.params.id, route.path, route.query.ablum_id, route.query.album_id], async (_next, previous) => {
+  if (!viewerReady.value) return
+  if (await redirectLegacyPath()) return
+  const previousScope = previous ? Number(previous[3] || previous[4] || 0) || null : null
+  if (routeAlbumScopeId() !== previousScope) await reloadThumbRail()
+  const id = routeImageId()
+  if (id && Number(id) !== Number(currentImageId.value)) await selectImage(id, { updateUrl: false, align: 'visible' })
+  else if (id) await ensureImageInRail(id)
+})
+
+watch(currentImageUrl, () => {
+  viewerImageLoaded.value = false
+  pan.x = 0
+  pan.y = 0
+})
+
+watch(() => image.value?.id, () => {
+  nextTick(() => {
+    observeThumbRail()
+    updateRailVisibleCount()
+  })
+})
+
+watch(railImages, () => nextTick(updateRailVisibleCount), { deep: true })
+
 onMounted(async () => {
-  await loadThumbs()
-  await loadImage()
+  await redirectLegacyPath()
+  await reloadThumbRail()
+  window.addEventListener('resize', updateRailVisibleCount)
+  window.addEventListener('popstate', handlePopState)
+  const id = routeImageId()
+  if (id) await selectImage(id, { updateUrl: false, align: 'visible' })
+  else loading.value = false
+  await nextTick()
+  observeThumbRail()
+  updateRailVisibleCount()
+  viewerReady.value = true
+})
+
+onBeforeUnmount(() => {
+  railResizeObserver?.disconnect()
+  window.removeEventListener('resize', updateRailVisibleCount)
+  window.removeEventListener('popstate', handlePopState)
+  window.removeEventListener('pointermove', movePan)
+  window.removeEventListener('pointerup', endPan)
+  window.removeEventListener('pointercancel', endPan)
+  cancelMomentum()
 })
 </script>
 
@@ -433,7 +781,7 @@ onMounted(async () => {
 }
 
 .detail-shell {
-  position: relative;
+  position: fixed;
   z-index: 1;
   min-height: 100vh;
   padding: 26px clamp(18px, 1.8vw, 34px) 36px;
@@ -510,13 +858,24 @@ onMounted(async () => {
   border-radius: 50%;
 }
 
+.size-switcher-row {
+  display: grid;
+  grid-template-columns: 114px minmax(0, 745px) minmax(320px, 372px);
+  column-gap: clamp(24px, 3.8vw, 78px);
+  width: min(100%, 1840px);
+  margin: 0 auto 28px;
+  justify-content: space-between;
+}
+
 .size-switcher {
   width: fit-content;
   display: flex;
+  grid-column: 2;
   align-items: center;
   justify-content: center;
+  justify-self: center;
   gap: 3px;
-  margin: 0 auto 28px;
+  margin: 0;
   padding: 5px;
   border: 1px solid rgba(255,255,255,0.72);
   border-radius: 10px;
@@ -551,26 +910,40 @@ onMounted(async () => {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: 114px minmax(620px, 1fr) 372px;
-  column-gap: 78px;
+  grid-template-columns: 114px minmax(0, 745px) minmax(320px, 372px);
+  column-gap: clamp(24px, 3.8vw, 78px);
   row-gap: 24px;
   width: min(100%, 1840px);
   margin: 0 auto;
-  align-items: start;
+  align-items: stretch;
+  justify-content: space-between;
 }
 
 .thumb-rail {
-  min-height: 656px;
+  height: min(745px, calc(100vh - 188px));
+  max-height: 745px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
   border-radius: 12px;
+  overflow: hidden;
+}
+
+.thumb-list {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
 }
 
 .thumb-card {
   width: 88px;
   height: 88px;
+  flex: 0 0 88px;
   padding: 0;
   border: 2px solid transparent;
   border-radius: 10px;
@@ -592,13 +965,34 @@ onMounted(async () => {
   box-shadow: 0 0 0 3px rgba(248,95,154,0.16), 0 10px 24px rgba(248,95,154,0.18);
 }
 
+.thumb-slide-move,
+.thumb-slide-enter-active,
+.thumb-slide-leave-active {
+  transition: transform 0.24s ease, opacity 0.2s ease;
+}
+
+.thumb-slide-enter-from {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.thumb-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-16px);
+}
+
+.thumb-slide-leave-active {
+  position: absolute;
+}
+
 .load-more-thumbs {
   width: 34px;
   height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin: auto auto 0;
+  flex: 0 0 34px;
+  margin: 0 auto;
   border: 1px solid rgba(218, 224, 239, 0.86);
   border-radius: 50%;
   background: rgba(255,255,255,0.72);
@@ -613,10 +1007,14 @@ onMounted(async () => {
 .viewer-column {
   position: relative;
   min-width: 0;
+  width: min(100%, 745px);
 }
 
 .image-viewer {
-  min-height: min(70vh, 760px);
+  width: min(100%, 745px);
+  height: min(745px, calc(100vh - 188px));
+  max-height: 745px;
+  min-height: 420px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -625,7 +1023,8 @@ onMounted(async () => {
   border-radius: 12px;
   background: rgba(255,255,255,0.46);
   box-shadow: 0 16px 46px rgba(81, 91, 124, 0.1);
-  overflow: auto;
+  overflow: hidden;
+  touch-action: none;
 }
 
 .image-viewer:fullscreen {
@@ -635,13 +1034,28 @@ onMounted(async () => {
 
 .image-viewer img {
   max-width: 100%;
-  max-height: calc(100vh - 260px);
+  max-height: 100%;
   display: block;
   object-fit: contain;
   border-radius: 8px;
   transform-origin: center center;
-  transition: transform 0.16s ease;
+  opacity: 0;
+  user-select: none;
+  transition: transform 0.16s ease, opacity 0.16s ease;
   box-shadow: 0 18px 46px rgba(45, 52, 82, 0.18);
+}
+
+.image-viewer img.is-loaded {
+  opacity: 1;
+}
+
+.image-viewer img.is-pannable {
+  cursor: grab;
+}
+
+.image-viewer img.is-panning {
+  cursor: grabbing;
+  transition: none;
 }
 
 .image-viewer:fullscreen img {
@@ -730,9 +1144,12 @@ onMounted(async () => {
 }
 
 .info-column {
+  height: min(745px, calc(100vh - 188px));
+  max-height: 745px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
 }
 
 .detail-card {
@@ -1029,15 +1446,20 @@ onMounted(async () => {
 }
 
 @media (max-width: 1450px) {
+  .size-switcher-row,
   .detail-grid {
-    grid-template-columns: 100px minmax(0, 1fr);
-    column-gap: 76px;
+    grid-template-columns: 100px minmax(0, 745px);
+    column-gap: clamp(22px, 5vw, 76px);
   }
 
   .info-column {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 
   .side-nav.prev { left: 12px; }
@@ -1058,15 +1480,32 @@ onMounted(async () => {
     flex-direction: column;
   }
 
+  .size-switcher-row {
+    grid-template-columns: 1fr;
+    column-gap: 0;
+  }
+
+  .size-switcher {
+    grid-column: 1;
+  }
+
   .detail-grid {
     grid-template-columns: 1fr;
     column-gap: 0;
   }
 
   .thumb-rail {
+    width: 100%;
+    height: auto;
     min-height: 0;
+    max-height: none;
     flex-direction: row;
     overflow-x: auto;
+  }
+
+  .thumb-list {
+    flex-direction: row;
+    overflow: visible;
   }
 
   .load-more-thumbs {
@@ -1079,7 +1518,9 @@ onMounted(async () => {
   }
 
   .image-viewer {
-    min-height: 54vh;
+    width: 100%;
+    height: min(64vh, 745px);
+    min-height: 360px;
   }
 }
 </style>
