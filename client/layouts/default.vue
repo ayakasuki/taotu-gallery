@@ -1,37 +1,38 @@
 <template>
   <div class="taotu-page" :style="pageStyle">
     <div class="taotu-shell">
-      <header class="site-header">
-        <div class="brand-block">
-          <NuxtLink to="/" class="brand-link">
-            <img v-if="brandLogoUrl" :src="brandLogoUrl" class="taotu-icon brand-icon" alt="" />
-            <span v-else-if="showBrandFallback" class="brand-fallback">桃</span>
-            <span>{{ siteName }}</span>
-          </NuxtLink>
-        </div>
+      <header class="site-header" :class="{ 'site-header-transparent': useTransparentNav }">
+        <div class="nav-frame" :style="navFrameStyle">
+          <div class="brand-block">
+            <NuxtLink to="/" class="brand-link">
+              <img v-if="brandLogoUrl" :src="brandLogoUrl" class="taotu-icon brand-icon" alt="" />
+              <span v-else-if="showBrandFallback" class="brand-fallback">桃</span>
+              <span>{{ siteName }}</span>
+            </NuxtLink>
+          </div>
 
-        <nav class="nav-links" aria-label="主导航">
-          <NuxtLink v-for="item in visibleNavItems" :key="item.to" :to="item.to" class="nav-link">
-            <img :src="item.icon" class="taotu-icon taotu-icon-20" alt="" />
-            <span>{{ item.label }}</span>
-          </NuxtLink>
-        </nav>
+          <nav class="nav-links" aria-label="主导航">
+            <NuxtLink v-for="item in visibleNavItems" :key="item.to" :to="item.to" class="nav-link">
+              <span>{{ item.label }}</span>
+            </NuxtLink>
+          </nav>
 
-        <div class="header-actions">
-          <NavNoticeUser
-            v-if="isLoggedIn"
-            :is-logged-in="isLoggedIn"
-            :user="currentUser"
-            :avatar-url="userAvatarUrl"
-            :fallback-ready="showUserFallback"
-            username-fallback="用户"
-            @logout="handleLogout"
-          />
+          <div class="header-actions">
+            <NavNoticeUser
+              v-if="isLoggedIn"
+              :is-logged-in="isLoggedIn"
+              :user="currentUser"
+              :avatar-url="userAvatarUrl"
+              :fallback-ready="showUserFallback"
+              username-fallback="用户"
+              @logout="handleLogout"
+            />
 
-          <NuxtLink v-else to="/login" class="taotu-btn taotu-btn-primary login-btn">
-            <img src="/icons/nav/login-64x64.png" class="taotu-icon taotu-icon-18" alt="" />
-            登录
-          </NuxtLink>
+            <NuxtLink v-else to="/login" class="taotu-btn taotu-btn-primary login-btn">
+              <img src="/icons/nav/login-64x64.png" class="taotu-icon taotu-icon-18" alt="" />
+              登录
+            </NuxtLink>
+          </div>
         </div>
       </header>
 
@@ -81,6 +82,9 @@ const defaultSiteBg = '/site_bg.png'
 const hasCustomBackground = ref(false)
 const siteConfigReady = ref(false)
 const currentUserReady = ref(false)
+const isGalleryAtTop = ref(true)
+const navFrameWidth = ref(null)
+let navResizeObserver = null
 
 const isDefaultBackground = (background = {}) => {
   const value = String(background?.value || '')
@@ -101,6 +105,48 @@ const brandLogoUrl = computed(() => normalizeAssetUrl(iconUrl.value))
 const userAvatarUrl = computed(() => normalizeAssetUrl(currentUser.value?.avatar))
 const showBrandFallback = computed(() => siteConfigReady.value && !brandLogoUrl.value)
 const showUserFallback = computed(() => currentUserReady.value && !userAvatarUrl.value)
+const isGalleryRoute = computed(() => route.path === '/')
+const useTransparentNav = computed(() => isGalleryRoute.value && isGalleryAtTop.value)
+const navFrameStyle = computed(() => (
+  navFrameWidth.value ? { '--nav-frame-width': `${navFrameWidth.value}px` } : {}
+))
+
+const getNavFrameTarget = () => {
+  if (!import.meta.client) return null
+  if (route.path === '/') return document.querySelector('.gallery-page')
+  if (route.path.startsWith('/albums')) return document.querySelector('.albums-page') || document.querySelector('.album-detail')
+  if (route.path === '/api-docs') return document.querySelector('.api-docs-page')
+  if (route.path === '/upload') return document.querySelector('.upload-page')
+  if (route.path === '/dashboard') return document.querySelector('.dashboard-page.page-container')
+  return document.querySelector('.main-content')
+}
+
+const updateNavFrameWidth = () => {
+  if (!import.meta.client) return
+  const target = getNavFrameTarget()
+  const rect = target?.getBoundingClientRect()
+  navFrameWidth.value = rect?.width > 0 ? Math.round(rect.width) : null
+}
+
+const observeNavFrameTarget = () => {
+  if (!import.meta.client) return
+  if (navResizeObserver) {
+    navResizeObserver.disconnect()
+    navResizeObserver = null
+  }
+  const target = getNavFrameTarget()
+  if (target && 'ResizeObserver' in window) {
+    navResizeObserver = new ResizeObserver(updateNavFrameWidth)
+    navResizeObserver.observe(target)
+  }
+  updateNavFrameWidth()
+}
+
+const updateNavScrollState = () => {
+  if (!import.meta.client) return
+  const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+  isGalleryAtTop.value = scrollTop <= 2
+}
 
 const pageStyle = computed(() => {
   const blurPx = Math.round(Math.min(100, Math.max(0, bgBlur.value)) * 0.4 * 10) / 10
@@ -214,6 +260,10 @@ onMounted(async () => {
   if (cachedSiteConfig && !siteConfigReady.value) applySiteConfig(cachedSiteConfig)
   window.addEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
   window.addEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
+  window.addEventListener('scroll', updateNavScrollState, { passive: true })
+  window.addEventListener('resize', updateNavFrameWidth, { passive: true })
+  updateNavScrollState()
+  nextTick(observeNavFrameTarget)
   checkAuth()
   await loadSiteConfig()
 })
@@ -222,9 +272,21 @@ onBeforeUnmount(() => {
   if (!import.meta.client) return
   window.removeEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
   window.removeEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
+  window.removeEventListener('scroll', updateNavScrollState)
+  window.removeEventListener('resize', updateNavFrameWidth)
+  if (navResizeObserver) {
+    navResizeObserver.disconnect()
+    navResizeObserver = null
+  }
 })
 
-watch(() => route.path, () => checkAuth())
+watch(() => route.path, () => {
+  checkAuth()
+  nextTick(() => {
+    updateNavScrollState()
+    observeNavFrameTarget()
+  })
+})
 
 const handleLogout = () => {
   localStorage.removeItem('jwt_token')
@@ -241,16 +303,37 @@ const handleLogout = () => {
   position: sticky;
   top: 0;
   z-index: 100;
+  min-height: 50px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.46);
+  box-shadow: 0 10px 24px rgba(85, 74, 118, 0.06);
+  backdrop-filter: blur(12px) saturate(280%);
+  -webkit-backdrop-filter: blur(12px) saturate(280%);
+  transition:
+    background-color 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease,
+    backdrop-filter 0.28s ease,
+    -webkit-backdrop-filter 0.28s ease;
+}
+
+.nav-frame {
+  width: min(calc(100% - 36px), var(--nav-frame-width, 1500px));
+  min-height: 50px;
+  margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
   align-items: center;
   gap: 18px;
-  min-height: 50px;
-  padding: 0 28px;
-  background: rgba(255, 255, 255, 0.82);
-  border-bottom: 1px solid rgba(238, 210, 226, 0.62);
-  box-shadow: 0 10px 24px rgba(85, 74, 118, 0.06);
-  backdrop-filter: blur(22px);
+}
+
+.site-header.site-header-transparent {
+  background: rgba(255, 255, 255, 0);
+  border-bottom-color: transparent;
+  box-shadow: 0 0 0 rgba(85, 74, 118, 0);
+  backdrop-filter: blur(0) saturate(100%);
+  -webkit-backdrop-filter: blur(0) saturate(100%);
 }
 
 .brand-link {
@@ -262,6 +345,7 @@ const handleLogout = () => {
   font-size: 24px;
   font-weight: 900;
   letter-spacing: 0;
+  padding: 0px 35px;
 }
 
 .brand-icon {
@@ -294,11 +378,10 @@ const handleLogout = () => {
 .nav-link {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   min-width: 35px;
   max-height: 35px;
   justify-content: center;
-  padding: 10px 14px;
+  padding: 10px 16px;
   border-radius: 100vh;
   color: var(--taotu-text);
   font-size: 14px;
@@ -309,6 +392,22 @@ const handleLogout = () => {
 .nav-link:hover,
 .nav-link.router-link-active {
   background: linear-gradient(160deg, rgb(255, 143, 163), rgb(245, 109, 134));
+  color: #ffffff;
+}
+
+.site-header.site-header-transparent .nav-link {
+  background: transparent;
+  color: #ffffff;
+  text-shadow: 0 2px 14px rgba(35, 32, 52, 0.28);
+}
+
+.site-header.site-header-transparent .nav-link.router-link-active {
+  background: transparent;
+  color: #ffffff;
+}
+
+.site-header.site-header-transparent .nav-link:hover {
+  background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
 }
 
@@ -343,10 +442,11 @@ const handleLogout = () => {
 }
 
 @media (max-width: 980px) {
-  .site-header {
+  .nav-frame {
     grid-template-columns: 1fr;
     justify-items: stretch;
-    padding: 14px;
+    width: min(calc(100% - 28px), var(--nav-frame-width, 100%));
+    padding: 14px 0;
   }
 
   .brand-block,
