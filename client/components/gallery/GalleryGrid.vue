@@ -5,6 +5,7 @@
         v-for="(image, index) in images"
         :key="image.id"
         class="waterfall-item"
+        :class="{ 'is-ready': Boolean(waterfallItems[index]) }"
         :style="getWaterfallItemStyle(index)"
       >
         <ImageCard :image="image" :mode="safeMode" @click="$emit('select', image)" />
@@ -39,6 +40,7 @@ const gap = 10
 const minGridColumnWidth = 190
 const minWaterfallColumnWidth = 200
 let resizeObserver = null
+let layoutRaf = 0
 
 const safeMode = computed(() => props.mode === 'waterfall' ? 'waterfall' : 'grid')
 
@@ -55,6 +57,7 @@ const getDisplayAspect = (image) => {
 }
 
 const calculateWaterfall = () => {
+  layoutRaf = 0
   const width = waterfallRef.value?.clientWidth || 0
   if (!width || props.images.length === 0) {
     waterfallItems.value = []
@@ -77,11 +80,14 @@ const calculateWaterfall = () => {
   waterfallHeight.value = Math.max(0, ...heights)
 }
 
-const scheduleLayout = () => requestAnimationFrame(calculateWaterfall)
+const scheduleLayout = () => {
+  if (layoutRaf) cancelAnimationFrame(layoutRaf)
+  layoutRaf = requestAnimationFrame(calculateWaterfall)
+}
 
 const getWaterfallItemStyle = (index) => {
   const item = waterfallItems.value[index]
-  if (!item) return { opacity: 0 }
+  if (!item) return { opacity: 0, visibility: 'hidden', transform: 'translate3d(0,0,0)' }
   return {
     width: item.width + 'px',
     height: item.height + 'px',
@@ -97,6 +103,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (resizeObserver) resizeObserver.disconnect()
+  if (layoutRaf) cancelAnimationFrame(layoutRaf)
 })
 
 watch(() => props.images, async () => { await nextTick(); scheduleLayout() }, { deep: true })
@@ -106,7 +113,15 @@ watch(safeMode, async () => { await nextTick(); scheduleLayout() })
 <style scoped>
 .gallery-grid { width: 100%; }
 .waterfall-layout { position: relative; width: 100%; min-height: 220px; }
-.waterfall-item { position: absolute; left: 0; top: 0; transition: transform 0.22s ease, opacity 0.18s ease; }
+.waterfall-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  will-change: opacity;
+  transition: opacity 0.22s ease;
+}
+.waterfall-item.is-ready { opacity: 1; }
 .empty-state, .loading-state {
   min-height: 240px;
   display: flex;

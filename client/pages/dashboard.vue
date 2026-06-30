@@ -1686,10 +1686,11 @@ const buildPageItems = (current, total) => {
 .overview-main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 384px;
+  align-items: stretch;
   gap: 16px;
 }
 .recent-panel {
-  min-height: 438px;
+  min-height: 540px;
   padding: 16px;
 }
 .panel-title-row {
@@ -1773,6 +1774,7 @@ const buildPageItems = (current, total) => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 540px;
 }
 .side-card {
   padding: 18px;
@@ -1866,20 +1868,24 @@ const buildPageItems = (current, total) => {
   background: linear-gradient(90deg, #f66fa3, #a984ff);
 }
 .account-summary-card {
-  min-height: 188px;
+  flex: 1;
+  min-height: 206px;
+  display: flex;
+  flex-direction: column;
 }
 .summary-row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   align-items: center;
-  min-height: 32px;
+  flex: 1;
+  min-height: 34px;
   border-bottom: 1px solid rgba(218, 224, 236, 0.72);
   color: #8a92a5;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
 }
 .summary-row:first-of-type {
-  margin-top: 15px;
+  margin-top: 12px;
 }
 .summary-row strong {
   display: flex;
@@ -1887,6 +1893,7 @@ const buildPageItems = (current, total) => {
   justify-content: flex-end;
   gap: 8px;
   color: #6b748a;
+  font-size: 13px;
   font-weight: 900;
   text-align: right;
   min-width: 0;
@@ -1895,8 +1902,8 @@ const buildPageItems = (current, total) => {
   color: #51596f;
 }
 .summary-avatar {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

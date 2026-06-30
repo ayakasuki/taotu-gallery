@@ -182,7 +182,7 @@
             v-for="(img, index) in images"
             :key="img.id"
             class="gallery-item-wrapper"
-            :class="{ selected: selectedIds.includes(img.id) }"
+            :class="{ selected: selectedIds.includes(img.id), ready: Boolean(waterfallItems[index]) }"
             :style="getItemStyle(img, index)"
             @click="handleItemClick(img)"
             @pointerdown="startLongPress(img)"
@@ -190,10 +190,10 @@
             @pointerleave="cancelLongPress"
             @pointercancel="cancelLongPress"
           >
-            <div class="select-checkbox" v-if="gallerySource === 'mine'" @click.stop="toggleSelect(img.id)">
+            <div class="select-checkbox" v-if="waterfallItems[index] && gallerySource === 'mine'" @click.stop="toggleSelect(img.id)">
               <span class="native-check" :class="{ checked: selectedIds.includes(img.id) }"></span>
             </div>
-            <ImageCard :image="img" :mode="displayMode" :showInfo="true" />
+            <ImageCard v-if="waterfallItems[index]" :image="img" :mode="displayMode" :showInfo="true" />
           </div>
         </div>
 
@@ -269,6 +269,8 @@ const pageSize = 30
 const loadMoreRef = ref(null)
 let infiniteObserver = null
 let resizeObserver = null
+let layoutRaf = 0
+let loadMoreCheckRaf = 0
 let longPressTimer = null
 let longPressTriggered = false
 
@@ -318,6 +320,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (resizeObserver) resizeObserver.disconnect()
   if (infiniteObserver) infiniteObserver.disconnect()
+  if (layoutRaf) cancelAnimationFrame(layoutRaf)
+  if (loadMoreCheckRaf) cancelAnimationFrame(loadMoreCheckRaf)
   cancelLongPress()
 })
 
@@ -433,6 +437,12 @@ const loadMore = async () => {
   await fetchImages(params)
   await nextTick()
   scheduleLayout()
+}
+
+const checkLoadMoreInView = () => {
+  if (!import.meta.client || loading.value || !hasMore.value || !loadMoreRef.value) return
+  const rect = loadMoreRef.value.getBoundingClientRect()
+  if (rect.top <= window.innerHeight + 560 && rect.bottom >= -560) loadMore()
 }
 
 const switchSource = (source) => {
@@ -590,16 +600,34 @@ const calculateWaterfallLayout = () => {
 }
 
 const scheduleLayout = () => {
-  requestAnimationFrame(() => calculateWaterfallLayout())
+  if (layoutRaf) cancelAnimationFrame(layoutRaf)
+  layoutRaf = requestAnimationFrame(() => {
+    layoutRaf = 0
+    calculateWaterfallLayout()
+    if (loadMoreCheckRaf) cancelAnimationFrame(loadMoreCheckRaf)
+    loadMoreCheckRaf = requestAnimationFrame(() => {
+      loadMoreCheckRaf = 0
+      checkLoadMoreInView()
+    })
+  })
 }
 
 const getItemStyle = (img, index) => {
   const item = waterfallItems.value[index]
-  if (!item) return { opacity: 0 }
+  if (!item) {
+    return {
+      opacity: 0,
+      visibility: 'hidden',
+      pointerEvents: 'none',
+      transform: 'translate3d(0,0,0)'
+    }
+  }
   return {
     position: 'absolute',
     width: item.width + 'px',
     height: item.height + 'px',
+    opacity: 1,
+    visibility: 'visible',
     transform: 'translate3d(' + item.left + 'px,' + item.top + 'px,0)'
   }
 }
@@ -1102,8 +1130,10 @@ const moveToAlbum = async () => {
   left: 0;
   top: 0;
   min-width: 0;
-  transition: transform 0.22s ease, opacity 0.18s ease;
   touch-action: manipulation;
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: 190px 190px;
 }
 
 .gallery-item-wrapper.selected {

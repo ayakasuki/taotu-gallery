@@ -39,7 +39,7 @@ router.get('/overview', authMiddleware, async (req, res, next) => {
         .where({ uploader_id: user.id })
         .select('id', 'filename', 'width', 'height', 'size_bytes', 'hash_path', 'created_at')
         .orderBy('created_at', 'desc')
-        .limit(15)
+        .limit(25)
     ]);
 
     const usedBytes = toNumber(storage.used);
