@@ -7,6 +7,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const imageService = require('../../services/imageService');
+const imageProcessor = require('../../utils/imageProcessor');
 const db = require('../../db');
 const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConflict');
 
@@ -147,12 +148,11 @@ router.get('/random', async (req, res, next) => {
       let filePath;
 
       if (useMedium) {
-        const ext = path.extname(image.path);
-        const baseName = path.basename(image.path, ext);
-        const dirName = path.dirname(image.path);
-        filePath = path.resolve(__dirname, '../../..', dirName, '.thumbs', `${baseName}_medium${ext}`);
-        if (!fs.existsSync(filePath)) {
-          filePath = path.resolve(__dirname, '../../..', image.path);
+        const realPath = path.resolve(__dirname, '../../..', image.path);
+        filePath = imageProcessor.getExistingThumbnailPath(realPath, 'medium').find(candidate => fs.existsSync(candidate)) || realPath;
+        if (filePath === realPath && fs.existsSync(realPath)) {
+          await imageProcessor.generateDerivedThumbnails(realPath).catch(() => {});
+          filePath = imageProcessor.getExistingThumbnailPath(realPath, 'medium').find(candidate => fs.existsSync(candidate)) || realPath;
         }
       } else {
         filePath = path.resolve(__dirname, '../../..', image.path);

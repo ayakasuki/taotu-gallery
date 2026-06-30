@@ -43,6 +43,29 @@
           <img src="/icons/actions/search-64x64.png" alt="" />
           搜索
         </button>
+
+        <div v-if="selectedIds.length > 0" class="batch-action-wrap" @mouseenter="batchPopoverOpen = true" @mouseleave="batchPopoverOpen = false">
+          <button type="button" class="search-btn batch-action-btn" @focus="batchPopoverOpen = true" @click="batchPopoverOpen = !batchPopoverOpen">
+            <img src="/icons/actions/settings-64x64.png" alt="" />
+            批量操作
+          </button>
+          <div v-if="batchPopoverOpen" class="batch-popover" @mouseenter="batchPopoverOpen = true">
+            <button type="button" class="batch-delete-btn" @click="deleteSelectedImages">
+              <img src="/icons/actions/trash-64x64.png" alt="" />
+              批量删除已选 {{ selectedIds.length }} 张
+            </button>
+            <div class="batch-public-card">
+              <strong>批量公开</strong>
+              <span>将已选图片统一设为公开或不公开</span>
+              <div class="batch-switch-row">
+                <button type="button" class="public-switch" :class="{ active: selectedImagesPublicState }" @click="setSelectedImagesPublic(!selectedImagesPublicState)">
+                  <i></i>
+                </button>
+                <small>{{ selectedImagesPublicState ? '设为公共图片' : '设为不公开图片' }}</small>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="image-table-shell">
@@ -235,6 +258,18 @@
         </footer>
       </section>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      title="删除图片"
+      :message="deleteDialog.message"
+      description="此操作不可恢复，图片记录和标签关联会被删除。"
+      :effects="deleteDialog.effects"
+      :avatar-text="deleteDialog.avatarText"
+      :loading="deleteDialog.loading"
+      @cancel="closeDeleteDialog"
+      @confirm="confirmDeleteImage"
+    />
   </div>
 </template>
 
@@ -263,6 +298,8 @@ const tagFilterOpen = ref(false)
 const users = ref([])
 const albums = ref([])
 const selectedIds = ref([])
+const batchPopoverOpen = ref(false)
+const deleteDialog = reactive({ show: false, target: null, targets: [], mode: 'single', message: '', avatarText: '图', loading: false, effects: [] })
 
 const editingImage = ref(null)
 const editTagIds = ref([])
@@ -297,6 +334,10 @@ const selectedPrivateTags = computed(() => allPrivateTagOptions.value.filter(tag
 const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / Number(pageSize.value || 50))))
 const pageItems = computed(() => buildPageItems(page.value, totalPages.value))
 const allCurrentSelected = computed(() => images.value.length > 0 && images.value.every(img => selectedIds.value.includes(img.id)))
+const selectedImagesPublicState = computed(() => {
+  const selectedImages = images.value.filter(img => selectedIds.value.includes(img.id))
+  return selectedImages.length > 0 && selectedImages.every(img => !!img.is_public)
+})
 const editImageOwnerName = computed(() => editingImage.value?.uploader_name || editUserTagOwnerName.value)
 
 onMounted(async () => {
@@ -569,13 +610,67 @@ async function togglePublic(img) {
 }
 
 async function deleteImage(img) {
-  if (!confirm(`确定删除图片 "${img.filename}"？`)) return
+  deleteDialog.show = true
+  deleteDialog.target = img
+  deleteDialog.targets = []
+  deleteDialog.mode = 'single'
+  deleteDialog.message = `确定删除图片「${img.filename}」吗？`
+  deleteDialog.avatarText = '图'
+  deleteDialog.effects = [
+    '图片记录会从图库中移除',
+    '该图片已有的平台标签和私有标签关联会同步清理',
+    '上传图片源文件会按后端既有规则删除，本地扫描图片不删除原始文件'
+  ]
+}
+
+function deleteSelectedImages() {
+  if (selectedIds.value.length === 0) return
+  batchPopoverOpen.value = false
+  deleteDialog.show = true
+  deleteDialog.target = null
+  deleteDialog.targets = [...selectedIds.value]
+  deleteDialog.mode = 'batch'
+  deleteDialog.message = `确定删除选中的 ${selectedIds.value.length} 张图片吗？`
+  deleteDialog.avatarText = String(selectedIds.value.length)
+  deleteDialog.effects = [
+    '选中图片记录会从图库中移除',
+    '这些图片已有的平台标签和私有标签关联会同步清理',
+    '上传图片源文件会按后端既有规则删除，本地扫描图片不删除原始文件'
+  ]
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.target = null
+  deleteDialog.targets = []
+  deleteDialog.mode = 'single'
+}
+
+async function confirmDeleteImage() {
+  const img = deleteDialog.target
+  if (deleteDialog.loading) return
+  deleteDialog.loading = true
   try {
-    await api.del(`/api/admin/images/${img.id}`)
+    if (deleteDialog.mode === 'batch') {
+      const ids = [...deleteDialog.targets]
+      for (const id of ids) await api.del(`/api/admin/images/${id}`)
+      selectedIds.value = []
+      showAdminToast(`已删除 ${ids.length} 张图片`, 'success')
+    } else {
+      if (!img) return
+      await api.del(`/api/admin/images/${img.id}`)
+      showAdminToast('图片已删除', 'success')
+    }
     await loadImages(page.value)
-    showAdminToast('图片已删除', 'success')
+    deleteDialog.show = false
+    deleteDialog.target = null
+    deleteDialog.targets = []
+    deleteDialog.mode = 'single'
   } catch (err) {
     showAdminToast('删除失败: ' + (err.data?.error || err.message), 'error')
+  } finally {
+    deleteDialog.loading = false
   }
 }
 
@@ -587,6 +682,22 @@ function toggleSelect(id) {
 
 function toggleSelectAllCurrent() {
   selectedIds.value = allCurrentSelected.value ? [] : images.value.map(img => img.id)
+}
+
+async function setSelectedImagesPublic(isPublic) {
+  if (selectedIds.value.length === 0) return
+  batchPopoverOpen.value = false
+  let success = 0
+  try {
+    for (const id of selectedIds.value) {
+      await api.put(`/api/admin/images/${id}`, { is_public: !!isPublic })
+      success++
+    }
+    images.value = images.value.map(img => selectedIds.value.includes(img.id) ? { ...img, is_public: !!isPublic } : img)
+    showAdminToast(`已${isPublic ? '公开' : '取消公开'} ${success} 张图片`, 'success')
+  } catch (err) {
+    showAdminToast('批量公开操作失败: ' + (err.data?.error || err.message), 'error')
+  }
 }
 
 function onPageSizeChange() {
@@ -730,7 +841,7 @@ function tagToneById(id) {
 .image-filter-row {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(126px, 0.56fr) minmax(180px, 1fr) auto auto;
+  grid-template-columns: auto minmax(126px, 0.42fr) minmax(120px, 0.72fr) auto auto auto;
   align-items: center;
   gap: 10px;
   min-height: 0;
@@ -740,7 +851,7 @@ function tagToneById(id) {
 }
 
 .image-filter-row.has-user-filter {
-  grid-template-columns: auto minmax(118px, 0.45fr) minmax(126px, 0.5fr) minmax(170px, 1fr) auto auto;
+  grid-template-columns: auto minmax(108px, 0.34fr) minmax(118px, 0.38fr) minmax(110px, 0.58fr) auto auto auto;
 }
 
 .scope-tabs {
@@ -883,6 +994,96 @@ function tagToneById(id) {
   color: white;
   box-shadow: 0 12px 24px rgba(244, 95, 147, 0.22);
   cursor: pointer;
+}
+
+.batch-action-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-bottom: 12px;
+  margin-bottom: -12px;
+}
+
+.batch-action-btn {
+  min-width: 112px;
+}
+
+.batch-popover {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  z-index: 30;
+  width: 248px;
+  padding: 12px;
+  border: 1px solid rgba(255, 210, 228, 0.72);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 20px 48px rgba(92, 80, 118, 0.16);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.batch-popover::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  right: 34px;
+  width: 12px;
+  height: 12px;
+  border-left: 1px solid rgba(255, 210, 228, 0.72);
+  border-top: 1px solid rgba(255, 210, 228, 0.72);
+  background: rgba(255,255,255,0.96);
+  transform: rotate(45deg);
+}
+
+.batch-delete-btn {
+  width: 100%;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 111, 157, 0.26);
+  border-radius: 10px;
+  background: rgba(255, 241, 247, 0.92);
+  color: #f45f93;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.batch-delete-btn img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
+.batch-public-card {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid rgba(226, 230, 241, 0.78);
+  border-radius: 12px;
+  background: rgba(250, 251, 255, 0.78);
+}
+
+.batch-public-card strong {
+  color: #4d5870;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.batch-public-card span,
+.batch-public-card small {
+  color: #8792a8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.batch-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .image-table-shell {
@@ -1571,10 +1772,10 @@ button:active {
 
 @media (max-width: 1320px) {
   .image-filter-row {
-    grid-template-columns: 1fr 126px minmax(120px, 1fr) auto auto;
+    grid-template-columns: 1fr 112px minmax(96px, 0.65fr) auto auto auto;
   }
   .image-filter-row.has-user-filter {
-    grid-template-columns: 1fr 112px 120px minmax(110px, 1fr) auto auto;
+    grid-template-columns: 1fr 96px 106px minmax(82px, 0.55fr) auto auto auto;
   }
   .scope-tabs {
     grid-template-columns: repeat(4, minmax(68px, 1fr));

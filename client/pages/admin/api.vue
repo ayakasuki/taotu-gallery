@@ -24,6 +24,17 @@
         <button class="fluent-btn fluent-btn-secondary" @click="copyToken">复制</button>
       </div>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      title="确认删除 Token"
+      message="删除此 API Token？"
+      :effects="['使用该 Token 的外部请求会立即失效']"
+      avatar-text="T"
+      :loading="deleteDialog.loading"
+      @confirm="confirmDeleteToken"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -32,6 +43,7 @@ definePageMeta({ layout: 'admin' })
 const tokens = ref([])
 const newLabel = ref('')
 const newToken = ref('')
+const deleteDialog = reactive({ show: false, tokenId: null, loading: false })
 
 onMounted(() => loadTokens())
 
@@ -54,12 +66,27 @@ const createToken = async () => {
 }
 
 const deleteToken = async (id) => {
-  if (!confirm('确定删除此 Token？')) return
+  deleteDialog.show = true
+  deleteDialog.tokenId = id
+}
+
+const closeDeleteDialog = () => {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.tokenId = null
+}
+
+const confirmDeleteToken = async () => {
+  if (!deleteDialog.tokenId || deleteDialog.loading) return
+  deleteDialog.loading = true
   try {
     const api = useApi()
-    await api.del(`/api/admin/api/tokens/${id}`)
+    await api.del(`/api/admin/api/tokens/${deleteDialog.tokenId}`)
     await loadTokens()
+    deleteDialog.loading = false
+    closeDeleteDialog()
   } catch (err) { alert('删除失败: ' + err.message) }
+  finally { deleteDialog.loading = false }
 }
 
 const copyToken = async () => {

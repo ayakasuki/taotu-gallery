@@ -133,6 +133,17 @@
         </footer>
       </section>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      title="确认删除公告"
+      :message="deleteDialog.message"
+      :effects="deleteDialog.effects"
+      avatar-text="告"
+      :loading="deleteDialog.loading"
+      @confirm="confirmDeleteAnnouncement"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -157,6 +168,7 @@ const pageSize = 10
 const total = ref(0)
 const editorOpen = ref(false)
 const editingId = ref(null)
+const deleteDialog = reactive({ show: false, payload: null, message: '', effects: [], loading: false })
 const form = reactive({
   title: '',
   subtitle: '',
@@ -260,13 +272,33 @@ async function publishDraft(item) {
 }
 
 async function deleteAnnouncement(item) {
-  if (!confirm(`确定删除公告「${item.title}」吗？删除后用户通知栏会同步移除。`)) return
+  deleteDialog.show = true
+  deleteDialog.payload = item
+  deleteDialog.message = `删除公告「${item.title}」？`
+  deleteDialog.effects = ['用户通知栏会同步移除', '已读状态记录会随公告清理']
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.payload = null
+  deleteDialog.effects = []
+}
+
+async function confirmDeleteAnnouncement() {
+  if (!deleteDialog.payload || deleteDialog.loading) return
+  deleteDialog.loading = true
+  const item = deleteDialog.payload
   try {
     const data = await api.del(`/api/admin/announcements/${item.id}`)
     showAdminToast(data.message || '公告已删除', 'success')
     await loadAnnouncements()
+    deleteDialog.loading = false
+    closeDeleteDialog()
   } catch (err) {
     showAdminToast('删除失败: ' + (err.data?.error || err.message), 'error')
+  } finally {
+    deleteDialog.loading = false
   }
 }
 

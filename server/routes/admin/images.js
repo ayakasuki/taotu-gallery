@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const config = require('../../config');
 const logger = require('../../config/logger');
+const imageProcessor = require('../../utils/imageProcessor');
 
 const router = express.Router();
 
@@ -56,12 +57,9 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
       const fullPath = path.resolve(config.projectRoot, image.path);
       try {
         await fs.unlink(fullPath);
-        const ext = path.extname(image.path);
-        const baseName = path.basename(image.path, ext);
-        const dirName = path.dirname(image.path);
-        const thumbDir = path.resolve(config.projectRoot, dirName, '.thumbs');
-        await fs.unlink(path.join(thumbDir, `${baseName}_thumb${ext}`)).catch(() => {});
-        await fs.unlink(path.join(thumbDir, `${baseName}_medium${ext}`)).catch(() => {});
+        for (const thumbPath of imageProcessor.getExistingThumbnailPath(fullPath, 'thumb')) await fs.unlink(thumbPath).catch(() => {});
+        for (const mediumPath of imageProcessor.getExistingThumbnailPath(fullPath, 'medium')) await fs.unlink(mediumPath).catch(() => {});
+        await imageProcessor.removeDerivedThumbnailsForImage(fullPath).catch(() => {});
       } catch (err) {
         logger.warn(`删除文件失败: ${err.message}`);
       }

@@ -271,8 +271,9 @@ const orientationText = computed(() => {
 })
 
 const embedRows = computed(() => {
-  const codes = image.value?.embed_codes?.full || {}
-  const source = codes.source || fullImageUrl.value
+  const sizeKey = currentSize.value === 'thumb' ? 'thumb' : currentSize.value === 'medium' ? 'medium' : 'full'
+  const codes = image.value?.embed_codes?.[sizeKey] || {}
+  const source = codes.source || currentImageUrl.value || fullImageUrl.value
   return [
     { key: 'source', label: '源地址（URL）', value: source },
     { key: 'html', label: 'HTML', value: codes.html || `<img src="${source}" alt="${imageTitle.value}" />` },

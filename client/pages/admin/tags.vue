@@ -420,6 +420,18 @@
         </footer>
       </section>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      :title="deleteDialog.title"
+      :message="deleteDialog.message"
+      :description="deleteDialog.description"
+      :effects="deleteDialog.effects"
+      :avatar-text="deleteDialog.avatarText"
+      :loading="deleteDialog.loading"
+      @confirm="confirmDeleteDialog"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -451,6 +463,17 @@ const selectedTagIds = ref([])
 const showTagModal = ref(false)
 const editingTag = ref(null)
 const tagForm = reactive({ name: '', display_name: '', combinable: true, mutually_exclusive_with: '' })
+const deleteDialog = reactive({
+  show: false,
+  type: '',
+  payload: null,
+  title: '确认删除',
+  message: '',
+  description: '此操作不可恢复，请谨慎操作。',
+  effects: [],
+  avatarText: '删',
+  loading: false
+})
 
 const expandedGroups = ref([])
 const showGroupModal = ref(false)
@@ -669,7 +692,17 @@ async function setSelectedTagsPublic() {
 async function deleteSelectedTags() {
   const selected = selectedTagObjects()
   if (selected.length === 0) return
-  if (!confirm(`确定删除选中的 ${selected.length} 个标签？关联的图片标签也会被清除。`)) return
+  openDeleteDialog({
+    type: 'selected-tags',
+    payload: selected,
+    title: '确认删除标签',
+    message: `删除选中的 ${selected.length} 个标签？`,
+    effects: ['关联的图片标签会同步清除', '删除后标签列表不可直接恢复'],
+    avatarText: String(selected.length)
+  })
+}
+
+async function deleteSelectedTagsNow(selected) {
   try {
     for (const tag of selected) {
       await deleteTagRequest(tag)
@@ -869,7 +902,17 @@ async function deleteTagRequest(tag) {
 }
 
 async function deleteTag(tag) {
-  if (!confirm(`确定删除标签 "${tag.display_name || tag.name}"？关联的图片标签也会被清除。`)) return
+  openDeleteDialog({
+    type: 'tag',
+    payload: tag,
+    title: '确认删除标签',
+    message: `删除标签 "${tag.display_name || tag.name}"？`,
+    effects: ['关联的图片标签会同步清除', '删除后该标签不可直接恢复'],
+    avatarText: '签'
+  })
+}
+
+async function deleteTagNow(tag) {
   try {
     await deleteTagRequest(tag)
     await fetchAdminTags()
@@ -984,7 +1027,17 @@ async function saveGroupModal() {
 }
 
 async function deleteGroup(group) {
-  if (!confirm(`确定删除分组 "${group.name}"？`)) return
+  openDeleteDialog({
+    type: 'group',
+    payload: group,
+    title: '确认删除分组',
+    message: `删除分组 "${group.name}"？`,
+    effects: ['仅删除分组结构，不删除标签本身', '分组内子分组关系会同步移除'],
+    avatarText: '组'
+  })
+}
+
+async function deleteGroupNow(group) {
   try {
     await api.del(`/api/admin/tag-groups/${group.id}`)
     await loadGroups()
@@ -995,13 +1048,57 @@ async function deleteGroup(group) {
 }
 
 async function deleteSubgroup(group, subgroup) {
-  if (!confirm(`确定删除子分组 "${subgroup.name}"？`)) return
+  openDeleteDialog({
+    type: 'subgroup',
+    payload: { group, subgroup },
+    title: '确认删除子分组',
+    message: `删除子分组 "${subgroup.name}"？`,
+    effects: ['仅删除子分组结构，不删除标签本身'],
+    avatarText: '组'
+  })
+}
+
+async function deleteSubgroupNow(group, subgroup) {
   try {
     await api.del(`/api/admin/tag-groups/${group.id}/subgroup/${subgroup.sid}`)
     await loadGroups()
     showAdminToast('子分组已删除', 'success')
   } catch (err) {
     showAdminToast('删除失败: ' + (err.data?.error || err.message), 'error')
+  }
+}
+
+function openDeleteDialog(options) {
+  deleteDialog.show = true
+  deleteDialog.type = options.type
+  deleteDialog.payload = options.payload
+  deleteDialog.title = options.title
+  deleteDialog.message = options.message
+  deleteDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
+  deleteDialog.effects = options.effects || []
+  deleteDialog.avatarText = options.avatarText || '删'
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.type = ''
+  deleteDialog.payload = null
+  deleteDialog.effects = []
+}
+
+async function confirmDeleteDialog() {
+  if (deleteDialog.loading) return
+  deleteDialog.loading = true
+  try {
+    if (deleteDialog.type === 'selected-tags') await deleteSelectedTagsNow(deleteDialog.payload || [])
+    else if (deleteDialog.type === 'tag') await deleteTagNow(deleteDialog.payload)
+    else if (deleteDialog.type === 'group') await deleteGroupNow(deleteDialog.payload)
+    else if (deleteDialog.type === 'subgroup') await deleteSubgroupNow(deleteDialog.payload.group, deleteDialog.payload.subgroup)
+    deleteDialog.loading = false
+    closeDeleteDialog()
+  } finally {
+    deleteDialog.loading = false
   }
 }
 

@@ -39,6 +39,19 @@
         总计 {{ verifyResult.total }} 张图片，可读 {{ verifyResult.readable }}，不可读 {{ verifyResult.unreadable }}
       </div>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="confirmDialog.show"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      :description="confirmDialog.description"
+      :effects="confirmDialog.effects"
+      :avatar-text="confirmDialog.avatarText"
+      :loading="confirmDialog.loading"
+      :confirm-text="confirmDialog.confirmText"
+      @confirm="confirmBackupAction"
+      @cancel="closeConfirmDialog"
+    />
   </div>
 </template>
 
@@ -49,6 +62,18 @@ const backups = ref([])
 const backupLoading = ref(false)
 const backupResult = ref('')
 const verifyResult = ref(null)
+const confirmDialog = reactive({
+  show: false,
+  type: '',
+  filename: '',
+  title: '确认操作',
+  message: '',
+  description: '此操作不可恢复，请谨慎操作。',
+  effects: [],
+  avatarText: '!',
+  confirmText: '确认',
+  loading: false
+})
 
 onMounted(() => loadBackups())
 
@@ -72,7 +97,19 @@ const createBackup = async () => {
 }
 
 const restoreBackup = async (filename) => {
-  if (!confirm(`确定恢复备份 "${filename}"？此操作会覆盖当前数据。`)) return
+  openConfirmDialog({
+    type: 'restore',
+    filename,
+    title: '确认恢复备份',
+    message: `恢复备份 "${filename}"？`,
+    description: '恢复会覆盖当前数据，请确认已保存当前状态。',
+    effects: ['当前数据库或配置可能被覆盖', '恢复完成后建议刷新页面并验证图片路径'],
+    avatarText: '恢',
+    confirmText: '确认恢复'
+  })
+}
+
+const restoreBackupNow = async (filename) => {
   try {
     const api = useApi()
     await api.post('/api/admin/restore', { filename })
@@ -81,12 +118,56 @@ const restoreBackup = async (filename) => {
 }
 
 const deleteBackup = async (filename) => {
-  if (!confirm(`确定删除备份 "${filename}"？`)) return
+  openConfirmDialog({
+    type: 'delete',
+    filename,
+    title: '确认删除备份',
+    message: `删除备份 "${filename}"？`,
+    effects: ['备份文件会被删除', '删除后无法再用该备份恢复'],
+    avatarText: '备',
+    confirmText: '确认删除'
+  })
+}
+
+const deleteBackupNow = async (filename) => {
   try {
     const api = useApi()
     await api.del(`/api/admin/backup/${filename}`)
     await loadBackups()
   } catch (err) { alert('删除失败: ' + err.message) }
+}
+
+const openConfirmDialog = (options) => {
+  confirmDialog.show = true
+  confirmDialog.type = options.type
+  confirmDialog.filename = options.filename
+  confirmDialog.title = options.title
+  confirmDialog.message = options.message
+  confirmDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
+  confirmDialog.effects = options.effects || []
+  confirmDialog.avatarText = options.avatarText || '!'
+  confirmDialog.confirmText = options.confirmText || '确认'
+}
+
+const closeConfirmDialog = () => {
+  if (confirmDialog.loading) return
+  confirmDialog.show = false
+  confirmDialog.type = ''
+  confirmDialog.filename = ''
+  confirmDialog.effects = []
+}
+
+const confirmBackupAction = async () => {
+  if (!confirmDialog.filename || confirmDialog.loading) return
+  confirmDialog.loading = true
+  try {
+    if (confirmDialog.type === 'restore') await restoreBackupNow(confirmDialog.filename)
+    else if (confirmDialog.type === 'delete') await deleteBackupNow(confirmDialog.filename)
+    confirmDialog.loading = false
+    closeConfirmDialog()
+  } finally {
+    confirmDialog.loading = false
+  }
 }
 
 const verifyPaths = async () => {

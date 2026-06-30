@@ -733,6 +733,18 @@
         </div>
       </div>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      :title="deleteDialog.title"
+      :message="deleteDialog.message"
+      :description="deleteDialog.description"
+      :effects="deleteDialog.effects"
+      :avatar-text="deleteDialog.avatarText"
+      :loading="deleteDialog.loading"
+      @confirm="confirmDeleteDialog"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -778,6 +790,17 @@ const privateTagPageSize = ref(10)
 const editingImage = ref(null)
 const editTagIds = ref([])
 const showEditTagPicker = ref(false)
+const deleteDialog = reactive({
+  show: false,
+  type: '',
+  payload: null,
+  title: '确认删除',
+  message: '',
+  description: '此操作不可恢复，请谨慎操作。',
+  effects: [],
+  avatarText: '删',
+  loading: false
+})
 const manualImages = ref([])
 const manualTotal = ref(0)
 const manualPage = ref(1)
@@ -1023,9 +1046,19 @@ const onPrivateTagPageSizeChange = () => {
 
 const deleteSelectedPrivateTags = async () => {
   if (selectedPrivateTagIds.value.length === 0) return
-  if (!confirm('确定删除选中的 ' + selectedPrivateTagIds.value.length + ' 个私有标签？关联的图片标签也会被清除。')) return
+  openDeleteDialog({
+    type: 'selected-private-tags',
+    payload: [...selectedPrivateTagIds.value],
+    title: '确认删除私有标签',
+    message: '删除选中的 ' + selectedPrivateTagIds.value.length + ' 个私有标签？',
+    effects: ['关联的图片标签会同步清除', '删除后私有标签不可直接恢复'],
+    avatarText: String(selectedPrivateTagIds.value.length)
+  })
+}
+
+const deleteSelectedPrivateTagsNow = async (ids) => {
   try {
-    for (const id of selectedPrivateTagIds.value) await api.del('/api/user-tags/' + id)
+    for (const id of ids) await api.del('/api/user-tags/' + id)
     selectedPrivateTagIds.value = []
     await loadMyTags(); await loadMyImages(myPage.value); await loadManualImages(manualPage.value)
   } catch (err) { alert('批量删除失败: ' + (err.data?.error || err.message)) }
@@ -1056,7 +1089,17 @@ const saveMyTag = async () => {
 }
 
 const deleteMyTag = async (tag) => {
-  if (!confirm('确定删除标签 "' + (tag.display_name || tag.name) + '"？')) return
+  openDeleteDialog({
+    type: 'private-tag',
+    payload: tag,
+    title: '确认删除私有标签',
+    message: '删除标签 "' + (tag.display_name || tag.name) + '"？',
+    effects: ['关联的图片标签会同步清除', '删除后该标签不可直接恢复'],
+    avatarText: '签'
+  })
+}
+
+const deleteMyTagNow = async (tag) => {
   try { await api.del('/api/user-tags/' + tag.id); await loadMyTags(); await loadMyImages(myPage.value); await loadManualImages(manualPage.value) } catch { alert('删除失败') }
 }
 
@@ -1118,9 +1161,19 @@ const batchSetMyImagesPublic = async (isPublic) => {
 }
 const batchDeleteMyImages = async () => {
   if (selectedImageIds.value.length === 0) return
-  if (!confirm('确定删除选中的 ' + selectedImageIds.value.length + ' 张图片？')) return
+  openDeleteDialog({
+    type: 'selected-images',
+    payload: [...selectedImageIds.value],
+    title: '确认删除图片',
+    message: '删除选中的 ' + selectedImageIds.value.length + ' 张图片？',
+    effects: ['图片记录会被移除', '相关图片标签会同步清理'],
+    avatarText: String(selectedImageIds.value.length)
+  })
+}
+
+const batchDeleteMyImagesNow = async (ids) => {
   let success = 0, fail = 0
-  for (const id of selectedImageIds.value) {
+  for (const id of ids) {
     try { await api.del('/api/admin/images/' + id); success++ } catch { fail++ }
   }
   alert('删除完成: ' + success + ' 成功, ' + fail + ' 失败')
@@ -1176,7 +1229,17 @@ const runManualTag = async () => {
 
 const togglePublic = async (img) => { try { await api.put('/api/admin/images/' + img.id, { is_public: !img.is_public }); img.is_public = !img.is_public } catch { alert('操作失败') } }
 const deleteMyImage = async (img) => {
-  if (!confirm('确定删除图片 "' + img.filename + '"？')) return
+  openDeleteDialog({
+    type: 'image',
+    payload: img,
+    title: '确认删除图片',
+    message: '删除图片 "' + img.filename + '"？',
+    effects: ['图片记录会被移除', '相关图片标签会同步清理'],
+    avatarText: '图'
+  })
+}
+
+const deleteMyImageNow = async (img) => {
   try { await api.del('/api/admin/images/' + img.id); await loadMyImages(myPage.value); await loadManualImages(manualPage.value) } catch (err) { alert('删除失败: ' + (err.data?.error || err.message)) }
 }
 
@@ -1258,7 +1321,53 @@ const createToken = async () => {
     tokenPage.value = 1
   } catch (err) { alert('创建失败: ' + (err.data?.error || err.message)) }
 }
-const deleteToken = async (id) => { if (!confirm('确定删除此 Token？')) return; try { await api.del('/api/admin/api/tokens/' + id); await loadTokens() } catch { alert('删除失败') } }
+const deleteToken = async (id) => {
+  openDeleteDialog({
+    type: 'token',
+    payload: id,
+    title: '确认删除 Token',
+    message: '删除此 API Token？',
+    effects: ['使用该 Token 的外部请求会立即失效'],
+    avatarText: 'T'
+  })
+}
+
+const deleteTokenNow = async (id) => { try { await api.del('/api/admin/api/tokens/' + id); await loadTokens() } catch { alert('删除失败') } }
+
+const openDeleteDialog = (options) => {
+  deleteDialog.show = true
+  deleteDialog.type = options.type
+  deleteDialog.payload = options.payload
+  deleteDialog.title = options.title
+  deleteDialog.message = options.message
+  deleteDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
+  deleteDialog.effects = options.effects || []
+  deleteDialog.avatarText = options.avatarText || '删'
+}
+
+const closeDeleteDialog = () => {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.type = ''
+  deleteDialog.payload = null
+  deleteDialog.effects = []
+}
+
+const confirmDeleteDialog = async () => {
+  if (deleteDialog.loading) return
+  deleteDialog.loading = true
+  try {
+    if (deleteDialog.type === 'selected-private-tags') await deleteSelectedPrivateTagsNow(deleteDialog.payload || [])
+    else if (deleteDialog.type === 'private-tag') await deleteMyTagNow(deleteDialog.payload)
+    else if (deleteDialog.type === 'selected-images') await batchDeleteMyImagesNow(deleteDialog.payload || [])
+    else if (deleteDialog.type === 'image') await deleteMyImageNow(deleteDialog.payload)
+    else if (deleteDialog.type === 'token') await deleteTokenNow(deleteDialog.payload)
+    deleteDialog.loading = false
+    closeDeleteDialog()
+  } finally {
+    deleteDialog.loading = false
+  }
+}
 const copyToken = async () => { try { await navigator.clipboard.writeText(newTokenValue.value); alert('已复制') } catch {} }
 const getThumbUrl = (img) => { const url = img.thumb_url || img.url; return url ? (config.public.apiBase || '') + url : '' }
 const formatCount = (value) => Number(value || 0).toLocaleString('en-US')

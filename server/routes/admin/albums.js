@@ -65,6 +65,34 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
   }
 });
 
+// 批量更新相册内图片公开状态（仅所有者或管理员）
+router.put('/:id/images-public', authMiddleware, async (req, res, next) => {
+  try {
+    const album = await db('albums').where({ id: req.params.id }).first();
+    if (!album) return res.status(404).json({ error: '相册不存在' });
+
+    const user = await db('users').where({ id: req.user.id }).first();
+    if (user.role !== 'admin' && album.user_id !== req.user.id) {
+      return res.status(403).json({ error: '无权修改此相册' });
+    }
+
+    const isPublic = req.body?.is_public === true;
+    const count = await db.transaction(async trx => {
+      const updated = await trx('images')
+        .where({ album_id: album.id })
+        .update({ is_public: isPublic ? 1 : 0, updated_at: trx.fn.now() });
+      await trx('albums')
+        .where({ id: album.id })
+        .update({ all_picture_public: isPublic ? 1 : 0, updated_at: trx.fn.now() });
+      return updated;
+    });
+
+    res.json({ album_id: album.id, is_public: isPublic, all_picture_public: isPublic, updated: count });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 删除相册（仅所有者或管理员）
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {

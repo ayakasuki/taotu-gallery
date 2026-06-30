@@ -9,9 +9,15 @@ const config = require('../config');
 const configService = require('./configService');
 const imageService = require('./imageService');
 const logger = require('../config/logger');
+const imageProcessor = require('../utils/imageProcessor');
 
 let watcher = null;
 const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+
+function isDerivedGalleryAsset(filePath) {
+  const relative = path.relative(config.galleryDir, filePath).replace(/\\/g, '/');
+  return relative === '.derived' || relative.startsWith('.derived/');
+}
 
 // 启动监听
 async function startWatching() {
@@ -45,6 +51,7 @@ async function startWatching() {
   watcher.on('add', async (filePath) => {
     const ext = path.extname(filePath).toLowerCase();
     if (!imageExts.includes(ext)) return;
+    if (isDerivedGalleryAsset(filePath)) return;
 
     logger.info(`检测到新图片: ${filePath}`);
     await handleNewImage(filePath);
@@ -67,7 +74,6 @@ async function startWatching() {
 async function handleNewImage(filePath) {
   const db = require('../db');
   const pathUtils = require('../utils/pathUtils');
-  const imageProcessor = require('../utils/imageProcessor');
 
   try {
     const relativePath = pathUtils.toRelativePath(filePath);
@@ -79,6 +85,7 @@ async function handleNewImage(filePath) {
 
     // 获取图片元信息
     const meta = await imageProcessor.getImageMeta(filePath);
+    await imageProcessor.generateDerivedThumbnails(filePath);
     const fileSize = fs.statSync(filePath).size;
 
     // 插入数据库
@@ -210,16 +217,24 @@ async function resolveAlbumId({ albumId, albumName, userId }) {
   return id;
 }
 
-async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = null }) {
+async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = null, makePublic = false }) {
   const db = require('../db');
   const pathUtils = require('../utils/pathUtils');
-  const imageProcessor = require('../utils/imageProcessor');
 
   const relativePath = pathUtils.toRelativePath(filePath);
   const existing = await db('images').where({ path: relativePath }).first();
-  if (existing) return false;
+  if (existing) {
+    await imageProcessor.generateDerivedThumbnails(filePath).catch(err => {
+      logger.warn(`补生成缩略图失败: ${filePath} - ${err.message}`);
+    });
+    if (makePublic && !existing.is_public) {
+      await db('images').where({ id: existing.id }).update({ is_public: 1, updated_at: db.fn.now() });
+    }
+    return false;
+  }
 
   const meta = await imageProcessor.getImageMeta(filePath);
+  await imageProcessor.generateDerivedThumbnails(filePath);
   const fileSize = fs.statSync(filePath).size;
   const hashPath = imageService.generateHashPath(path.basename(filePath));
 
@@ -235,7 +250,8 @@ async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = 
     orientation: meta.orientation,
     upload_source: 'local',
     album_id: albumId,
-    uploader_id: userId || null
+    uploader_id: userId || null,
+    is_public: !!makePublic
   });
 
   for (const tagId of tagIds) {
@@ -251,14 +267,15 @@ async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = 
   return true;
 }
 
-async function scanPathEntry({ scanPath, recursive = true, albumId = null, tagIds = [], userId = null }) {
+async function scanPathEntry({ scanPath, recursive = true, albumId = null, tagIds = [], userId = null, makePublic = false }) {
   const db = require('../db');
   let added = 0;
   let skipped = 0;
 
   const scanFn = async (filePath) => {
+    if (isDerivedGalleryAsset(filePath)) return;
     try {
-      const inserted = await indexImageFile({ filePath, albumId, tagIds, userId });
+      const inserted = await indexImageFile({ filePath, albumId, tagIds, userId, makePublic });
       if (inserted) added++;
       else skipped++;
     } catch (err) {
@@ -333,7 +350,8 @@ async function scanAndIndexAll(options = {}) {
         recursive: entry.recursive !== false,
         albumId: finalAlbumId,
         tagIds: [...(entry.tagIds || []), ...newTagIds],
-        userId: options.userId || null
+        userId: options.userId || null,
+        makePublic: !!entry.makePublic
       });
       added += result.added;
       skipped += result.skipped;
@@ -361,7 +379,7 @@ async function scanAndIndexAll(options = {}) {
 }
 
 // 扫描指定路径（支持相册和标签）
-async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags, userId }) {
+async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags, userId, makePublic = false }) {
   if (!isLocalPath(targetPath)) {
     throw new Error('远程路径暂不支持直接扫描');
   }
@@ -376,7 +394,8 @@ async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags,
     recursive,
     albumId: finalAlbumId,
     tagIds: allTagIds,
-    userId
+    userId,
+    makePublic
   });
 
   logger.info(`路径扫描完成: ${targetPath}, 新增 ${result.added}, 跳过 ${result.skipped}`);

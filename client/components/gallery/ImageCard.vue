@@ -102,7 +102,7 @@ const galleryImageQueue = import.meta.client
   : null
 
 const imageUrl = computed(() => {
-  const url = props.image.thumb_url || props.image.medium_url || props.image.url
+  const url = props.image.medium_url || props.image.thumb_url || props.image.url
   return url ? (config.public.apiBase || '') + url : ''
 })
 

@@ -31,6 +31,7 @@ function isHashImageAssetPath(reqPath) {
 
 // 图片静态文件服务（哈希路径映射）
 const imageService = require('./services/imageService');
+const imageProcessor = require('./utils/imageProcessor');
 app.use('/image', async (req, res, next) => {
   try {
     if (!isHashImageAssetPath(req.path)) return next();
@@ -57,15 +58,21 @@ app.use('/thumb', async (req, res, next) => {
     const size = req.query.s || 'thumb';
     const record = await imageService.getImageByHashPath(hashPath);
     if (record) {
-      const ext = path.extname(record.path);
-      const baseName = path.basename(record.path, ext);
-      const dirName = path.dirname(record.path);
-      const thumbPath = path.resolve(__dirname, '..', dirName, '.thumbs', `${baseName}_${size}${ext}`);
-      if (fs.existsSync(thumbPath)) {
-        return res.sendFile(thumbPath);
-      }
       const realPath = path.resolve(__dirname, '..', record.path);
+      for (const candidate of imageProcessor.getExistingThumbnailPath(realPath, size)) {
+        if (fs.existsSync(candidate)) {
+          return res.sendFile(candidate);
+        }
+      }
       if (fs.existsSync(realPath)) {
+        await imageProcessor.generateDerivedThumbnails(realPath).catch(err => {
+          logger.warn(`请求时生成缩略图失败: ${realPath} - ${err.message}`);
+        });
+        for (const candidate of imageProcessor.getExistingThumbnailPath(realPath, size)) {
+          if (fs.existsSync(candidate)) {
+            return res.sendFile(candidate);
+          }
+        }
         return res.sendFile(realPath);
       }
     }

@@ -4,17 +4,47 @@
  */
 const sharp = require('sharp');
 const path = require('path');
+const crypto = require('crypto');
 const fs = require('fs').promises;
 const config = require('../config');
 const logger = require('../config/logger');
 
+function getThumbnailBasename(imagePath) {
+  const ext = path.extname(imagePath);
+  return path.basename(imagePath, ext);
+}
+
+function getThumbnailExt(imagePath) {
+  return path.extname(imagePath) || '.jpg';
+}
+
+function getSidecarThumbnailDir(imagePath) {
+  return path.join(path.dirname(imagePath), '.thumbs');
+}
+
+function getDerivedFolderName(imagePath) {
+  const normalized = path.resolve(imagePath).replace(/\\/g, '/');
+  return crypto.createHash('sha1').update(normalized).digest('hex').slice(0, 16);
+}
+
+function getDerivedThumbnailDir(imagePath) {
+  return path.join(config.galleryDir, '.derived', getDerivedFolderName(imagePath));
+}
+
+function getThumbnailPaths(imagePath, options = {}) {
+  const ext = getThumbnailExt(imagePath);
+  const baseName = getThumbnailBasename(imagePath);
+  const thumbDir = options.outputDir || getSidecarThumbnailDir(imagePath);
+  return {
+    thumbDir,
+    thumbPath: path.join(thumbDir, `${baseName}_thumb${ext}`),
+    mediumPath: path.join(thumbDir, `${baseName}_medium${ext}`)
+  };
+}
+
 // 生成缩略图和中等图
 async function generateThumbnails(imagePath, options = {}) {
-  const ext = path.extname(imagePath);
-  const baseName = path.basename(imagePath, ext);
-  const dirName = path.dirname(imagePath);
-
-  const thumbDir = path.join(dirName, '.thumbs');
+  const { thumbDir, thumbPath, mediumPath } = getThumbnailPaths(imagePath, options);
   await fs.mkdir(thumbDir, { recursive: true });
 
   const mediumW = options.mediumWidth || config.thumbnails.medium.width;
@@ -22,20 +52,34 @@ async function generateThumbnails(imagePath, options = {}) {
   const quality = Math.min(100, Math.max(40, Number(options.quality || 85)));
 
   // 缩略图
-  const thumbPath = path.join(thumbDir, `${baseName}_thumb${ext}`);
   await sharp(imagePath)
     .resize(config.thumbnails.small.width, config.thumbnails.small.height, { fit: 'inside' })
     .jpeg({ quality: Math.min(quality, 85) })
     .toFile(thumbPath);
 
   // 中等图（质量稍高）
-  const mediumPath = path.join(thumbDir, `${baseName}_medium${ext}`);
   await sharp(imagePath)
     .resize(mediumW, mediumH, { fit: 'inside' })
     .jpeg({ quality })
     .toFile(mediumPath);
 
   return { thumbPath, mediumPath };
+}
+
+async function generateDerivedThumbnails(imagePath, options = {}) {
+  return generateThumbnails(imagePath, { ...options, outputDir: getDerivedThumbnailDir(imagePath) });
+}
+
+function getExistingThumbnailPath(imagePath, size = 'thumb') {
+  const safeSize = size === 'medium' ? 'medium' : 'thumb';
+  const sidecarPaths = getThumbnailPaths(imagePath);
+  const derivedPaths = getThumbnailPaths(imagePath, { outputDir: getDerivedThumbnailDir(imagePath) });
+  const key = safeSize === 'medium' ? 'mediumPath' : 'thumbPath';
+  return [sidecarPaths[key], derivedPaths[key]];
+}
+
+async function removeDerivedThumbnailsForImage(imagePath) {
+  await fs.rm(getDerivedThumbnailDir(imagePath), { recursive: true, force: true });
 }
 
 function calculateOrientation(width, height) {
@@ -130,6 +174,10 @@ function hexToRgb(hex) {
 
 module.exports = {
   generateThumbnails,
+  generateDerivedThumbnails,
+  getDerivedThumbnailDir,
+  getExistingThumbnailPath,
+  removeDerivedThumbnailsForImage,
   getImageMeta,
   calculateOrientation,
   getResolutionBucket,

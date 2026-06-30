@@ -223,6 +223,17 @@
         </div>
       </div>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      title="确认删除备份"
+      :message="deleteDialog.message"
+      :effects="deleteDialog.effects"
+      avatar-text="备"
+      :loading="deleteDialog.loading"
+      @confirm="confirmDeleteBackup"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -246,6 +257,7 @@ const syncStatus = ref({ success: false, message: '尚未同步', updatedAt: nul
 const webdav = reactive({ configured: false, url: '', username: '', password: '', remotePath: '/gallery-sync/' })
 const restoreDialog = reactive({ open: false, filename: '', createdAt: null, items: [], selected: [] })
 const syncLogDialog = reactive({ open: false, logs: [] })
+const deleteDialog = reactive({ show: false, payload: null, message: '', effects: [], loading: false })
 const backupOptions = reactive({ includeDatabase: true, includeGallery: true, includeTags: true, includeConditions: true, includeSiteConfig: true })
 
 const backupItems = [
@@ -400,9 +412,27 @@ async function confirmRestore() {
   }
 }
 async function deleteBackup(backup) {
-  if (!window.confirm(`确定删除备份 "${backup.filename}"？`)) return
+  deleteDialog.show = true
+  deleteDialog.payload = backup
+  deleteDialog.message = `删除备份 "${backup.filename}"？`
+  deleteDialog.effects = ['备份文件会被删除', '删除后无法再用该备份恢复']
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.payload = null
+  deleteDialog.effects = []
+}
+
+async function confirmDeleteBackup() {
+  if (!deleteDialog.payload || deleteDialog.loading) return
+  deleteDialog.loading = true
+  const backup = deleteDialog.payload
   await api.del(`/api/admin/backup/${encodeURIComponent(backup.filename)}`)
   await loadBackups()
+  deleteDialog.loading = false
+  closeDeleteDialog()
 }
 
 async function saveWebdav() {

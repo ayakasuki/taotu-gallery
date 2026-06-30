@@ -6,6 +6,7 @@ const db = require('../../db');
 const config = require('../../config');
 const pathUtils = require('../../utils/pathUtils');
 const albumService = require('../../services/albumService');
+const imageProcessor = require('../../utils/imageProcessor');
 
 const router = express.Router();
 
@@ -129,7 +130,7 @@ router.post('/scan', authMiddleware, async (req, res, next) => {
 // 扫描指定路径（支持指定相册和标签）
 router.post('/scan-path', authMiddleware, async (req, res, next) => {
   try {
-    const { path: targetPath, recursive, albumId, albumName, tagIds, newTags } = req.body;
+    const { path: targetPath, recursive, albumId, albumName, tagIds, newTags, makePublic } = req.body;
     if (!targetPath) return res.status(400).json({ error: '请提供路径' });
 
     let finalAlbumId = albumId || null;
@@ -150,7 +151,8 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
       albumId: finalAlbumId,
       tagIds: tagIds || [],
       newTags: newTags || [],
-      userId: req.user.id
+      userId: req.user.id,
+      makePublic: !!makePublic
     });
 
     const pathsConfig = await configService.readPaths();
@@ -162,6 +164,7 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
       albumMode: albumName ? 'new' : (finalAlbumId ? 'existing' : 'none'),
       albumId: finalAlbumId,
       albumName: albumName || null,
+      makePublic: !!makePublic,
       tagIds: tagIds || [],
       newTagNames: newTags || []
     };
@@ -170,6 +173,43 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
     await configService.writePaths({ galleryPaths: [], customPaths: existingPaths });
 
     res.json({ ...result, pathCount: 1 });
+  } catch (err) { next(err); }
+});
+
+// 删除自定义路径并清理该路径扫描入库的图片记录与标签关联（不删除原始磁盘文件）
+router.post('/delete-path', authMiddleware, async (req, res, next) => {
+  try {
+    const { path: targetPath } = req.body || {};
+    if (!targetPath) return res.status(400).json({ error: '请提供路径' });
+
+    const normalized = normalizePathForLike(targetPath);
+    const prefix = withTrailingSlash(targetPath);
+    const images = await db('images')
+      .where('path', normalized)
+      .orWhere('path', 'like', `${prefix}%`)
+      .select('id', 'path', 'album_id');
+    const imageIds = images.map(image => image.id);
+    const albumIds = [...new Set(images.map(image => image.album_id).filter(Boolean))];
+
+    await db.transaction(async trx => {
+      if (imageIds.length) {
+        await trx('image_tags').whereIn('image_id', imageIds).del();
+        await trx('images').whereIn('id', imageIds).del();
+      }
+      await trx('custom_paths').where({ path: targetPath }).del();
+    });
+
+    for (const image of images) {
+      const realPath = pathUtils.toAbsolutePath(image.path);
+      await imageProcessor.removeDerivedThumbnailsForImage(realPath).catch(() => {});
+    }
+
+    for (const albumId of albumIds) {
+      const [{ cnt }] = await db('images').where({ album_id: albumId }).count('* as cnt');
+      await db('albums').where({ id: albumId }).update({ image_count: cnt });
+    }
+
+    res.json({ deletedImages: imageIds.length, deletedRelations: imageIds.length, deletedPath: targetPath });
   } catch (err) { next(err); }
 });
 

@@ -273,6 +273,7 @@ async function readPaths() {
         albumMode: cp.album_mode || 'none',
         albumId: cp.album_id,
         albumName: cp.album_name,
+        makePublic: !!cp.make_public,
         tagIds: parseJsonField(cp.tag_ids, []),
         newTagNames: parseJsonField(cp.new_tag_names, [])
       }))
@@ -294,6 +295,7 @@ async function writePaths(pathsData) {
         album_mode: cp.albumMode || 'none',
         album_id: cp.albumId || null,
         album_name: cp.albumName || null,
+        make_public: !!cp.makePublic,
         tag_ids: cp.tagIds ? JSON.stringify(cp.tagIds) : null,
         new_tag_names: cp.newTagNames ? JSON.stringify(cp.newTagNames) : null
       });

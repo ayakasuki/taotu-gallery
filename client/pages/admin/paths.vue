@@ -126,6 +126,17 @@
                 <i></i>
               </label>
             </div>
+
+            <div class="switch-row">
+              <div>
+                <strong>批量公开</strong>
+                <small>为扫描到的图片批量设为公开图片</small>
+              </div>
+              <label class="pink-switch muted-switch">
+                <input v-model="newPath.makePublic" type="checkbox" />
+                <i></i>
+              </label>
+            </div>
           </div>
 
           <div class="add-inner-card tags-card">
@@ -208,24 +219,38 @@
       <section class="side-card token-card">
         <h2><img src="/icons/admin/api-settings-64x64.png" alt="" />API Token 管理</h2>
         <p>用于第三方应用访问你的图库数据</p>
-        <div v-if="primaryToken" class="token-mini-card">
+        <div v-if="pagedTokens.length" class="token-list-mini">
+        <div v-for="token in pagedTokens" :key="token.id" class="token-mini-card">
           <div>
-            <strong>{{ primaryToken.label || '默认 Token' }}</strong>
-            <span>创建于 {{ formatDate(primaryToken.created_at) }}</span>
-            <code>{{ tokenVisible[primaryToken.id] ? primaryToken.token : maskToken(primaryToken.token) }}</code>
+            <strong>{{ token.label || '默认 Token' }}</strong>
+            <span>创建于 {{ formatDate(token.created_at) }}</span>
+            <code>{{ tokenVisible[token.id] ? token.token : maskToken(token.token) }}</code>
           </div>
-          <button type="button" @click="toggleToken(primaryToken.id)">
-            <img :src="tokenVisible[primaryToken.id] ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+          <button type="button" @click="toggleToken(token.id)">
+            <img :src="tokenVisible[token.id] ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
           </button>
-          <button type="button" @click="tokenMenuOpen = !tokenMenuOpen">
-            <span aria-hidden="true">···</span>
+          <button type="button" @click="toggleTokenMenu(token.id)">
+            <img src="/icons/admin/paths/more-actions-placeholder.svg" alt="更多" />
           </button>
-          <div v-if="tokenMenuOpen" class="token-action-menu">
-            <button type="button" @click="copyToken(primaryToken.token)">复制 Token</button>
-            <button type="button" class="danger" @click="deleteToken(primaryToken.id)">删除 Token</button>
+          <div v-if="tokenMenuOpen === token.id" class="token-action-menu">
+            <button type="button" @click="copyToken(token.token)">复制 Token</button>
+            <button type="button" class="danger" @click="requestDeleteToken(token)">删除 Token</button>
           </div>
         </div>
+        </div>
         <div v-else class="token-empty">暂无 Token</div>
+        <div v-if="tokenTotalPages > 1" class="token-pagination">
+          <button type="button" :disabled="tokenPage <= 1" @click="tokenPage--">‹</button>
+          <button
+            v-for="item in tokenPaginationItems"
+            :key="item.key"
+            type="button"
+            :class="{ active: item.page === tokenPage, ellipsis: item.ellipsis }"
+            :disabled="item.ellipsis"
+            @click="!item.ellipsis && (tokenPage = item.page)"
+          >{{ item.label }}</button>
+          <button type="button" :disabled="tokenPage >= tokenTotalPages" @click="tokenPage++">›</button>
+        </div>
         <div v-if="newToken" class="new-token-inline">
           <button type="button" @click="newToken = ''">×</button>
           <span>新 Token 仅显示一次</span>
@@ -235,6 +260,18 @@
         <NuxtLink to="/api-docs" class="api-doc-link">查看使用文档 →</NuxtLink>
       </section>
     </aside>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      :title="deleteDialog.title"
+      :message="deleteDialog.message"
+      :description="deleteDialog.description"
+      :effects="deleteDialog.effects"
+      :avatar-text="deleteDialog.avatarText"
+      :loading="deleteDialog.loading"
+      @cancel="closeDeleteDialog"
+      @confirm="confirmDeleteDialog"
+    />
   </div>
 </template>
 
@@ -256,8 +293,21 @@ const uploadConfig = ref({ showUrlAfterUpload: true })
 const showAdd = ref(false)
 const scanning = ref(false)
 const selectedGroupId = ref('')
-const tokenMenuOpen = ref(false)
+const tokenMenuOpen = ref(null)
+const tokenPage = ref(1)
+const tokenPageSize = 3
 const scanToast = reactive({ show: false, error: false, warning: false, title: '', message: '' })
+const deleteDialog = reactive({
+  show: false,
+  type: '',
+  target: null,
+  title: '确认删除',
+  message: '',
+  description: '此操作不可恢复，请谨慎操作。',
+  effects: [],
+  avatarText: '',
+  loading: false
+})
 
 const newPath = reactive({
   path: '',
@@ -265,6 +315,7 @@ const newPath = reactive({
   albumMode: 'existing',
   albumId: null,
   albumName: '',
+  makePublic: false,
   enableTags: false,
   tagIds: [],
   newTagName: '',
@@ -278,7 +329,20 @@ const selectedPreviewTags = computed(() => {
   return [...existing, ...(newPath.newTagNames || [])]
 })
 
-const primaryToken = computed(() => tokens.value[0] || null)
+const tokenTotalPages = computed(() => Math.max(1, Math.ceil(tokens.value.length / tokenPageSize)))
+const pagedTokens = computed(() => tokens.value.slice((tokenPage.value - 1) * tokenPageSize, tokenPage.value * tokenPageSize))
+const tokenPaginationItems = computed(() => {
+  const total = tokenTotalPages.value
+  const current = tokenPage.value
+  const pages = new Set([1, current - 1, current, current + 1, total].filter(page => page >= 1 && page <= total))
+  const sorted = [...pages].sort((a, b) => a - b)
+  const result = []
+  sorted.forEach((page, index) => {
+    if (index > 0 && page - sorted[index - 1] > 1) result.push({ key: `ellipsis-${page}`, label: '...', ellipsis: true })
+    result.push({ key: page, label: String(page), page })
+  })
+  return result
+})
 
 const tagGroups = computed(() => buildPathTagGroups(rawTagGroups.value))
 
@@ -334,6 +398,7 @@ async function loadTagGroups() {
 async function loadTokens() {
   const data = await api.get('/api/admin/api/tokens')
   tokens.value = (data.tokens || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  if (tokenPage.value > tokenTotalPages.value) tokenPage.value = tokenTotalPages.value
 }
 
 async function loadDatabaseStatus() {
@@ -346,6 +411,7 @@ function resetNewPath() {
   newPath.albumMode = 'existing'
   newPath.albumId = null
   newPath.albumName = ''
+  newPath.makePublic = false
   newPath.enableTags = false
   newPath.tagIds = []
   newPath.newTagName = ''
@@ -464,6 +530,7 @@ function addPath() {
     albumMode: newPath.albumMode,
     albumId: newPath.albumMode === 'existing' ? newPath.albumId : null,
     albumName: newPath.albumMode === 'new' ? newPath.albumName.trim() : '',
+    makePublic: !!newPath.makePublic,
     tagIds: newPath.enableTags ? [...newPath.tagIds] : [],
     newTagNames: newPath.enableTags ? [...newPath.newTagNames] : [],
     status: 'normal',
@@ -475,8 +542,20 @@ function addPath() {
 }
 
 function removePath(index) {
-  if (!confirm('确定删除此路径配置？')) return
-  customPaths.value.splice(index, 1)
+  const pathItem = customPaths.value[index]
+  deleteDialog.show = true
+  deleteDialog.type = 'path'
+  deleteDialog.target = { index, pathItem }
+  deleteDialog.title = '删除路径'
+  deleteDialog.message = `确定要删除路径「${pathItem.path}」吗？`
+  deleteDialog.description = '此操作会清理该路径扫描入库的图片记录。'
+  deleteDialog.effects = [
+    '该路径配置将从自定义路径列表移除',
+    '该路径下已扫描入库的图片记录将被删除',
+    '这些图片已有的标签关联数据会同步清理',
+    '原始磁盘图片文件、相册和标签本身不会被删除'
+  ]
+  deleteDialog.avatarText = '路'
 }
 
 async function savePaths() {
@@ -487,6 +566,7 @@ async function savePaths() {
       albumMode: pathItem.albumMode || 'none',
       albumId: pathItem.albumId || null,
       albumName: pathItem.albumName || null,
+      makePublic: !!pathItem.makePublic,
       tagIds: pathItem.tagIds || [],
       newTagNames: pathItem.newTagNames || []
     }))
@@ -503,6 +583,7 @@ async function scanPath(pathItem) {
       recursive: pathItem.recursive !== false,
       albumId: pathItem.albumId || null,
       albumName: pathItem.albumName || null,
+      makePublic: !!pathItem.makePublic,
       tagIds: pathItem.tagIds || [],
       newTags: pathItem.newTagNames || []
     })
@@ -549,7 +630,7 @@ async function createToken() {
 async function copyToken(token) {
   try {
     await navigator.clipboard.writeText(token)
-    tokenMenuOpen.value = false
+    tokenMenuOpen.value = null
     showToast('复制完成', 'Token 已复制到剪贴板')
   } catch {
     showToast('复制失败', '浏览器阻止了剪贴板访问', true)
@@ -557,12 +638,57 @@ async function copyToken(token) {
 }
 
 async function deleteToken(id) {
-  if (!confirm('确定删除此 Token？删除后使用它的第三方应用将无法继续访问图库数据。')) return
   await api.del(`/api/admin/api/tokens/${id}`)
-  tokenMenuOpen.value = false
-  if (primaryToken.value?.id === id) newToken.value = ''
+  tokenMenuOpen.value = null
   await loadTokens()
   showToast('删除完成', 'Token 已删除')
+}
+
+function toggleTokenMenu(id) {
+  tokenMenuOpen.value = tokenMenuOpen.value === id ? null : id
+}
+
+function requestDeleteToken(token) {
+  deleteDialog.show = true
+  deleteDialog.type = 'token'
+  deleteDialog.target = token
+  deleteDialog.title = '删除 Token'
+  deleteDialog.message = `确定要删除 Token「${token.label || '默认 Token'}」吗？`
+  deleteDialog.description = '删除后使用它的第三方应用将无法继续访问图库数据。'
+  deleteDialog.effects = [
+    '该 Token 会立即失效',
+    '使用该 Token 的接口调用会失败',
+    '已复制到外部应用的密钥不会自动同步更新'
+  ]
+  deleteDialog.avatarText = 'TK'
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.type = ''
+  deleteDialog.target = null
+}
+
+async function confirmDeleteDialog() {
+  if (!deleteDialog.show || deleteDialog.loading) return
+  deleteDialog.loading = true
+  try {
+    if (deleteDialog.type === 'token') {
+      await deleteToken(deleteDialog.target.id)
+    } else if (deleteDialog.type === 'path') {
+      const { index, pathItem } = deleteDialog.target
+      const data = await api.post('/api/admin/gallery/delete-path', { path: pathItem.path })
+      customPaths.value.splice(index, 1)
+      showToast('路径已删除', `已清理 ${data.deletedImages || 0} 张图片记录`)
+      await Promise.all([loadConfig(), loadDatabaseStatus()])
+    }
+  } catch (err) {
+    showToast('删除失败', err?.data?.error || err.message || '删除操作失败', true)
+  } finally {
+    deleteDialog.loading = false
+    closeDeleteDialog()
+  }
 }
 
 function toggleToken(id) {
@@ -710,18 +836,22 @@ function maskToken(value) {
 .display-choice-row button { min-height: 76px; display: grid; place-items: center; gap: 6px; border: 1px solid rgba(226, 230, 241, 0.84); border-radius: 8px; background: rgba(255,255,255,0.62); color: #6f7a90; font-size: 13px; font-weight: 900; cursor: pointer; }
 .display-choice-row button.active { border-color: rgba(255, 111, 157, 0.7); background: rgba(255, 241, 247, 0.82); color: #ff6f9d; }
 .display-choice-row img { width: 25px; height: 25px; object-fit: contain; }
+.token-list-mini { display: grid; gap: 8px; }
 .token-mini-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 28px 28px; gap: 7px; align-items: center; padding: 11px; border: 1px solid rgba(226, 230, 241, 0.74); border-radius: 8px; background: rgba(255,255,255,0.58); }
 .token-mini-card strong, .token-mini-card span, .token-mini-card code { display: block; }
 .token-mini-card strong { color: #5c6880; font-size: 12px; font-weight: 900; }
 .token-mini-card span { margin: 4px 0 5px; color: #9aa4b7; font-size: 11px; font-weight: 800; }
 .token-mini-card code { overflow: hidden; color: #63708a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .token-mini-card button { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid rgba(226, 230, 241, 0.84); border-radius: 6px; background: rgba(255,255,255,0.68); cursor: pointer; }
-.token-mini-card button span { color: #8a94a8; font-size: 16px; line-height: 1; letter-spacing: 0; transform: translateY(-2px); }
 .token-mini-card button img { width: 14px; height: 14px; object-fit: contain; }
 .token-action-menu { position: absolute; top: 42px; right: 8px; z-index: 5; min-width: 112px; padding: 6px; border: 1px solid rgba(226, 230, 241, 0.9); border-radius: 8px; background: rgba(255,255,255,0.96); box-shadow: 0 16px 32px rgba(72, 84, 112, 0.14); }
 .token-action-menu button { width: 100%; height: 28px; justify-content: flex-start; padding: 0 8px; border: none; background: transparent; color: #657188; font-size: 12px; font-weight: 900; }
 .token-action-menu button:hover { background: rgba(247, 243, 255, 0.9); color: #8b72e8; }
 .token-action-menu button.danger:hover { background: rgba(255, 241, 246, 0.92); color: #ff6f9d; }
+.token-pagination { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; }
+.token-pagination button { min-width: 30px; height: 30px; border: 1px solid rgba(213, 222, 238, 0.96); border-radius: 8px; background: rgba(255,255,255,0.78); color: #66728a; cursor: pointer; font-size: 13px; font-weight: 900; }
+.token-pagination button.active { border-color: transparent; background: linear-gradient(135deg, #ff86ad, #f85f9a); color: #fff; box-shadow: 0 10px 22px rgba(248, 95, 154, 0.18); }
+.token-pagination button.ellipsis, .token-pagination button:disabled { cursor: default; opacity: 0.48; box-shadow: none; }
 .token-empty { padding: 16px; border: 1px solid rgba(226, 230, 241, 0.74); border-radius: 8px; color: #9aa4b7; text-align: center; font-size: 12px; font-weight: 900; }
 .new-token-inline { position: relative; display: grid; gap: 5px; margin-top: 10px; padding: 10px 28px 10px 10px; border: 1px solid rgba(245, 177, 77, 0.28); border-radius: 8px; background: rgba(255, 250, 235, 0.84); color: #a86f1d; font-size: 12px; font-weight: 900; }
 .new-token-inline button { position: absolute; top: 6px; right: 8px; border: none; background: transparent; color: #b78332; cursor: pointer; }

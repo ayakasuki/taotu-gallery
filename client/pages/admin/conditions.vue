@@ -191,6 +191,17 @@
         </footer>
       </section>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      title="确认删除条件"
+      :message="deleteDialog.message"
+      :effects="deleteDialog.effects"
+      :avatar-text="deleteDialog.avatarText"
+      :loading="deleteDialog.loading"
+      @confirm="confirmDeleteCondition"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -207,6 +218,7 @@ const loading = ref(false)
 const page = ref(1)
 const pageSize = 8
 const total = ref(0)
+const deleteDialog = reactive({ show: false, payload: null, message: '', effects: [], avatarText: '条', loading: false })
 
 const typeLabels = {
   path_regex: '路径包含',
@@ -450,14 +462,34 @@ async function toggleCondition(cond) {
 }
 
 async function deleteCondition(cond) {
-  if (!confirm(`确定删除条件 "${cond.name}"？`)) return
+  deleteDialog.show = true
+  deleteDialog.payload = cond
+  deleteDialog.message = `删除条件 "${cond.name}"？`
+  deleteDialog.effects = ['条件规则会被删除', '已写入图片的标签不会自动删除']
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.payload = null
+  deleteDialog.effects = []
+}
+
+async function confirmDeleteCondition() {
+  if (!deleteDialog.payload || deleteDialog.loading) return
+  deleteDialog.loading = true
+  const cond = deleteDialog.payload
   try {
     await api.del(`/api/admin/conditions/${cond.id}`)
     if (conditions.value.length === 1 && page.value > 1) page.value -= 1
     await loadConditions()
     showAdminToast('条件标签已删除', 'success')
+    deleteDialog.loading = false
+    closeDeleteDialog()
   } catch (err) {
     showAdminToast('删除失败: ' + (err.data?.error || err.message), 'error')
+  } finally {
+    deleteDialog.loading = false
   }
 }
 

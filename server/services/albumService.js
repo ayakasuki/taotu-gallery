@@ -184,6 +184,7 @@ async function createAlbum(data) {
     description: data.description || null,
     cover_image_id: data.cover_image_id || null,
     is_public: data.is_public || false,
+    all_picture_public: data.all_picture_public || false,
     user_id: data.user_id || null
   });
   logger.info(`相册已创建: ${normalizedName} (ID: ${id})`);
@@ -206,6 +207,7 @@ async function updateAlbum(albumId, data) {
   if (data.description !== undefined) updates.description = data.description;
   if (data.cover_image_id !== undefined) updates.cover_image_id = data.cover_image_id;
   if (data.is_public !== undefined) updates.is_public = data.is_public;
+  if (data.all_picture_public !== undefined) updates.all_picture_public = data.all_picture_public;
 
   await db('albums').where({ id: albumId }).update(updates);
   return getAlbumById(albumId);

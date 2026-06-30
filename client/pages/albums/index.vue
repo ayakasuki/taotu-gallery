@@ -256,10 +256,42 @@
             </button>
           </div>
 
+          <div class="setting-row image-public-row">
+            <div>
+              <strong>公开所有图片</strong>
+              <span>公开该相册所有图片</span>
+              <small class="setting-warning">
+                <img src="/icons/status/warning-64x64.png" alt="" />
+                该操作会覆盖相册已有公开属性，操作前请知悉！
+              </small>
+            </div>
+            <button
+              type="button"
+              class="pink-switch"
+              :class="{ active: editForm.imagesPublic }"
+              :disabled="imagePublicSaving"
+              @click="toggleAlbumImagesPublic"
+            >
+              <i></i>
+            </button>
+          </div>
+
           <button type="button" class="pink-action full" @click="saveAlbumSettings">保存设置</button>
         </div>
       </template>
     </aside>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      :title="deleteDialog.title"
+      :message="deleteDialog.message"
+      :description="deleteDialog.description"
+      :effects="deleteDialog.effects"
+      :avatar-text="deleteDialog.avatarText"
+      :loading="deleteDialog.loading"
+      @confirm="confirmDeleteDialog"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -292,7 +324,19 @@ const managingAlbum = ref(null)
 const manageImages = ref([])
 const selectedManageIds = ref([])
 const activeManageTab = ref('images')
-const editForm = reactive({ name: '', description: '', isPublic: false })
+const editForm = reactive({ name: '', description: '', isPublic: false, imagesPublic: false })
+const imagePublicSaving = ref(false)
+const deleteDialog = reactive({
+  show: false,
+  type: '',
+  payload: null,
+  title: '确认删除',
+  message: '',
+  description: '此操作不可恢复，请谨慎操作。',
+  effects: [],
+  avatarText: '删',
+  loading: false
+})
 
 const sourceTabs = computed(() => [
   { key: 'all', label: '全部相册', count: counts.all, icon: '/icons/albums/album-64x64.png' },
@@ -447,6 +491,7 @@ const openManage = async (album) => {
   editForm.name = album.name || ''
   editForm.description = album.description || ''
   editForm.isPublic = !!album.is_public
+  editForm.imagesPublic = !!album.all_picture_public
   await loadManageImages(album.id)
 }
 
@@ -468,6 +513,7 @@ const loadManageImages = async (albumId) => {
     editForm.name = managingAlbum.value.name || ''
     editForm.description = managingAlbum.value.description || ''
     editForm.isPublic = !!managingAlbum.value.is_public
+    editForm.imagesPublic = !!managingAlbum.value.all_picture_public
   } catch {
     manageImages.value = []
   }
@@ -495,9 +541,20 @@ const setCover = async (img) => {
 
 const removeSelectedFromAlbum = async () => {
   if (selectedManageIds.value.length === 0) return
-  if (!confirm(`确定从相册移除已选 ${selectedManageIds.value.length} 张图片？`)) return
+  openDeleteDialog({
+    type: 'remove-images',
+    payload: [...selectedManageIds.value],
+    title: '确认移除图片',
+    message: `从相册移除已选 ${selectedManageIds.value.length} 张图片？`,
+    description: '图片只会离开当前相册，不会删除图片文件。',
+    effects: ['相册图片数量会更新', '图片本身和标签数据会保留'],
+    avatarText: String(selectedManageIds.value.length)
+  })
+}
+
+const removeSelectedFromAlbumNow = async (ids) => {
   try {
-    await Promise.all(selectedManageIds.value.map(id => api.put(`/api/admin/images/${id}`, { album_id: null })))
+    await Promise.all(ids.map(id => api.put(`/api/admin/images/${id}`, { album_id: null })))
     selectedManageIds.value = []
     await Promise.all([loadAlbums(page.value), loadManageImages(managingAlbum.value.id), loadCounts()])
   } catch (err) {
@@ -520,14 +577,75 @@ const saveAlbumSettings = async () => {
   }
 }
 
-const deleteAlbum = async () => {
-  if (!confirm(`确定删除相册 "${managingAlbum.value.name}"？相册内图片不会被删除。`)) return
+const toggleAlbumImagesPublic = async () => {
+  if (!managingAlbum.value || imagePublicSaving.value) return
+  const nextValue = !editForm.imagesPublic
+  imagePublicSaving.value = true
   try {
-    await api.del(`/api/admin/albums/${managingAlbum.value.id}`)
+    const result = await api.put(`/api/admin/albums/${managingAlbum.value.id}/images-public`, { is_public: nextValue })
+    editForm.imagesPublic = nextValue
+    managingAlbum.value = { ...managingAlbum.value, all_picture_public: nextValue }
+    manageImages.value = manageImages.value.map(img => ({ ...img, is_public: nextValue }))
+    alert(`已${nextValue ? '公开' : '取消公开'}相册内 ${result.updated || 0} 张图片`)
+    await loadManageImages(managingAlbum.value.id)
+  } catch (err) {
+    alert('批量设置失败: ' + (err.data?.error || err.message))
+  } finally {
+    imagePublicSaving.value = false
+  }
+}
+
+const deleteAlbum = async () => {
+  openDeleteDialog({
+    type: 'album',
+    payload: managingAlbum.value,
+    title: '确认删除相册',
+    message: `删除相册 "${managingAlbum.value.name}"？`,
+    description: '相册内图片不会被删除。',
+    effects: ['相册记录会被删除', '图片会保留并脱离该相册'],
+    avatarText: '册'
+  })
+}
+
+const deleteAlbumNow = async (album) => {
+  try {
+    await api.del(`/api/admin/albums/${album.id}`)
     closeManage()
     await Promise.all([loadAlbums(1), loadCounts()])
   } catch (err) {
     alert('删除失败: ' + (err.data?.error || err.message))
+  }
+}
+
+const openDeleteDialog = (options) => {
+  deleteDialog.show = true
+  deleteDialog.type = options.type
+  deleteDialog.payload = options.payload
+  deleteDialog.title = options.title
+  deleteDialog.message = options.message
+  deleteDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
+  deleteDialog.effects = options.effects || []
+  deleteDialog.avatarText = options.avatarText || '删'
+}
+
+const closeDeleteDialog = () => {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.type = ''
+  deleteDialog.payload = null
+  deleteDialog.effects = []
+}
+
+const confirmDeleteDialog = async () => {
+  if (deleteDialog.loading) return
+  deleteDialog.loading = true
+  try {
+    if (deleteDialog.type === 'remove-images') await removeSelectedFromAlbumNow(deleteDialog.payload || [])
+    else if (deleteDialog.type === 'album') await deleteAlbumNow(deleteDialog.payload)
+    deleteDialog.loading = false
+    closeDeleteDialog()
+  } finally {
+    deleteDialog.loading = false
   }
 }
 </script>
@@ -1425,20 +1543,49 @@ const deleteAlbum = async () => {
   font-weight: 800;
 }
 
+.image-public-row {
+  align-items: flex-start;
+}
+
+.setting-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 7px 9px;
+  border: 1px solid rgba(248, 95, 154, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 239, 246, 0.72);
+  color: #f15c96;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.setting-warning img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
 .pink-switch {
-  width: 62px;
-  height: 34px;
+  flex: 0 0 auto;
+  width: 48px;
+  min-width: 48px;
+  height: 26px;
+  min-height: 26px;
   padding: 3px;
   border: 0;
   border-radius: 999px;
   background: #d8dce8;
+  box-sizing: border-box;
   cursor: pointer;
   transition: background 180ms ease;
 }
 
 .pink-switch i {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   display: block;
   border-radius: 50%;
   background: #fff;
@@ -1447,11 +1594,11 @@ const deleteAlbum = async () => {
 }
 
 .pink-switch.active {
-  background: #f15c96;
+  background: var(--taotu-button-active-bg, #f15c96);
 }
 
 .pink-switch.active i {
-  transform: translateX(28px);
+  transform: translateX(22px);
 }
 
 @media (max-width: 1120px) {

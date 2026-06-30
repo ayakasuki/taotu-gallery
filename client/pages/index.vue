@@ -227,6 +227,17 @@
         </div>
       </div>
     </div>
+
+    <ConfirmDeleteDialog
+      :show="deleteDialog.show"
+      title="确认删除图片"
+      :message="deleteDialog.message"
+      :effects="deleteDialog.effects"
+      :avatar-text="deleteDialog.avatarText"
+      :loading="deleteDialog.loading"
+      @confirm="confirmBatchDelete"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>
 
@@ -253,6 +264,7 @@ const sortOptions = [
 
 // 多选相关
 const selectedIds = ref([])
+const deleteDialog = reactive({ show: false, payload: [], message: '', effects: [], avatarText: '图', loading: false })
 
 // 移动相册相关
 const showMoveModal = ref(false)
@@ -681,14 +693,36 @@ const selectAllCurrent = () => {
 
 // 批量删除
 const batchDelete = async () => {
-  if (!confirm(`确定删除选中的 ${selectedIds.value.length} 张图片？`)) return
+  deleteDialog.show = true
+  deleteDialog.payload = [...selectedIds.value]
+  deleteDialog.message = `删除选中的 ${selectedIds.value.length} 张图片？`
+  deleteDialog.effects = ['图片记录会被移除', '相关图片标签会同步清理']
+  deleteDialog.avatarText = String(selectedIds.value.length)
+}
+
+const closeDeleteDialog = () => {
+  if (deleteDialog.loading) return
+  deleteDialog.show = false
+  deleteDialog.payload = []
+  deleteDialog.effects = []
+}
+
+const confirmBatchDelete = async () => {
+  if (deleteDialog.loading) return
+  deleteDialog.loading = true
   let success = 0
-  for (const id of selectedIds.value) {
-    try { await api.del(`/api/admin/images/${id}`); success++ } catch {}
+  try {
+    for (const id of deleteDialog.payload) {
+      try { await api.del(`/api/admin/images/${id}`); success++ } catch {}
+    }
+    alert(`已删除 ${success} 张图片`)
+    selectedIds.value = []
+    await loadGallery()
+    deleteDialog.loading = false
+    closeDeleteDialog()
+  } finally {
+    deleteDialog.loading = false
   }
-  alert(`已删除 ${success} 张图片`)
-  selectedIds.value = []
-  await loadGallery()
 }
 
 // 移动到相册
