@@ -184,7 +184,7 @@ curl -X POST {{ baseUrl }}/api/upload \
             <span>文件名</span>
             <span>大小</span>
             <span>状态</span>
-            <span>链接（桃图智库）</span>
+            <span>链接（{{ siteName }}）</span>
             <span>错误信息</span>
             <span>操作</span>
             <span>时间</span>
@@ -222,6 +222,7 @@ const { tags, fetchTags } = useTags()
 
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
+const siteName = ref('桃图智库')
 const activeTab = ref('file')
 const uploadTabs = [
   { key: 'file', label: '文件上传', icon: '/icons/upload/file-upload-64x64.png' },
@@ -229,7 +230,12 @@ const uploadTabs = [
   { key: 'api', label: 'API 上传', icon: '/icons/upload/api-upload-64x64.png' }
 ]
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const api = useApi()
+    const siteConfig = await api.get('/api/admin/site-config/public')
+    siteName.value = siteConfig.siteName || '桃图智库'
+  } catch {}
   const token = localStorage.getItem('jwt_token')
   isLoggedIn.value = !!token
   if (isLoggedIn.value) {

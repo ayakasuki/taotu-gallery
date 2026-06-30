@@ -173,6 +173,9 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: '用户名或密码错误' });
     }
 
+    if (user.review_status === 'pending') {
+      return res.status(403).json({ error: '该用户未审核，请等待管理员启用' });
+    }
     if (user.is_disabled) {
       return res.status(403).json({ error: '用户已被禁用，请咨询管理员' });
     }
@@ -296,12 +299,19 @@ router.post('/register', async (req, res, next) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const requireReview = !!siteConfig.registration?.requireReview;
     const [id] = await db('users').insert({
       username,
       password_hash: passwordHash,
       email: normalizedEmail || null,
-      role: 'user'
+      role: 'user',
+      is_disabled: requireReview,
+      review_status: requireReview ? 'pending' : 'approved'
     });
+
+    if (requireReview) {
+      return res.json({ pendingReview: true, message: '注册成功，等待管理员审核账户。' });
+    }
 
     const token = jwt.sign(
       { id, username, role: 'user' },

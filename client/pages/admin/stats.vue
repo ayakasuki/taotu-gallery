@@ -229,7 +229,6 @@
       title="确认删除备份"
       :message="deleteDialog.message"
       :effects="deleteDialog.effects"
-      avatar-text="备"
       :loading="deleteDialog.loading"
       @confirm="confirmDeleteBackup"
       @cancel="closeDeleteDialog"

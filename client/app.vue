@@ -1,6 +1,6 @@
 <template>
   <NuxtLayout>
-    <NuxtPage />
+    <NuxtPage :page-key="route.path" :transition="taotuPageTransition" />
   </NuxtLayout>
   <AdminToast />
 </template>
@@ -8,6 +8,12 @@
 <script setup>
 const { showAdminToast } = useAdminToast()
 const runtimeConfig = useRuntimeConfig()
+const route = useRoute()
+const taotuPageTransition = {
+  name: 'taotu-page-pop',
+  mode: 'out-in',
+  appear: true
+}
 let originalAlert = null
 
 useHead({

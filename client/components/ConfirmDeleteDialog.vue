@@ -4,7 +4,7 @@
       <section class="confirm-card">
       <header class="confirm-head">
         <div class="confirm-title">
-          <span class="warn-mark">!</span>
+          <img class="title-icon" :src="titleIcon" alt="" />
           <h2>{{ title }}</h2>
         </div>
         <button type="button" class="close-btn" @click="$emit('cancel')">
@@ -12,9 +12,8 @@
         </button>
       </header>
 
-      <div v-if="avatarText || avatarIcon" class="confirm-avatar">
-        <img v-if="avatarIcon" :src="avatarIcon" alt="" />
-        <span v-else>{{ avatarText }}</span>
+      <div v-if="previewIcon" class="confirm-preview">
+        <img :src="previewIcon" alt="" />
       </div>
 
       <h3>{{ message }}</h3>
@@ -46,8 +45,8 @@ defineProps({
   description: { type: String, default: '此操作不可恢复，请谨慎操作。' },
   effectTitle: { type: String, default: '删除影响' },
   effects: { type: Array, default: () => [] },
-  avatarText: { type: String, default: '' },
-  avatarIcon: { type: String, default: '' },
+  titleIcon: { type: String, default: '/icons/actions/delete-64x64.png' },
+  previewIcon: { type: String, default: '' },
   closeIcon: { type: String, default: '/icons/actions/close-64x64.png' },
   confirmText: { type: String, default: '确认删除' },
   cancelText: { type: String, default: '取消' },
@@ -79,19 +78,17 @@ defineEmits(['confirm', 'cancel'])
 }
 .confirm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .confirm-title { display: inline-flex; align-items: center; gap: 10px; }
-.warn-mark {
-  width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
-  border: 2px solid #ff5f98; border-radius: 50%; color: #ff5f98; font-weight: 900; line-height: 1;
-}
+.title-icon { width: 32px; height: 32px; object-fit: contain; flex: 0 0 auto; }
 .confirm-title h2 { margin: 0; color: #ff5f98; font-size: 20px; font-weight: 900; }
 .close-btn { width: 26px; height: 26px; border: 0; border-radius: 6px; background: rgba(213, 255, 179, 0.72); cursor: pointer; }
 .close-btn img { width: 14px; height: 14px; object-fit: contain; }
-.confirm-avatar {
-  width: 78px; height: 78px; display: grid; place-items: center; margin: 20px auto 16px;
-  border: 12px solid rgba(255, 228, 239, 0.9); border-radius: 50%; background: linear-gradient(135deg, #83d5ff, #8f9dff); color: #fff; font-size: 24px; font-weight: 900;
+.confirm-preview {
+  width: 94px; height: 94px; display: grid; place-items: center; margin: 18px auto 14px;
+  border: 8px solid rgba(255, 228, 239, 0.9); border-radius: 18px; background: rgba(255,255,255,0.88); overflow: hidden;
 }
-.confirm-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-.confirm-card h3 { margin: 0; color: #4a5368; text-align: center; font-size: 18px; font-weight: 900; }
+.confirm-preview img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+.confirm-card h3 { margin: 18px 0 0; color: #4a5368; text-align: center; font-size: 18px; font-weight: 900; }
+.confirm-preview + h3 { margin-top: 0; }
 .confirm-desc { margin: 8px 0 0; color: #9aa4b8; text-align: center; font-size: 13px; font-weight: 900; }
 .effect-box { margin-top: 18px; padding: 15px 17px; border: 1px solid rgba(255, 157, 190, 0.52); border-radius: 9px; background: rgba(255, 244, 248, 0.82); }
 .effect-box strong { display: block; margin-bottom: 8px; color: #ff5f98; font-size: 14px; font-weight: 900; }

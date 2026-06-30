@@ -265,7 +265,7 @@
       :message="deleteDialog.message"
       description="此操作不可恢复，图片记录和标签关联会被删除。"
       :effects="deleteDialog.effects"
-      :avatar-text="deleteDialog.avatarText"
+      :preview-icon="deleteDialog.previewIcon"
       :loading="deleteDialog.loading"
       @cancel="closeDeleteDialog"
       @confirm="confirmDeleteImage"
@@ -299,7 +299,7 @@ const users = ref([])
 const albums = ref([])
 const selectedIds = ref([])
 const batchPopoverOpen = ref(false)
-const deleteDialog = reactive({ show: false, target: null, targets: [], mode: 'single', message: '', avatarText: '图', loading: false, effects: [] })
+const deleteDialog = reactive({ show: false, target: null, targets: [], mode: 'single', message: '', previewIcon: '', loading: false, effects: [] })
 
 const editingImage = ref(null)
 const editTagIds = ref([])
@@ -615,7 +615,7 @@ async function deleteImage(img) {
   deleteDialog.targets = []
   deleteDialog.mode = 'single'
   deleteDialog.message = `确定删除图片「${img.filename}」吗？`
-  deleteDialog.avatarText = '图'
+  deleteDialog.previewIcon = getThumbUrl(img)
   deleteDialog.effects = [
     '图片记录会从图库中移除',
     '该图片已有的平台标签和私有标签关联会同步清理',
@@ -631,7 +631,7 @@ function deleteSelectedImages() {
   deleteDialog.targets = [...selectedIds.value]
   deleteDialog.mode = 'batch'
   deleteDialog.message = `确定删除选中的 ${selectedIds.value.length} 张图片吗？`
-  deleteDialog.avatarText = String(selectedIds.value.length)
+  deleteDialog.previewIcon = ''
   deleteDialog.effects = [
     '选中图片记录会从图库中移除',
     '这些图片已有的平台标签和私有标签关联会同步清理',
@@ -645,6 +645,7 @@ function closeDeleteDialog() {
   deleteDialog.target = null
   deleteDialog.targets = []
   deleteDialog.mode = 'single'
+  deleteDialog.previewIcon = ''
 }
 
 async function confirmDeleteImage() {
@@ -667,6 +668,7 @@ async function confirmDeleteImage() {
     deleteDialog.target = null
     deleteDialog.targets = []
     deleteDialog.mode = 'single'
+    deleteDialog.previewIcon = ''
   } catch (err) {
     showAdminToast('删除失败: ' + (err.data?.error || err.message), 'error')
   } finally {

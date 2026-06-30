@@ -267,7 +267,6 @@
       :message="deleteDialog.message"
       :description="deleteDialog.description"
       :effects="deleteDialog.effects"
-      :avatar-text="deleteDialog.avatarText"
       :loading="deleteDialog.loading"
       @cancel="closeDeleteDialog"
       @confirm="confirmDeleteDialog"
@@ -305,7 +304,6 @@ const deleteDialog = reactive({
   message: '',
   description: '此操作不可恢复，请谨慎操作。',
   effects: [],
-  avatarText: '',
   loading: false
 })
 
@@ -555,7 +553,6 @@ function removePath(index) {
     '这些图片已有的标签关联数据会同步清理',
     '原始磁盘图片文件、相册和标签本身不会被删除'
   ]
-  deleteDialog.avatarText = '路'
 }
 
 async function savePaths() {
@@ -660,7 +657,6 @@ function requestDeleteToken(token) {
     '使用该 Token 的接口调用会失败',
     '已复制到外部应用的密钥不会自动同步更新'
   ]
-  deleteDialog.avatarText = 'TK'
 }
 
 function closeDeleteDialog() {

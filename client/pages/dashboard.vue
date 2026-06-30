@@ -562,7 +562,7 @@
           <div class="security-card api-token-security-card">
             <div class="api-token-heading">
               <h2>API Token <span>管理</span></h2>
-              <p>使用 API Token 访问桃图智库 API，注意妥善保管，切勿泄露给他人。</p>
+              <p>使用 API Token 访问{{ siteName }} API，注意妥善保管，切勿泄露给他人。</p>
               <button type="button" class="token-create-button" @click="openTokenModal">
                 <img src="/icons/actions/add-64x64.png" alt="" />
                 <span>生成新 Token</span>
@@ -740,7 +740,7 @@
       :message="deleteDialog.message"
       :description="deleteDialog.description"
       :effects="deleteDialog.effects"
-      :avatar-text="deleteDialog.avatarText"
+      :preview-icon="deleteDialog.previewIcon"
       :loading="deleteDialog.loading"
       @confirm="confirmDeleteDialog"
       @cancel="closeDeleteDialog"
@@ -757,6 +757,7 @@ const router = useRouter()
 const { readCurrentUserCache, writeCurrentUserCache } = useUiCache()
 
 const activeSection = ref('overview')
+const siteName = ref('桃图智库')
 const user = ref(null)
 const loading = ref(true)
 const myImages = ref([])
@@ -798,7 +799,7 @@ const deleteDialog = reactive({
   message: '',
   description: '此操作不可恢复，请谨慎操作。',
   effects: [],
-  avatarText: '删',
+  previewIcon: '',
   loading: false
 })
 const manualImages = ref([])
@@ -942,6 +943,8 @@ onMounted(async () => {
   if (!token) { router.push('/login'); return }
   browserInfo.value = detectBrowserInfo()
   try {
+    const siteConfig = await api.get('/api/admin/site-config/public').catch(() => null)
+    siteName.value = siteConfig?.siteName || '桃图智库'
     const cachedUser = readCurrentUserCache()
     if (cachedUser) user.value = cachedUser
     user.value = await api.get('/api/admin/auth/me')
@@ -1052,7 +1055,6 @@ const deleteSelectedPrivateTags = async () => {
     title: '确认删除私有标签',
     message: '删除选中的 ' + selectedPrivateTagIds.value.length + ' 个私有标签？',
     effects: ['关联的图片标签会同步清除', '删除后私有标签不可直接恢复'],
-    avatarText: String(selectedPrivateTagIds.value.length)
   })
 }
 
@@ -1095,7 +1097,6 @@ const deleteMyTag = async (tag) => {
     title: '确认删除私有标签',
     message: '删除标签 "' + (tag.display_name || tag.name) + '"？',
     effects: ['关联的图片标签会同步清除', '删除后该标签不可直接恢复'],
-    avatarText: '签'
   })
 }
 
@@ -1167,7 +1168,6 @@ const batchDeleteMyImages = async () => {
     title: '确认删除图片',
     message: '删除选中的 ' + selectedImageIds.value.length + ' 张图片？',
     effects: ['图片记录会被移除', '相关图片标签会同步清理'],
-    avatarText: String(selectedImageIds.value.length)
   })
 }
 
@@ -1235,7 +1235,7 @@ const deleteMyImage = async (img) => {
     title: '确认删除图片',
     message: '删除图片 "' + img.filename + '"？',
     effects: ['图片记录会被移除', '相关图片标签会同步清理'],
-    avatarText: '图'
+    previewIcon: getThumbUrl(img)
   })
 }
 
@@ -1328,7 +1328,6 @@ const deleteToken = async (id) => {
     title: '确认删除 Token',
     message: '删除此 API Token？',
     effects: ['使用该 Token 的外部请求会立即失效'],
-    avatarText: 'T'
   })
 }
 
@@ -1342,7 +1341,7 @@ const openDeleteDialog = (options) => {
   deleteDialog.message = options.message
   deleteDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
   deleteDialog.effects = options.effects || []
-  deleteDialog.avatarText = options.avatarText || '删'
+  deleteDialog.previewIcon = options.previewIcon || ''
 }
 
 const closeDeleteDialog = () => {
@@ -1351,6 +1350,7 @@ const closeDeleteDialog = () => {
   deleteDialog.type = ''
   deleteDialog.payload = null
   deleteDialog.effects = []
+  deleteDialog.previewIcon = ''
 }
 
 const confirmDeleteDialog = async () => {

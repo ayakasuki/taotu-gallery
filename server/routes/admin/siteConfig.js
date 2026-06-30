@@ -43,7 +43,7 @@ router.get('/public', async (req, res, next) => {
       siteName: siteConfig.siteName || '桃图智库',
       publicDomain: siteConfig.publicDomain || '',
       recordNumber: siteConfig.recordNumber || '',
-      registration: siteConfig.registration || { enabled: false, emailVerification: false, maxUsers: 0 },
+      registration: siteConfig.registration || { enabled: false, emailVerification: false, requireReview: false, maxUsers: 0 },
       background: withDefaultBackground(siteConfig.background),
       icon: siteConfig.icon || null,
       logo: null,

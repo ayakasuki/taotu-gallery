@@ -41,15 +41,15 @@
       </main>
 
       <footer class="site-footer">
-        <span>© 2024 {{ siteName }}</span>
+        <span>© 2026 <a href="https://github.com/ayakasuki/taotu-gallery" target="_blank" rel="noopener noreferrer">{{ siteName }}</a></span>
         <span v-if="recordNumber">·</span>
         <span v-if="recordNumber">{{ recordNumber }}</span>
         <span>·</span>
-        <span>服务条款</span>
+        <NuxtLink to="/terms">服务条款</NuxtLink>
         <span>·</span>
-        <span>隐私政策</span>
+        <NuxtLink to="/privacy">隐私政策</NuxtLink>
         <span>·</span>
-        <span>帮助中心</span>
+        <NuxtLink to="/help">帮助中心</NuxtLink>
       </footer>
     </div>
   </div>
@@ -439,6 +439,16 @@ const handleLogout = () => {
   color: rgba(111, 119, 145, 0.76);
   font-size: 12px;
   text-align: center;
+}
+
+.site-footer a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.16s ease;
+}
+
+.site-footer a:hover {
+  color: #f45f93;
 }
 
 @media (max-width: 980px) {

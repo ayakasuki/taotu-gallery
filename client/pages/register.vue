@@ -20,6 +20,13 @@
         <NuxtLink to="/login" class="fluent-btn fluent-btn-primary">前往登录</NuxtLink>
       </div>
 
+      <div v-else-if="reviewSubmitted" class="closed-msg review-success-msg">
+        <img src="/icons/status/review-approved_128x128.png" class="review-success-icon" alt="" />
+        <h2>注册成功，等待管理员审核账户。</h2>
+        <p>审核通过后即可登录使用，若站点已配置 SMTP，系统会通过邮箱通知你审核结果。</p>
+        <NuxtLink to="/login" class="fluent-btn fluent-btn-primary">返回登录页</NuxtLink>
+      </div>
+
       <template v-else>
         <div class="form-group">
           <label class="form-label">用户名</label>
@@ -88,6 +95,7 @@
             <li><span class="dot" :class="{ done: registrationOpen }"></span>检查开放注册</li>
             <li><span class="dot" :class="{ done: !!captchaSvg }"></span>初始化图片验证码</li>
             <li><span class="dot" :class="{ done: emailVerification }"></span>邮箱验证策略</li>
+            <li><span class="dot" :class="{ done: registrationRequireReview }"></span>注册审核策略</li>
           </ul>
         </div>
 
@@ -125,7 +133,9 @@ const sendingCode = ref(false)
 const captchaLoading = ref(false)
 const configLoading = ref(true)
 const registrationOpen = ref(false)
+const registrationRequireReview = ref(false)
 const emailVerification = ref(false)
+const reviewSubmitted = ref(false)
 const siteName = ref('桃图智库')
 const brandLogo = ref('')
 const brandReady = ref(false)
@@ -140,6 +150,7 @@ onMounted(async () => {
     brandLogo.value = normalizeAssetUrl(cachedSiteConfig.icon)
     brandReady.value = true
     registrationOpen.value = !!cachedSiteConfig.registration?.enabled
+    registrationRequireReview.value = !!cachedSiteConfig.registration?.requireReview
     emailVerification.value = !!cachedSiteConfig.registration?.emailVerification
   }
   try {
@@ -148,6 +159,7 @@ onMounted(async () => {
     brandLogo.value = normalizeAssetUrl(siteConfig.icon)
     brandReady.value = true
     registrationOpen.value = !!siteConfig.registration?.enabled
+    registrationRequireReview.value = !!siteConfig.registration?.requireReview
     emailVerification.value = !!siteConfig.registration?.emailVerification
     writeSiteConfigCache(siteConfig)
     if (registrationOpen.value) await loadCaptcha()
@@ -248,6 +260,11 @@ const handleRegister = async () => {
       captchaId: form.captchaId,
       captchaCode: form.captchaCode
     })
+    if (data.pendingReview) {
+      reviewSubmitted.value = true
+      setSuccess(data.message || '注册成功，等待管理员审核账户。')
+      return
+    }
     if (data.token) {
       localStorage.setItem('jwt_token', data.token)
       writeCurrentUserCache(data.user)
@@ -318,6 +335,10 @@ const handleRegister = async () => {
 .register-btn { width: 100%; padding: 10px; font-size: 15px; }
 .closed-msg { text-align: center; padding: var(--space-xl) 0; }
 .closed-msg p { margin-bottom: var(--space-lg); color: var(--fluent-text-secondary); }
+.review-success-msg { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.review-success-msg h2 { color: var(--taotu-text-strong); font-size: 22px; font-weight: 950; }
+.review-success-msg p { max-width: 360px; margin-bottom: var(--space-sm); line-height: 1.8; }
+.review-success-icon { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 12px 22px rgba(54, 196, 143, 0.22)); }
 .footer-links { display: flex; justify-content: space-between; margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--fluent-border); font-size: 13px; }
 .footer-links a { color: var(--fluent-blue); text-decoration: none; }
 .register-side { display: flex; flex-direction: column; gap: var(--space-md); }

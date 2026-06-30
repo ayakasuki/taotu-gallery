@@ -159,6 +159,14 @@
         </div>
 
         <div class="switch-row">
+          <span>用户注册后需审核</span>
+          <label class="pink-switch">
+            <input v-model="form.registrationRequireReview" type="checkbox" />
+            <i></i>
+          </label>
+        </div>
+
+        <div class="switch-row">
           <span>注册需邮箱验证</span>
           <label class="pink-switch">
             <input v-model="form.emailVerification" type="checkbox" />
@@ -412,6 +420,7 @@ const form = reactive({
   siteName: '',
   publicDomain: '',
   registrationEnabled: false,
+  registrationRequireReview: false,
   emailVerification: false,
   registrationMaxUsers: 0,
   recordNumber: '',
@@ -474,7 +483,7 @@ function showMessage(text, type = 'success') {
 
 const cardFields = {
   brand: ['siteName', 'icon', 'bgUrl', 'bgBlur', 'overlayTop', 'overlayBottom'],
-  access: ['publicDomain', 'registrationEnabled', 'emailVerification', 'registrationMaxUsers', 'defaultStorageLimit'],
+  access: ['publicDomain', 'registrationEnabled', 'registrationRequireReview', 'emailVerification', 'registrationMaxUsers', 'defaultStorageLimit'],
   password: ['oldPassword', 'newPassword', 'confirmPassword'],
   smtp: ['smtpHost', 'smtpPort', 'smtpSecurity', 'smtpUsername', 'smtpPassword', 'smtpFrom', 'smtpTestTo'],
   image: ['mediumWidth', 'mediumHeight', 'imageQuality', 'allowedFormats', 'defaultMaxFileSize'],
@@ -529,6 +538,7 @@ function applyForm(data = {}) {
   form.siteName = data.siteName || ''
   form.publicDomain = data.publicDomain || ''
   form.registrationEnabled = !!data.registration?.enabled
+  form.registrationRequireReview = !!data.registration?.requireReview
   form.emailVerification = !!data.registration?.emailVerification
   form.registrationMaxUsers = Number(data.registration?.maxUsers || 0)
   form.recordNumber = data.recordNumber || ''
@@ -585,6 +595,7 @@ function buildSiteConfigPayload() {
     logo: null,
     registration: {
       enabled: !!form.registrationEnabled,
+      requireReview: !!form.registrationRequireReview,
       emailVerification: !!form.emailVerification,
       maxUsers: Math.max(0, Number(form.registrationMaxUsers || 0))
     },
@@ -626,6 +637,7 @@ function buildPublicSiteConfigCache(overrides = {}) {
     recordNumber: form.recordNumber || '',
     registration: {
       enabled: !!form.registrationEnabled,
+      requireReview: !!form.registrationRequireReview,
       emailVerification: !!form.emailVerification,
       maxUsers: Math.max(0, Number(form.registrationMaxUsers || 0))
     },

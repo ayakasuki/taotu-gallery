@@ -42,6 +42,54 @@ async function requireAdminUser(req) {
   return user;
 }
 
+async function cleanupUserData(userId, user) {
+  const tokenCount = await db('api_tokens').where({ user_id: userId }).del();
+  logger.info(`删除用户 ${userId} 的 ${tokenCount} 个 Token`);
+
+  const userTagIds = await db('user_tags').where({ user_id: userId }).select('id');
+  for (const ut of userTagIds) {
+    await db('image_tags').where({ user_tag_id: ut.id }).del();
+  }
+  const tagCount = await db('user_tags').where({ user_id: userId }).del();
+  logger.info(`删除用户 ${userId} 的 ${tagCount} 个私有标签`);
+
+  const userImages = await db('images').where({ uploader_id: userId }).select('id', 'path');
+  const imageIds = userImages.map(img => img.id);
+  if (imageIds.length > 0) {
+    await db('image_tags').whereIn('image_id', imageIds).del();
+    let deletedFiles = 0;
+    for (const img of userImages) {
+      if (img.path) {
+        const fullPath = path.resolve(config.projectRoot, img.path);
+        try {
+          await fs.unlink(fullPath);
+          for (const thumbPath of imageProcessor.getExistingThumbnailPath(fullPath, 'thumb')) await fs.unlink(thumbPath).catch(() => {});
+          for (const mediumPath of imageProcessor.getExistingThumbnailPath(fullPath, 'medium')) await fs.unlink(mediumPath).catch(() => {});
+          await imageProcessor.removeDerivedThumbnailsForImage(fullPath).catch(() => {});
+          deletedFiles++;
+        } catch {}
+      }
+    }
+    logger.info(`删除用户 ${userId} 的 ${deletedFiles} 个图片文件`);
+    await db('images').whereIn('id', imageIds).del();
+    logger.info(`删除用户 ${userId} 的 ${imageIds.length} 条图片记录`);
+  }
+
+  const userAlbums = await db('albums').where({ user_id: userId }).select('id');
+  const albumIds = userAlbums.map(a => a.id);
+  if (albumIds.length > 0) {
+    await db('album_tags').whereIn('album_id', albumIds).del();
+    await db('albums').whereIn('id', albumIds).del();
+    logger.info(`删除用户 ${userId} 的 ${albumIds.length} 个相册`);
+  }
+
+  await db('upload_logs').where({ user_id: userId }).del();
+  await db('users').where({ id: userId }).del();
+  logger.info(`用户 ${user.username} (ID:${userId}) 已彻底删除`);
+
+  return { tokenCount, tagCount, imageIds, albumIds };
+}
+
 async function assertUserTagNameAvailable(userId, name) {
   const normalizedName = normalizeTagName(name);
   if (!normalizedName) throw createUserTagError('标签名不能为空');
@@ -92,9 +140,12 @@ router.get('/', authMiddleware, async (req, res, next) => {
     }
 
     if (status === 'enabled') {
-      baseQuery.where((builder) => builder.where('u.is_disabled', false).orWhereNull('u.is_disabled'));
+      baseQuery.where((builder) => builder.where('u.is_disabled', false).orWhereNull('u.is_disabled'))
+        .where((builder) => builder.where('u.review_status', 'approved').orWhereNull('u.review_status'));
     } else if (status === 'disabled') {
       baseQuery.where('u.is_disabled', true);
+    } else if (status === 'pending') {
+      baseQuery.where('u.review_status', 'pending');
     }
 
     const totalRow = await baseQuery.clone().clearSelect().count({ total: 'u.id' }).first();
@@ -113,6 +164,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
         'u.last_login_ip',
         'u.created_at',
         'u.is_disabled',
+        'u.review_status',
         db.raw('COALESCE(img.used_storage, 0) as used_storage'),
         db.raw('COALESCE(img.image_count, 0) as image_count')
       )
@@ -130,6 +182,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
       users: users.map((user) => ({
         ...user,
         is_disabled: !!user.is_disabled,
+        review_status: user.review_status || 'approved',
         used_storage: toNumber(user.used_storage),
         image_count: toNumber(user.image_count),
         storage_limit: toNumber(user.storage_limit),
@@ -217,7 +270,8 @@ router.post('/', authMiddleware, async (req, res, next) => {
       role: role || 'user',
       storage_limit: normalizeBytes(storage_limit),
       max_file_size: normalizeBytes(max_file_size),
-      is_disabled: false
+      is_disabled: false,
+      review_status: 'approved'
     });
     res.json({ id, username: normalizedUsername, email: normalizedEmail, role: role || 'user' });
   } catch (err) {
@@ -269,6 +323,61 @@ router.patch('/:id/status', authMiddleware, async (req, res, next) => {
   }
 });
 
+// 审核通过用户
+router.patch('/:id/review/approve', authMiddleware, async (req, res, next) => {
+  try {
+    await requireAdminUser(req);
+    const userId = parseInt(req.params.id, 10);
+    const target = await db('users').where({ id: userId }).first();
+    if (!target) return res.status(404).json({ error: '用户不存在' });
+    if (target.role === 'admin') return res.status(400).json({ error: '管理员账号无需审核' });
+
+    await db('users').where({ id: userId }).update({ review_status: 'approved', is_disabled: false });
+    if (target.email) {
+      const mailService = require('../../services/mailService');
+      await mailService.sendAccountReviewApproved(target.email, target.username).catch((err) => {
+        logger.warn(`审核通过邮件发送失败: ${target.email} - ${err.message}`);
+      });
+    }
+    res.json({ message: '用户审核已通过', review_status: 'approved', is_disabled: false });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 拒绝审核并删除用户
+router.patch('/:id/review/reject', authMiddleware, async (req, res, next) => {
+  try {
+    await requireAdminUser(req);
+    const userId = parseInt(req.params.id, 10);
+    if (userId === req.user.id) return res.status(400).json({ error: '不能拒绝当前登录账号' });
+    const target = await db('users').where({ id: userId }).first();
+    if (!target) return res.status(404).json({ error: '用户不存在' });
+    if (target.role === 'admin') return res.status(400).json({ error: '不能拒绝管理员账号' });
+
+    await db('users').where({ id: userId }).update({ review_status: 'rejected', is_disabled: true });
+    if (target.email) {
+      const mailService = require('../../services/mailService');
+      await mailService.sendAccountReviewRejected(target.email, target.username).catch((err) => {
+        logger.warn(`审核拒绝邮件发送失败: ${target.email} - ${err.message}`);
+      });
+    }
+
+    const cleaned = await cleanupUserData(userId, target);
+    res.json({
+      message: `已拒绝用户 ${target.username} 的审核申请并删除账户`,
+      cleaned: {
+        tokens: cleaned.tokenCount,
+        tags: cleaned.tagCount,
+        images: cleaned.imageIds.length,
+        albums: cleaned.albumIds.length
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 删除用户（彻底清理：Token、相册、图片、标签、文件）
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
@@ -279,70 +388,15 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
     if (!user) return res.status(404).json({ error: '用户不存在' });
     if (user.role === 'admin') return res.status(400).json({ error: '不能删除管理员账号' });
 
-    // 1. 删除用户的 API Token
-    const tokenCount = await db('api_tokens').where({ user_id: userId }).del();
-    logger.info(`删除用户 ${userId} 的 ${tokenCount} 个 Token`);
-
-    // 2. 删除用户的私有标签关联
-    const userTagIds = await db('user_tags').where({ user_id: userId }).select('id');
-    for (const ut of userTagIds) {
-      await db('image_tags').where({ user_tag_id: ut.id }).del();
-    }
-    const tagCount = await db('user_tags').where({ user_id: userId }).del();
-    logger.info(`删除用户 ${userId} 的 ${tagCount} 个私有标签`);
-
-    // 3. 获取用户的所有图片
-    const userImages = await db('images').where({ uploader_id: userId }).select('id', 'path');
-    const imageIds = userImages.map(img => img.id);
-
-    if (imageIds.length > 0) {
-      // 4. 删除图片标签关联
-      await db('image_tags').whereIn('image_id', imageIds).del();
-
-      // 5. 删除图片文件（只删除上传的，不删除本地扫描的）
-      let deletedFiles = 0;
-      for (const img of userImages) {
-        if (img.path) {
-          const fullPath = path.resolve(config.projectRoot, img.path);
-          try {
-            await fs.unlink(fullPath);
-            for (const thumbPath of imageProcessor.getExistingThumbnailPath(fullPath, 'thumb')) await fs.unlink(thumbPath).catch(() => {});
-            for (const mediumPath of imageProcessor.getExistingThumbnailPath(fullPath, 'medium')) await fs.unlink(mediumPath).catch(() => {});
-            await imageProcessor.removeDerivedThumbnailsForImage(fullPath).catch(() => {});
-            deletedFiles++;
-          } catch {}
-        }
-      }
-      logger.info(`删除用户 ${userId} 的 ${deletedFiles} 个图片文件`);
-
-      // 6. 删除图片数据库记录
-      await db('images').whereIn('id', imageIds).del();
-      logger.info(`删除用户 ${userId} 的 ${imageIds.length} 条图片记录`);
-    }
-
-    // 7. 删除用户的相册标签关联
-    const userAlbums = await db('albums').where({ user_id: userId }).select('id');
-    const albumIds = userAlbums.map(a => a.id);
-    if (albumIds.length > 0) {
-      await db('album_tags').whereIn('album_id', albumIds).del();
-      await db('albums').whereIn('id', albumIds).del();
-      logger.info(`删除用户 ${userId} 的 ${albumIds.length} 个相册`);
-    }
-
-    // 8. 删除上传日志
-    await db('upload_logs').where({ user_id: userId }).del();
-
-    // 9. 最后删除用户本身
-    await db('users').where({ id: userId }).del();
-    logger.info(`用户 ${user.username} (ID:${userId}) 已彻底删除`);
+    const cleaned = await cleanupUserData(userId, user);
 
     res.json({
       message: `用户 ${user.username} 已彻底删除`,
       cleaned: {
-        tokens: tokenCount,
-        tags: tagCount,
-        images: imageIds.length,
-        albums: albumIds.length
+        tokens: cleaned.tokenCount,
+        tags: cleaned.tagCount,
+        images: cleaned.imageIds.length,
+        albums: cleaned.albumIds.length
       }
     });
   } catch (err) { next(err); }

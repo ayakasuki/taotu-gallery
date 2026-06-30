@@ -21,6 +21,159 @@
   -webkit-backdrop-filter: var(--site-bg-filter, none);
 }
 
+.taotu-page-pop-enter-active,
+.taotu-page-pop-leave-active {
+  transform-origin: 50% 24px;
+  will-change: opacity, transform, filter;
+}
+
+.taotu-page-pop-enter-active {
+  animation: taotu-page-rise var(--taotu-page-pop-duration) var(--taotu-page-pop-ease) both;
+}
+
+.taotu-page-pop-leave-active {
+  transition: opacity 120ms ease, transform 120ms ease, filter 120ms ease;
+}
+
+.taotu-page-pop-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -6px, 0) scale(0.996);
+  filter: blur(2px);
+}
+
+.taotu-page-pop-enter-active :where(
+  .taotu-panel,
+  .taotu-card,
+  .fluent-card,
+  .glass-card,
+  .album-card,
+  .api-card,
+  .upload-card,
+  .stat-card,
+  .metric-card,
+  .feature-card,
+  .settings-card,
+  .admin-card,
+  .dashboard-card,
+  .summary-card,
+  .path-card,
+  .token-card,
+  .announcement-card
+) {
+  animation: taotu-panel-bloom 520ms var(--taotu-page-pop-ease) both;
+  will-change: opacity, transform, filter;
+}
+
+.taotu-page-pop-enter-active :where(
+  .taotu-panel,
+  .taotu-card,
+  .fluent-card,
+  .glass-card,
+  .album-card,
+  .api-card,
+  .upload-card,
+  .stat-card,
+  .metric-card,
+  .feature-card,
+  .settings-card,
+  .admin-card,
+  .dashboard-card,
+  .summary-card,
+  .path-card,
+  .token-card,
+  .announcement-card
+):nth-child(2n) {
+  animation-delay: 34ms;
+}
+
+.taotu-page-pop-enter-active :where(
+  .taotu-panel,
+  .taotu-card,
+  .fluent-card,
+  .glass-card,
+  .album-card,
+  .api-card,
+  .upload-card,
+  .stat-card,
+  .metric-card,
+  .feature-card,
+  .settings-card,
+  .admin-card,
+  .dashboard-card,
+  .summary-card,
+  .path-card,
+  .token-card,
+  .announcement-card
+):nth-child(3n) {
+  animation-delay: 68ms;
+}
+
+@keyframes taotu-page-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.985);
+    filter: blur(8px) saturate(0.96);
+  }
+  68% {
+    opacity: 1;
+    transform: translate3d(0, -3px, 0) scale(1.004);
+    filter: blur(0) saturate(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: none;
+  }
+}
+
+@keyframes taotu-panel-bloom {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.982);
+    filter: blur(5px);
+  }
+  66% {
+    opacity: 1;
+    transform: translate3d(0, -2px, 0) scale(1.006);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .taotu-page-pop-enter-active,
+  .taotu-page-pop-leave-active,
+  .taotu-page-pop-enter-active :where(
+    .taotu-panel,
+    .taotu-card,
+    .fluent-card,
+    .glass-card,
+    .album-card,
+    .api-card,
+    .upload-card,
+    .stat-card,
+    .metric-card,
+    .feature-card,
+    .settings-card,
+    .admin-card,
+    .dashboard-card,
+    .summary-card,
+    .path-card,
+    .token-card,
+    .announcement-card
+  ) {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
 .taotu-card,
 .fluent-card {
   background: var(--taotu-glass);

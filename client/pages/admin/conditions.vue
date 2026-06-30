@@ -197,7 +197,6 @@
       title="确认删除条件"
       :message="deleteDialog.message"
       :effects="deleteDialog.effects"
-      :avatar-text="deleteDialog.avatarText"
       :loading="deleteDialog.loading"
       @confirm="confirmDeleteCondition"
       @cancel="closeDeleteDialog"
@@ -218,7 +217,7 @@ const loading = ref(false)
 const page = ref(1)
 const pageSize = 8
 const total = ref(0)
-const deleteDialog = reactive({ show: false, payload: null, message: '', effects: [], avatarText: '条', loading: false })
+const deleteDialog = reactive({ show: false, payload: null, message: '', effects: [], loading: false })
 
 const typeLabels = {
   path_regex: '路径包含',

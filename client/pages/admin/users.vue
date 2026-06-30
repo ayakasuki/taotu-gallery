@@ -52,7 +52,8 @@
                   <div class="user-name-line">
                     <b>{{ user.username }}</b>
                     <i v-if="user.role === 'admin'" class="inline-role admin">管理员</i>
-                    <i v-if="user.is_disabled" class="inline-role disabled">禁用</i>
+                    <i v-if="isPendingReview(user)" class="inline-role pending">未审核</i>
+                    <i v-else-if="user.is_disabled" class="inline-role disabled">禁用</i>
                   </div>
                 </div>
               </div>
@@ -82,6 +83,24 @@
 
               <div class="action-cell">
                 <button type="button" class="row-btn edit" @click="openEditDialog(user)">编辑</button>
+                <button
+                  v-if="isPendingReview(user)"
+                  type="button"
+                  class="row-btn approve"
+                  :disabled="saving"
+                  @click="approveUser(user)"
+                >
+                  审核
+                </button>
+                <button
+                  v-if="isPendingReview(user) && canDelete(user)"
+                  type="button"
+                  class="row-btn reject"
+                  :disabled="saving"
+                  @click="rejectUser(user)"
+                >
+                  拒绝
+                </button>
                 <button
                   type="button"
                   class="row-btn"
@@ -266,7 +285,8 @@ const roleFilterOptions = [
 const statusFilterOptions = [
   { label: '全部状态', value: 'all' },
   { label: '启用', value: 'enabled' },
-  { label: '禁用', value: 'disabled' }
+  { label: '禁用', value: 'disabled' },
+  { label: '未审核', value: 'pending' }
 ]
 
 const pageSizeOptions = [
@@ -440,6 +460,38 @@ async function toggleUserStatus(user) {
   } finally {
     saving.value = false
   }
+}
+
+async function approveUser(user) {
+  saving.value = true
+  try {
+    await api.request(`/api/admin/users/${user.id}/review/approve`, { method: 'PATCH' })
+    user.review_status = 'approved'
+    user.is_disabled = false
+    showAdminToast('用户审核已通过', 'success')
+    await loadUsers()
+  } catch (err) {
+    showAdminToast(err?.data?.error || err.message || '审核失败', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function rejectUser(user) {
+  saving.value = true
+  try {
+    await api.request(`/api/admin/users/${user.id}/review/reject`, { method: 'PATCH' })
+    showAdminToast('已拒绝审核并删除该用户', 'success')
+    await loadUsers()
+  } catch (err) {
+    showAdminToast(err?.data?.error || err.message || '拒绝审核失败', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+function isPendingReview(user) {
+  return user.review_status === 'pending'
 }
 
 async function confirmDeleteUser() {
@@ -821,6 +873,11 @@ function formatDateTime(value) {
   color: #9ca4b8;
 }
 
+.inline-role.pending {
+  background: rgba(232, 250, 241, 0.95);
+  color: #37ad77;
+}
+
 .role-pill.user {
   background: rgba(241, 239, 255, 0.98);
   color: #8f7cff;
@@ -929,6 +986,17 @@ function formatDateTime(value) {
 .row-btn.enable {
   background: rgba(232, 250, 241, 0.95);
   color: #37ad77;
+}
+
+.row-btn.approve {
+  background: rgba(224, 250, 239, 0.98);
+  color: #20a96d;
+}
+
+.row-btn.reject {
+  min-width: 44px;
+  background: rgba(255, 239, 245, 0.95);
+  color: #f25c8e;
 }
 
 .row-btn.delete {

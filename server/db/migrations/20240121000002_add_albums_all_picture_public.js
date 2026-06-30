@@ -1,4 +1,6 @@
 exports.up = async function(knex) {
+  const hasTable = await knex.schema.hasTable('albums');
+  if (!hasTable) return;
   const hasColumn = await knex.schema.hasColumn('albums', 'all_picture_public');
   if (!hasColumn) {
     await knex.schema.alterTable('albums', (table) => {
@@ -8,6 +10,8 @@ exports.up = async function(knex) {
 };
 
 exports.down = async function(knex) {
+  const hasTable = await knex.schema.hasTable('albums');
+  if (!hasTable) return;
   const hasColumn = await knex.schema.hasColumn('albums', 'all_picture_public');
   if (hasColumn) {
     await knex.schema.alterTable('albums', (table) => {

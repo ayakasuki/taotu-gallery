@@ -149,15 +149,21 @@ async function getAlbumById(albumId) {
   album.owner_name = owner?.username || '系统';
   album.owner_avatar = owner?.avatar || null;
 
-  // 获取封面
+  // 获取封面：优先使用手动/系统写入的封面，缺失时回退到相册内最新图片
   if (album.cover_image_id) {
     album.cover_image = await db('images').where({ id: album.cover_image_id }).first();
-    if (album.cover_image) {
-      const urls = imageService.buildImageUrls(album.cover_image);
-      Object.assign(album.cover_image, urls);
-      delete album.cover_image.path;
-      delete album.cover_image.original_path;
-    }
+  }
+  if (!album.cover_image) {
+    album.cover_image = await db('images')
+      .where({ album_id: albumId })
+      .orderBy('created_at', 'desc')
+      .first();
+  }
+  if (album.cover_image) {
+    const urls = imageService.buildImageUrls(album.cover_image);
+    Object.assign(album.cover_image, urls);
+    delete album.cover_image.path;
+    delete album.cover_image.original_path;
   }
 
   // 获取图片列表（带 URL）

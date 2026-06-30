@@ -94,6 +94,24 @@ app.get('/api/gallery/config', async (req, res, next) => {
   }
 });
 
+// 公开联系信息（帮助中心使用，仅返回最早管理员邮箱）
+app.get('/api/public/contact', async (req, res, next) => {
+  try {
+    const db = require('./db');
+    const admin = await db('users')
+      .where({ role: 'admin' })
+      .orderBy('id', 'asc')
+      .select('id', 'email')
+      .first();
+    const email = admin?.email || 'admin@example.com';
+    const isDefaultEmail = !admin?.email || String(admin.email).trim().toLowerCase() === 'admin@example.com';
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.json({ adminId: admin?.id || null, email, isDefaultEmail });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // API 调用日志（对外 API）
 const apiLogger = require('./middleware/apiLogger');
 

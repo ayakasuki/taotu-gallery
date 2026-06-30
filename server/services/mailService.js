@@ -50,13 +50,39 @@ async function sendPasswordResetCode(email, code) {
   });
 }
 
-async function testSmtp(to) {
+async function sendAccountReviewApproved(email, username) {
+  if (!email) return null;
+  const siteConfig = await configService.readSiteConfig();
+  const siteName = siteConfig.siteName || '桃图智库';
   return sendMail({
-    to,
-    subject: 'SMTP 测试邮件',
-    text: '这是一封来自桃图智库的 SMTP 配置测试邮件。',
-    html: '<p>这是一封来自桃图智库的 SMTP 配置测试邮件。</p>'
+    to: email,
+    subject: siteName + ' 账户审核已通过',
+    text: '你好，' + (username || '用户') + '，你的账户审核已通过，现在可以登录使用 ' + siteName + '。',
+    html: '<p>你好，' + (username || '用户') + '：</p><p>你的账户审核已通过，现在可以登录使用 <strong>' + siteName + '</strong>。</p>'
   });
 }
 
-module.exports = { sendMail, sendVerificationCode, sendPasswordResetCode, testSmtp };
+async function sendAccountReviewRejected(email, username) {
+  if (!email) return null;
+  const siteConfig = await configService.readSiteConfig();
+  const siteName = siteConfig.siteName || '桃图智库';
+  return sendMail({
+    to: email,
+    subject: siteName + ' 账户审核未通过',
+    text: '你好，' + (username || '用户') + '，管理员已拒绝你的账户申请，账户未通过审核。',
+    html: '<p>你好，' + (username || '用户') + '：</p><p>管理员已拒绝你的账户申请，账户未通过审核。</p>'
+  });
+}
+
+async function testSmtp(to) {
+  const siteConfig = await configService.readSiteConfig();
+  const siteName = siteConfig.siteName || '桃图智库';
+  return sendMail({
+    to,
+    subject: siteName + ' SMTP 测试邮件',
+    text: '这是一封来自' + siteName + '的 SMTP 配置测试邮件。',
+    html: '<p>这是一封来自' + siteName + '的 SMTP 配置测试邮件。</p>'
+  });
+}
+
+module.exports = { sendMail, sendVerificationCode, sendPasswordResetCode, sendAccountReviewApproved, sendAccountReviewRejected, testSmtp };

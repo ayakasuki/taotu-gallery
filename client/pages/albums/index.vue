@@ -287,7 +287,6 @@
       :message="deleteDialog.message"
       :description="deleteDialog.description"
       :effects="deleteDialog.effects"
-      :avatar-text="deleteDialog.avatarText"
       :loading="deleteDialog.loading"
       @confirm="confirmDeleteDialog"
       @cancel="closeDeleteDialog"
@@ -334,7 +333,6 @@ const deleteDialog = reactive({
   message: '',
   description: '此操作不可恢复，请谨慎操作。',
   effects: [],
-  avatarText: '删',
   loading: false
 })
 
@@ -548,7 +546,6 @@ const removeSelectedFromAlbum = async () => {
     message: `从相册移除已选 ${selectedManageIds.value.length} 张图片？`,
     description: '图片只会离开当前相册，不会删除图片文件。',
     effects: ['相册图片数量会更新', '图片本身和标签数据会保留'],
-    avatarText: String(selectedManageIds.value.length)
   })
 }
 
@@ -603,7 +600,6 @@ const deleteAlbum = async () => {
     message: `删除相册 "${managingAlbum.value.name}"？`,
     description: '相册内图片不会被删除。',
     effects: ['相册记录会被删除', '图片会保留并脱离该相册'],
-    avatarText: '册'
   })
 }
 
@@ -625,7 +621,6 @@ const openDeleteDialog = (options) => {
   deleteDialog.message = options.message
   deleteDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
   deleteDialog.effects = options.effects || []
-  deleteDialog.avatarText = options.avatarText || '删'
 }
 
 const closeDeleteDialog = () => {

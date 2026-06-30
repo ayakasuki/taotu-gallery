@@ -427,7 +427,6 @@
       :message="deleteDialog.message"
       :description="deleteDialog.description"
       :effects="deleteDialog.effects"
-      :avatar-text="deleteDialog.avatarText"
       :loading="deleteDialog.loading"
       @confirm="confirmDeleteDialog"
       @cancel="closeDeleteDialog"
@@ -471,7 +470,6 @@ const deleteDialog = reactive({
   message: '',
   description: '此操作不可恢复，请谨慎操作。',
   effects: [],
-  avatarText: '删',
   loading: false
 })
 
@@ -698,7 +696,6 @@ async function deleteSelectedTags() {
     title: '确认删除标签',
     message: `删除选中的 ${selected.length} 个标签？`,
     effects: ['关联的图片标签会同步清除', '删除后标签列表不可直接恢复'],
-    avatarText: String(selected.length)
   })
 }
 
@@ -908,7 +905,6 @@ async function deleteTag(tag) {
     title: '确认删除标签',
     message: `删除标签 "${tag.display_name || tag.name}"？`,
     effects: ['关联的图片标签会同步清除', '删除后该标签不可直接恢复'],
-    avatarText: '签'
   })
 }
 
@@ -1033,7 +1029,6 @@ async function deleteGroup(group) {
     title: '确认删除分组',
     message: `删除分组 "${group.name}"？`,
     effects: ['仅删除分组结构，不删除标签本身', '分组内子分组关系会同步移除'],
-    avatarText: '组'
   })
 }
 
@@ -1054,7 +1049,6 @@ async function deleteSubgroup(group, subgroup) {
     title: '确认删除子分组',
     message: `删除子分组 "${subgroup.name}"？`,
     effects: ['仅删除子分组结构，不删除标签本身'],
-    avatarText: '组'
   })
 }
 
@@ -1076,7 +1070,6 @@ function openDeleteDialog(options) {
   deleteDialog.message = options.message
   deleteDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
   deleteDialog.effects = options.effects || []
-  deleteDialog.avatarText = options.avatarText || '删'
 }
 
 function closeDeleteDialog() {

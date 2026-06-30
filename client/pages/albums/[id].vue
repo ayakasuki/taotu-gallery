@@ -487,8 +487,10 @@ watch(pageSize, () => {
 
 .album-stats {
   width: fit-content;
+  max-width: 100%;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 30px;
   margin-top: 24px;
   padding: 10px 18px;
@@ -788,6 +790,29 @@ watch(pageSize, () => {
   background:
     radial-gradient(circle at 52% 38%, rgba(255,255,255,0.9) 0 15%, transparent 16%),
     radial-gradient(circle at 48% 42%, rgba(196, 205, 224, 0.34) 0 48%, transparent 49%);
+}
+
+@media (max-width: 1180px) {
+  .album-header {
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .album-cover-mini {
+    width: 132px;
+    height: 132px;
+  }
+
+  .album-stats {
+    gap: 10px 14px;
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  .album-stats img {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 @media (max-width: 980px) {

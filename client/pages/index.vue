@@ -233,7 +233,6 @@
       title="确认删除图片"
       :message="deleteDialog.message"
       :effects="deleteDialog.effects"
-      :avatar-text="deleteDialog.avatarText"
       :loading="deleteDialog.loading"
       @confirm="confirmBatchDelete"
       @cancel="closeDeleteDialog"
@@ -264,7 +263,7 @@ const sortOptions = [
 
 // 多选相关
 const selectedIds = ref([])
-const deleteDialog = reactive({ show: false, payload: [], message: '', effects: [], avatarText: '图', loading: false })
+const deleteDialog = reactive({ show: false, payload: [], message: '', effects: [], loading: false })
 
 // 移动相册相关
 const showMoveModal = ref(false)
@@ -697,7 +696,6 @@ const batchDelete = async () => {
   deleteDialog.payload = [...selectedIds.value]
   deleteDialog.message = `删除选中的 ${selectedIds.value.length} 张图片？`
   deleteDialog.effects = ['图片记录会被移除', '相关图片标签会同步清理']
-  deleteDialog.avatarText = String(selectedIds.value.length)
 }
 
 const closeDeleteDialog = () => {

@@ -139,7 +139,6 @@
       title="确认删除公告"
       :message="deleteDialog.message"
       :effects="deleteDialog.effects"
-      avatar-text="告"
       :loading="deleteDialog.loading"
       @confirm="confirmDeleteAnnouncement"
       @cancel="closeDeleteDialog"

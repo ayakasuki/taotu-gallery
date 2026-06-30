@@ -46,7 +46,6 @@
       :message="confirmDialog.message"
       :description="confirmDialog.description"
       :effects="confirmDialog.effects"
-      :avatar-text="confirmDialog.avatarText"
       :loading="confirmDialog.loading"
       :confirm-text="confirmDialog.confirmText"
       @confirm="confirmBackupAction"
@@ -70,7 +69,6 @@ const confirmDialog = reactive({
   message: '',
   description: '此操作不可恢复，请谨慎操作。',
   effects: [],
-  avatarText: '!',
   confirmText: '确认',
   loading: false
 })
@@ -104,7 +102,6 @@ const restoreBackup = async (filename) => {
     message: `恢复备份 "${filename}"？`,
     description: '恢复会覆盖当前数据，请确认已保存当前状态。',
     effects: ['当前数据库或配置可能被覆盖', '恢复完成后建议刷新页面并验证图片路径'],
-    avatarText: '恢',
     confirmText: '确认恢复'
   })
 }
@@ -124,7 +121,6 @@ const deleteBackup = async (filename) => {
     title: '确认删除备份',
     message: `删除备份 "${filename}"？`,
     effects: ['备份文件会被删除', '删除后无法再用该备份恢复'],
-    avatarText: '备',
     confirmText: '确认删除'
   })
 }
@@ -145,7 +141,6 @@ const openConfirmDialog = (options) => {
   confirmDialog.message = options.message
   confirmDialog.description = options.description || '此操作不可恢复，请谨慎操作。'
   confirmDialog.effects = options.effects || []
-  confirmDialog.avatarText = options.avatarText || '!'
   confirmDialog.confirmText = options.confirmText || '确认'
 }
 

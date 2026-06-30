@@ -50,6 +50,8 @@
   --taotu-radius-lg: 16px;
   --taotu-radius-xl: 22px;
   --taotu-transition: 180ms ease;
+  --taotu-page-pop-duration: 420ms;
+  --taotu-page-pop-ease: cubic-bezier(0.18, 0.92, 0.24, 1.08);
 
   --fluent-blue: var(--taotu-pink);
   --fluent-blue-hover: #f34f8d;

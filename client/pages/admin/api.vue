@@ -30,7 +30,6 @@
       title="确认删除 Token"
       message="删除此 API Token？"
       :effects="['使用该 Token 的外部请求会立即失效']"
-      avatar-text="T"
       :loading="deleteDialog.loading"
       @confirm="confirmDeleteToken"
       @cancel="closeDeleteDialog"
