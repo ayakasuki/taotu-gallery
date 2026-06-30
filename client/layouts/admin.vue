@@ -9,12 +9,15 @@
       </NuxtLink>
 
       <nav class="admin-topnav">
-        <NuxtLink to="/" class="topnav-link">图库</NuxtLink>
-        <NuxtLink to="/albums" class="topnav-link">相册</NuxtLink>
-        <NuxtLink to="/api-docs" class="topnav-link">API</NuxtLink>
-        <NuxtLink to="/upload" class="topnav-link">上传</NuxtLink>
-        <NuxtLink to="/dashboard" class="topnav-link">仪表盘</NuxtLink>
-        <NuxtLink to="/admin" class="topnav-link active">管理</NuxtLink>
+        <NuxtLink
+          v-for="item in topNavItems"
+          :key="item.to"
+          :to="item.to"
+          class="topnav-link"
+          active-class=""
+          exact-active-class=""
+          :class="{ active: isTopNavActive(item) }"
+        >{{ item.label }}</NuxtLink>
       </nav>
 
       <div class="admin-user-slot">
@@ -52,7 +55,7 @@
         </div>
       </aside>
 
-      <main class="admin-main">
+      <main class="admin-main" :class="{ 'admin-main-pop': adminMainPop }">
         <slot />
       </main>
     </div>
@@ -61,12 +64,15 @@
 
 <script setup>
 const api = useApi()
+const route = useRoute()
 const {
   readSiteConfigCache,
   writeSiteConfigCache,
   readCurrentUserCache,
   writeCurrentUserCache,
   clearCurrentUserCache,
+  clearAuthSession,
+  isAuthFailure,
   normalizeAssetUrl
 } = useUiCache()
 const username = ref('管理员')
@@ -76,6 +82,22 @@ const avatarUrl = ref('')
 const currentUserInfo = ref({ username: '管理员' })
 const siteConfigReady = ref(false)
 const currentUserReady = ref(false)
+const adminMainPop = ref(false)
+
+const topNavItems = [
+  { to: '/', label: '图库' },
+  { to: '/albums', label: '相册' },
+  { to: '/api-docs', label: 'API' },
+  { to: '/upload', label: '上传' },
+  { to: '/dashboard', label: '仪表盘' },
+  { to: '/admin', label: '管理' }
+]
+
+const isTopNavActive = (item) => {
+  if (!item?.to) return false
+  if (item.to === '/') return route.path === '/'
+  return route.path === item.to || route.path.startsWith(`${item.to}/`)
+}
 
 const menuGroups = [
   {
@@ -136,7 +158,28 @@ const handleCurrentUserUpdated = (event) => {
   if (event.detail) applyCurrentUser(event.detail)
 }
 
+const resetAdminUserState = () => {
+  username.value = '管理员'
+  avatarUrl.value = ''
+  currentUserInfo.value = { username: '管理员' }
+  currentUserReady.value = true
+}
+
+const triggerAdminMainPop = async () => {
+  if (!import.meta.client) return
+  adminMainPop.value = false
+  await nextTick()
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      adminMainPop.value = true
+    })
+  })
+}
+
+watch(() => route.path, triggerAdminMainPop, { flush: 'post' })
+
 onMounted(async () => {
+  triggerAdminMainPop()
   const cachedSiteConfig = readSiteConfigCache()
   if (cachedSiteConfig) applySiteConfig(cachedSiteConfig)
   const cachedUser = readCurrentUserCache()
@@ -146,10 +189,8 @@ onMounted(async () => {
 
   const token = localStorage.getItem('jwt_token')
   if (!token) {
-    clearCurrentUserCache()
-    username.value = '管理员'
-    avatarUrl.value = ''
-    currentUserReady.value = true
+    clearAuthSession()
+    resetAdminUserState()
     return
   }
   try {
@@ -169,7 +210,12 @@ onMounted(async () => {
     applyCurrentUser(me)
     writeSiteConfigCache(siteConfig)
     writeCurrentUserCache(me)
-  } catch {
+  } catch (err) {
+    if (isAuthFailure(err)) {
+      clearAuthSession()
+      resetAdminUserState()
+      navigateTo('/login')
+    }
     currentUserReady.value = true
   }
 })
@@ -181,8 +227,7 @@ onBeforeUnmount(() => {
 })
 
 const handleLogout = () => {
-  localStorage.removeItem('jwt_token')
-  clearCurrentUserCache()
+  clearAuthSession()
   navigateTo('/login')
 }
 </script>
@@ -259,10 +304,9 @@ const handleLogout = () => {
   font-weight: 800;
 }
 
-.topnav-link.router-link-active,
 .topnav-link.active {
-  background: var(--taotu-pink-soft);
-  color: var(--taotu-pink);
+  background: var(--taotu-button-active-bg);
+  color: var(--taotu-button-active-color);
 }
 
 .admin-user-slot {
@@ -371,6 +415,15 @@ const handleLogout = () => {
 .admin-main {
   min-width: 0;
   padding: 22px;
+}
+
+.admin-main > :deep(*) > :where(*) {
+  transform: translate3d(0, 27px, 0) scale(0.978);
+  will-change: transform;
+}
+
+.admin-main-pop > :deep(*) > :where(*) {
+  animation: taotu-page-pop-transform var(--taotu-page-pop-duration) var(--taotu-page-pop-ease) both;
 }
 
 .admin-main :deep(.page-title) {

@@ -1,10 +1,10 @@
 <template>
   <div class="image-detail">
     <div v-if="image" class="detail-bg">
-      <img :src="fullImageUrl" :alt="imageTitle" />
+      <img :src="fullImageUrl" :alt="imageTitle" @load="markDetailBackgroundReady" @error="markDetailBackgroundReady" />
     </div>
 
-    <div v-if="image" class="detail-shell">
+    <div v-if="image" class="detail-shell" :class="{ 'detail-shell-ready': detailShellReady }">
       <div class="detail-topbar">
         <div class="topbar-left">
           <NuxtLink to="/" class="soft-back">
@@ -187,7 +187,9 @@
       </div>
     </div>
 
-    <div v-else-if="loading" class="state-card">加载中...</div>
+    <div v-else-if="loading" class="detail-loading-placeholder" aria-label="图片详情加载中">
+      <img src="/icons/image/detail-loading-placeholder.gif" alt="" />
+    </div>
     <div v-else class="state-card">图片不存在</div>
   </div>
 </template>
@@ -216,6 +218,8 @@ const thumbEndReached = ref(false)
 const showAllTags = ref(false)
 const viewerImageLoaded = ref(false)
 const viewerReady = ref(false)
+const detailShellReady = ref(false)
+const detailBackgroundReady = ref(false)
 const isPanning = ref(false)
 const pan = reactive({ x: 0, y: 0 })
 const tagPreviewCount = 5
@@ -308,6 +312,18 @@ const syncImageUrl = async (id) => {
   await router.push({ path: '/image', query: { ...route.query, id: String(id) } })
 }
 
+const showDetailShell = () => {
+  if (!image.value || detailShellReady.value || !import.meta.client) return
+  requestAnimationFrame(() => {
+    detailShellReady.value = true
+  })
+}
+
+const markDetailBackgroundReady = () => {
+  detailBackgroundReady.value = true
+  showDetailShell()
+}
+
 const resetThumbRail = () => {
   railImages.value = []
   railStartIndex.value = 0
@@ -331,12 +347,17 @@ const selectImage = async (id, { updateUrl = true, align = 'visible' } = {}) => 
   currentImageId.value = Number(id)
   showAllTags.value = false
   viewerImageLoaded.value = false
+  detailShellReady.value = false
+  detailBackgroundReady.value = false
   resetZoom()
   if (!image.value) loading.value = true
   try {
     const data = await api.get(`/api/internal/images/${id}`)
     image.value = data
     currentImageId.value = Number(data.id || id)
+    await nextTick()
+    const bgImage = document.querySelector('.detail-bg img')
+    if (bgImage?.complete) markDetailBackgroundReady()
     const foundInRail = await ensureImageInRail(currentImageId.value)
     if (foundInRail) syncCurrentInRail()
     else prependCurrentToRail()
@@ -787,6 +808,12 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   padding: 26px clamp(18px, 1.8vw, 34px) 36px;
   background: transparent;
+  transform: translate3d(0, 27px, 0) scale(0.978);
+  will-change: transform;
+}
+
+.detail-shell-ready {
+  animation: taotu-page-pop-transform var(--taotu-page-pop-duration) var(--taotu-page-pop-ease) both;
 }
 
 .detail-topbar {
@@ -1444,6 +1471,22 @@ onBeforeUnmount(() => {
   font-weight: 900;
   box-shadow: var(--taotu-shadow);
   backdrop-filter: blur(18px);
+}
+
+.detail-loading-placeholder {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.detail-loading-placeholder img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  opacity: 0.78;
 }
 
 @media (max-width: 1450px) {

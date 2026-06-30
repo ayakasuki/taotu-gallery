@@ -4,6 +4,7 @@
 export function useAuth() {
   const user = useState('auth_user', () => null)
   const isLoggedIn = computed(() => !!user.value)
+  const { clearAuthSession } = useUiCache()
 
   const login = async (username, password) => {
     const api = useApi()
@@ -16,7 +17,7 @@ export function useAuth() {
   }
 
   const logout = () => {
-    localStorage.removeItem('jwt_token')
+    clearAuthSession()
     user.value = null
     navigateTo('/admin/login')
   }

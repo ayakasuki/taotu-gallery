@@ -218,6 +218,7 @@ curl -X POST {{ baseUrl }}/api/upload \
 import TagSelector from '~/components/tags/TagSelector.vue'
 
 const config = useRuntimeConfig()
+const { clearAuthSession, isAuthFailure } = useUiCache()
 const { tags, fetchTags } = useTags()
 
 const isLoggedIn = ref(false)
@@ -237,12 +238,26 @@ onMounted(async () => {
     siteName.value = siteConfig.siteName || '桃图智库'
   } catch {}
   const token = localStorage.getItem('jwt_token')
-  isLoggedIn.value = !!token
-  if (isLoggedIn.value) {
+  if (token) {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      isAdmin.value = payload.role === 'admin'
-    } catch {}
+      const me = await api.get('/api/admin/auth/me')
+      isLoggedIn.value = true
+      isAdmin.value = me?.role === 'admin'
+    } catch (err) {
+      if (isAuthFailure(err)) {
+        clearAuthSession()
+        isLoggedIn.value = false
+        isAdmin.value = false
+      } else {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]))
+          isLoggedIn.value = true
+          isAdmin.value = payload.role === 'admin'
+        } catch {}
+      }
+    }
+  }
+  if (isLoggedIn.value) {
     fetchTags()
     fetchAlbums()
   }

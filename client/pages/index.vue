@@ -246,6 +246,7 @@ import ImageCard from '~/components/gallery/ImageCard.vue'
 const { tags, selectedTagIds, fetchTags } = useTags()
 const { images, total, page, loading, displayMode, sort, fetchImages, setDisplayMode, setSort } = useGallery()
 const api = useApi()
+const { clearAuthSession, isAuthFailure } = useUiCache()
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
 const gallerySource = ref('public')
@@ -306,12 +307,26 @@ const emptyText = computed(() => {
 onMounted(async () => {
   await loadDisplayConfig()
   const token = localStorage.getItem('jwt_token')
-  isLoggedIn.value = !!token
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]))
-      isAdmin.value = payload.role === 'admin'
-    } catch {}
+      const me = await api.get('/api/admin/auth/me')
+      isLoggedIn.value = true
+      isAdmin.value = me?.role === 'admin' || payload.role === 'admin'
+    } catch (err) {
+      if (isAuthFailure(err)) {
+        clearAuthSession()
+        isLoggedIn.value = false
+        isAdmin.value = false
+        gallerySource.value = 'public'
+      } else {
+        isLoggedIn.value = true
+        isAdmin.value = payload.role === 'admin'
+      }
+    }
+  } else {
+    isLoggedIn.value = false
+    isAdmin.value = false
   }
   await fetchTags()
   await loadTagGroups()

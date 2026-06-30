@@ -1,6 +1,11 @@
 const SITE_CONFIG_CACHE_KEY = 'taotu_site_public_config'
 const CURRENT_USER_CACHE_KEY = 'taotu_current_user'
 
+function isAuthFailure(err) {
+  const status = Number(err?.status || err?.statusCode || err?.response?.status || err?.data?.statusCode || 0)
+  return status === 401 || status === 403
+}
+
 export function useUiCache() {
   const config = useRuntimeConfig()
 
@@ -41,6 +46,13 @@ export function useUiCache() {
     readCurrentUserCache: () => readJsonCache(CURRENT_USER_CACHE_KEY),
     writeCurrentUserCache: (value) => writeJsonCache(CURRENT_USER_CACHE_KEY, value, 'taotu:current-user-updated'),
     clearCurrentUserCache: () => removeJsonCache(CURRENT_USER_CACHE_KEY, 'taotu:current-user-updated'),
+    clearAuthSession: () => {
+      if (!import.meta.client) return
+      try { localStorage.removeItem('jwt_token') } catch {}
+      removeJsonCache(CURRENT_USER_CACHE_KEY, 'taotu:current-user-updated')
+      try { window.dispatchEvent(new CustomEvent('taotu:auth-invalid')) } catch {}
+    },
+    isAuthFailure,
     normalizeAssetUrl
   }
 }

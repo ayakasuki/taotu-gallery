@@ -1,7 +1,7 @@
 <template>
   <div class="taotu-page" :style="pageStyle">
     <div class="taotu-shell">
-      <header class="site-header" :class="{ 'site-header-transparent': useTransparentNav }">
+      <header class="site-header" :class="{ 'site-header-transparent': useTransparentNav, 'site-header-glass': !useTransparentNav }">
         <div class="nav-frame" :style="navFrameStyle">
           <div class="brand-block">
             <NuxtLink to="/" class="brand-link">
@@ -12,7 +12,16 @@
           </div>
 
           <nav class="nav-links" aria-label="主导航">
-            <NuxtLink v-for="item in visibleNavItems" :key="item.to" :to="item.to" class="nav-link">
+            <NuxtLink
+              v-for="item in visibleNavItems"
+              :key="item.to"
+              :to="item.to"
+              class="nav-link"
+              active-class=""
+              exact-active-class=""
+              :class="{ active: isNavItemActive(item) }"
+              @click="syncNavPath(item.to)"
+            >
               <span>{{ item.label }}</span>
             </NuxtLink>
           </nav>
@@ -65,6 +74,8 @@ const {
   readCurrentUserCache,
   writeCurrentUserCache,
   clearCurrentUserCache,
+  clearAuthSession,
+  isAuthFailure,
   normalizeAssetUrl
 } = useUiCache()
 
@@ -83,8 +94,12 @@ const hasCustomBackground = ref(false)
 const siteConfigReady = ref(false)
 const currentUserReady = ref(false)
 const isGalleryAtTop = ref(true)
+const currentPath = ref(route.path)
 const navFrameWidth = ref(null)
 let navResizeObserver = null
+let removeRouteAfterEach = null
+let authCheckPromise = null
+let lastAuthCheckAt = 0
 
 const isDefaultBackground = (background = {}) => {
   const value = String(background?.value || '')
@@ -105,19 +120,32 @@ const brandLogoUrl = computed(() => normalizeAssetUrl(iconUrl.value))
 const userAvatarUrl = computed(() => normalizeAssetUrl(currentUser.value?.avatar))
 const showBrandFallback = computed(() => siteConfigReady.value && !brandLogoUrl.value)
 const showUserFallback = computed(() => currentUserReady.value && !userAvatarUrl.value)
-const isGalleryRoute = computed(() => route.path === '/')
+const isGalleryRoute = computed(() => currentPath.value === '/')
 const useTransparentNav = computed(() => isGalleryRoute.value && isGalleryAtTop.value)
 const navFrameStyle = computed(() => (
   navFrameWidth.value ? { '--nav-frame-width': `${navFrameWidth.value}px` } : {}
 ))
 
+const isNavItemActive = (item) => {
+  if (!item?.to) return false
+  if (item.to === '/') return currentPath.value === '/'
+  return currentPath.value === item.to || currentPath.value.startsWith(`${item.to}/`)
+}
+
+const syncNavPath = (path) => {
+  if (!path) return
+  currentPath.value = path
+  if (path !== '/') isGalleryAtTop.value = false
+  else updateNavScrollState()
+}
+
 const getNavFrameTarget = () => {
   if (!import.meta.client) return null
-  if (route.path === '/') return document.querySelector('.gallery-page')
-  if (route.path.startsWith('/albums')) return document.querySelector('.albums-page') || document.querySelector('.album-detail')
-  if (route.path === '/api-docs') return document.querySelector('.api-docs-page')
-  if (route.path === '/upload') return document.querySelector('.upload-page')
-  if (route.path === '/dashboard') return document.querySelector('.dashboard-page.page-container')
+  if (currentPath.value === '/') return document.querySelector('.gallery-page')
+  if (currentPath.value.startsWith('/albums')) return document.querySelector('.albums-page') || document.querySelector('.album-detail')
+  if (currentPath.value === '/api-docs') return document.querySelector('.api-docs-page')
+  if (currentPath.value === '/upload') return document.querySelector('.upload-page')
+  if (currentPath.value === '/dashboard') return document.querySelector('.dashboard-page.page-container')
   return document.querySelector('.main-content')
 }
 
@@ -144,8 +172,22 @@ const observeNavFrameTarget = () => {
 
 const updateNavScrollState = () => {
   if (!import.meta.client) return
+  if (currentPath.value !== '/') {
+    isGalleryAtTop.value = false
+    return
+  }
   const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
   isGalleryAtTop.value = scrollTop <= 2
+}
+
+const refreshNavStateAfterRoute = () => {
+  if (!import.meta.client) return
+  updateNavScrollState()
+  requestAnimationFrame(() => {
+    updateNavScrollState()
+    observeNavFrameTarget()
+  })
+  window.setTimeout(updateNavScrollState, 80)
 }
 
 const pageStyle = computed(() => {
@@ -189,15 +231,26 @@ const applySiteConfig = (siteConfig = {}) => {
 const initialSiteConfig = import.meta.client ? readSiteConfigCache() : null
 if (initialSiteConfig) applySiteConfig(initialSiteConfig)
 
+const resetAuthState = () => {
+  if (import.meta.client) clearAuthSession()
+  isLoggedIn.value = false
+  isAdmin.value = false
+  currentUser.value = null
+  currentUserReady.value = true
+}
+
+const handleAuthInvalid = () => {
+  isLoggedIn.value = false
+  isAdmin.value = false
+  currentUser.value = null
+  currentUserReady.value = true
+}
+
 const checkAuth = () => {
   if (!import.meta.client) return
   const token = localStorage.getItem('jwt_token')
   if (!token) {
-    isLoggedIn.value = false
-    isAdmin.value = false
-    currentUser.value = null
-    currentUserReady.value = true
-    clearCurrentUserCache()
+    resetAuthState()
     return
   }
   try {
@@ -210,31 +263,36 @@ const checkAuth = () => {
       currentUserReady.value = !!cachedUser?.avatar
       loadCurrentUser()
     } else {
-      localStorage.removeItem('jwt_token')
-      isLoggedIn.value = false
-      isAdmin.value = false
-      currentUser.value = null
-      currentUserReady.value = true
-      clearCurrentUserCache()
+      resetAuthState()
     }
   } catch {
-    isLoggedIn.value = false
-    isAdmin.value = false
-    currentUser.value = null
-    currentUserReady.value = true
-    clearCurrentUserCache()
+    resetAuthState()
   }
 }
 
 const loadCurrentUser = async () => {
-  try {
-    currentUser.value = await api.get('/api/admin/auth/me')
-    isAdmin.value = currentUser.value?.role === 'admin'
+  const now = Date.now()
+  if (authCheckPromise) return authCheckPromise
+  if (now - lastAuthCheckAt < 30000 && currentUser.value?.id) {
     currentUserReady.value = true
-    writeCurrentUserCache(currentUser.value)
-  } catch {
-    currentUserReady.value = true
+    return
   }
+  authCheckPromise = (async () => {
+    try {
+      currentUser.value = await api.get('/api/admin/auth/me')
+      isLoggedIn.value = true
+      isAdmin.value = currentUser.value?.role === 'admin'
+      currentUserReady.value = true
+      lastAuthCheckAt = Date.now()
+      writeCurrentUserCache(currentUser.value)
+    } catch (err) {
+      if (isAuthFailure(err)) resetAuthState()
+      else currentUserReady.value = true
+    } finally {
+      authCheckPromise = null
+    }
+  })()
+  return authCheckPromise
 }
 
 const loadSiteConfig = async () => {
@@ -256,10 +314,15 @@ const handleCurrentUserUpdated = (event) => {
 }
 
 onMounted(async () => {
+  removeRouteAfterEach = router.afterEach((to) => {
+    syncNavPath(to.path)
+    nextTick(refreshNavStateAfterRoute)
+  })
   const cachedSiteConfig = readSiteConfigCache()
   if (cachedSiteConfig && !siteConfigReady.value) applySiteConfig(cachedSiteConfig)
   window.addEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
   window.addEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
+  window.addEventListener('taotu:auth-invalid', handleAuthInvalid)
   window.addEventListener('scroll', updateNavScrollState, { passive: true })
   window.addEventListener('resize', updateNavFrameWidth, { passive: true })
   updateNavScrollState()
@@ -272,28 +335,32 @@ onBeforeUnmount(() => {
   if (!import.meta.client) return
   window.removeEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
   window.removeEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
+  window.removeEventListener('taotu:auth-invalid', handleAuthInvalid)
   window.removeEventListener('scroll', updateNavScrollState)
   window.removeEventListener('resize', updateNavFrameWidth)
+  if (removeRouteAfterEach) {
+    removeRouteAfterEach()
+    removeRouteAfterEach = null
+  }
   if (navResizeObserver) {
     navResizeObserver.disconnect()
     navResizeObserver = null
   }
 })
 
-watch(() => route.path, () => {
-  checkAuth()
+watch(() => route.path, (nextPath) => {
+  currentPath.value = nextPath
+  if (nextPath !== '/') isGalleryAtTop.value = false
+  const token = import.meta.client ? localStorage.getItem('jwt_token') : ''
+  if (token && !isLoggedIn.value) checkAuth()
   nextTick(() => {
-    updateNavScrollState()
+    refreshNavStateAfterRoute()
     observeNavFrameTarget()
   })
 })
 
 const handleLogout = () => {
-  localStorage.removeItem('jwt_token')
-  isLoggedIn.value = false
-  isAdmin.value = false
-  currentUser.value = null
-  clearCurrentUserCache()
+  resetAuthState()
   router.push('/')
 }
 </script>
@@ -305,17 +372,25 @@ const handleLogout = () => {
   z-index: 100;
   min-height: 50px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.15);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.46);
-  box-shadow: 0 10px 24px rgba(85, 74, 118, 0.06);
-  backdrop-filter: blur(12px) saturate(280%);
-  -webkit-backdrop-filter: blur(12px) saturate(280%);
+  background: rgba(255, 255, 255, 0);
+  border-bottom: 1px solid transparent;
+  box-shadow: none;
+  backdrop-filter: blur(0) saturate(100%);
+  -webkit-backdrop-filter: blur(0) saturate(100%);
   transition:
     background-color 0.28s ease,
     border-color 0.28s ease,
     box-shadow 0.28s ease,
     backdrop-filter 0.28s ease,
     -webkit-backdrop-filter 0.28s ease;
+}
+
+.site-header.site-header-glass {
+  background: rgba(255, 255, 255, 0.15);
+  border-bottom-color: rgba(255, 255, 255, 0.46);
+  box-shadow: 0 10px 24px rgba(85, 74, 118, 0.06);
+  backdrop-filter: blur(12px) saturate(280%);
+  -webkit-backdrop-filter: blur(12px) saturate(280%);
 }
 
 .nav-frame {
@@ -329,11 +404,11 @@ const handleLogout = () => {
 }
 
 .site-header.site-header-transparent {
-  background: rgba(255, 255, 255, 0);
-  border-bottom-color: transparent;
-  box-shadow: 0 0 0 rgba(85, 74, 118, 0);
-  backdrop-filter: blur(0) saturate(100%);
-  -webkit-backdrop-filter: blur(0) saturate(100%);
+  background: rgba(255, 255, 255, 0) !important;
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(0) saturate(100%) !important;
+  -webkit-backdrop-filter: blur(0) saturate(100%) !important;
 }
 
 .brand-link {
@@ -390,9 +465,9 @@ const handleLogout = () => {
 }
 
 .nav-link:hover,
-.nav-link.router-link-active {
-  background: linear-gradient(160deg, rgb(255, 143, 163), rgb(245, 109, 134));
-  color: #ffffff;
+.nav-link.active {
+  background: var(--taotu-button-active-bg);
+  color: var(--taotu-button-active-color);
 }
 
 .site-header.site-header-transparent .nav-link {
@@ -401,7 +476,7 @@ const handleLogout = () => {
   text-shadow: 0 2px 14px rgba(35, 32, 52, 0.28);
 }
 
-.site-header.site-header-transparent .nav-link.router-link-active {
+.site-header.site-header-transparent .nav-link.active {
   background: transparent;
   color: #ffffff;
 }

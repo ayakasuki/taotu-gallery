@@ -754,7 +754,7 @@ import TagSelector from '~/components/tags/TagSelector.vue'
 const api = useApi()
 const config = useRuntimeConfig()
 const router = useRouter()
-const { readCurrentUserCache, writeCurrentUserCache } = useUiCache()
+const { readCurrentUserCache, writeCurrentUserCache, clearAuthSession, isAuthFailure } = useUiCache()
 
 const activeSection = ref('overview')
 const siteName = ref('桃图智库')
@@ -941,6 +941,7 @@ const normalizeAssetUrl = (url) => {
 onMounted(async () => {
   const token = localStorage.getItem('jwt_token')
   if (!token) { router.push('/login'); return }
+  let shouldRedirectLogin = false
   browserInfo.value = detectBrowserInfo()
   try {
     const siteConfig = await api.get('/api/admin/site-config/public').catch(() => null)
@@ -951,7 +952,16 @@ onMounted(async () => {
     writeCurrentUserCache(user.value)
     await Promise.all([loadDashboardOverview(), loadMyTags(), loadMyAlbums(), loadTokens()])
     await Promise.all([loadMyImages(), loadManualImages()])
-  } catch {} finally { loading.value = false }
+  } catch (err) {
+    if (isAuthFailure(err)) {
+      clearAuthSession()
+      user.value = null
+      shouldRedirectLogin = true
+    }
+  } finally { loading.value = false }
+  if (shouldRedirectLogin) {
+    router.push('/login')
+  }
 })
 
 const loadDashboardOverview = async () => {
