@@ -66,7 +66,9 @@
         <div class="image-table">
           <div class="image-table-head image-table-row">
             <span class="check-col">
-              <button type="button" class="check-box" :class="{ checked: allCurrentSelected }" @click="toggleSelectAllCurrent"></button>
+              <button type="button" class="check-box" :class="{ checked: allCurrentSelected }" @click="toggleSelectAllCurrent">
+                <TaotuIcon :name="allCurrentSelected ? 'checkbox-checked' : 'checkbox'" :filled="allCurrentSelected" :stateful="false" />
+              </button>
             </span>
             <span>缩略图</span>
             <span>文件名</span>
@@ -80,7 +82,9 @@
           <div class="image-table-body">
             <div v-for="img in images" :key="img.id" class="image-table-row image-data-row" :class="{ selected: selectedIds.includes(img.id) }">
               <span class="check-col">
-                <button type="button" class="check-box" :class="{ checked: selectedIds.includes(img.id) }" @click="toggleSelect(img.id)"></button>
+                <button type="button" class="check-box" :class="{ checked: selectedIds.includes(img.id) }" @click="toggleSelect(img.id)">
+                  <TaotuIcon :name="selectedIds.includes(img.id) ? 'checkbox-checked' : 'checkbox'" :filled="selectedIds.includes(img.id)" :stateful="false" />
+                </button>
               </span>
               <span class="thumb-col">
                 <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
@@ -1168,30 +1172,25 @@ function tagToneById(id) {
 }
 
 .check-box {
-  position: relative;
-  width: 15px;
-  height: 15px;
-  border: 1px solid rgba(207, 216, 231, 0.96);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.9);
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(207, 216, 231, 0.98);
   cursor: pointer;
 }
 
 .check-box.checked {
-  border-color: #f45f93;
-  background: #f45f93;
+  color: #f45f93;
 }
 
-.check-box.checked::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 4px;
-  height: 8px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.check-box .taotu-svg-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .thumb-col img {

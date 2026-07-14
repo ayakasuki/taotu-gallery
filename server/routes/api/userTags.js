@@ -228,11 +228,18 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
       ? await assertUserTagNameAvailable(req.user.id, req.body.name, tagId)
       : tag.name;
 
-    await db('user_tags').where({ id: req.params.id }).update({
+    const updates = {
       name: nextName,
       display_name: req.body.display_name || tag.display_name,
       combinable: req.body.combinable !== undefined ? req.body.combinable : tag.combinable
-    });
+    };
+    if (req.body.is_public !== undefined) {
+      const user = await db('users').where({ id: req.user.id }).select('role').first();
+      if (user?.role !== 'admin') return res.status(403).json({ error: '只有管理员可以设置用户标签是否公共' });
+      updates.is_public = !!req.body.is_public;
+    }
+
+    await db('user_tags').where({ id: req.params.id }).update(updates);
     await syncOwnedMutualGroup(req.user.id, tagId, parseMutualIds(req.body.mutually_exclusive_with, { requireUserPrefix: true }), req.body.combinable !== undefined ? req.body.combinable : tag.combinable);
     res.json({ message: '已更新' });
   } catch (err) { next(err); }

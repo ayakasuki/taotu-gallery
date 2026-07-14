@@ -72,11 +72,9 @@ const {
   readSiteConfigCache,
   writeSiteConfigCache,
   readCurrentUserCache,
-  writeCurrentUserCache,
-  clearCurrentUserCache,
   clearAuthSession,
+  readAuthPayload,
   syncAuthCookie,
-  isAuthFailure,
   normalizeAssetUrl
 } = useUiCache()
 
@@ -99,8 +97,6 @@ const currentPath = ref(route.path)
 const navFrameWidth = ref(null)
 let navResizeObserver = null
 let removeRouteAfterEach = null
-let authCheckPromise = null
-let lastAuthCheckAt = 0
 
 const isDefaultBackground = (background = {}) => {
   const value = String(background?.value || '')
@@ -249,52 +245,17 @@ const handleAuthInvalid = () => {
 
 const checkAuth = () => {
   if (!import.meta.client) return
-  const token = localStorage.getItem('jwt_token')
-  if (!token) {
+  const payload = readAuthPayload()
+  if (!payload) {
     resetAuthState()
     return
   }
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    if (payload.exp * 1000 > Date.now()) {
-      syncAuthCookie()
-      isLoggedIn.value = true
-      isAdmin.value = payload.role === 'admin'
-      const cachedUser = readCurrentUserCache()
-      currentUser.value = cachedUser?.id === payload.id ? { ...payload, ...cachedUser } : payload
-      currentUserReady.value = !!cachedUser?.avatar
-      loadCurrentUser()
-    } else {
-      resetAuthState()
-    }
-  } catch {
-    resetAuthState()
-  }
-}
-
-const loadCurrentUser = async () => {
-  const now = Date.now()
-  if (authCheckPromise) return authCheckPromise
-  if (now - lastAuthCheckAt < 30000 && currentUser.value?.id) {
-    currentUserReady.value = true
-    return
-  }
-  authCheckPromise = (async () => {
-    try {
-      currentUser.value = await api.get('/api/admin/auth/me')
-      isLoggedIn.value = true
-      isAdmin.value = currentUser.value?.role === 'admin'
-      currentUserReady.value = true
-      lastAuthCheckAt = Date.now()
-      writeCurrentUserCache(currentUser.value)
-    } catch (err) {
-      if (isAuthFailure(err)) resetAuthState()
-      else currentUserReady.value = true
-    } finally {
-      authCheckPromise = null
-    }
-  })()
-  return authCheckPromise
+  syncAuthCookie()
+  isLoggedIn.value = true
+  isAdmin.value = payload.role === 'admin'
+  const cachedUser = readCurrentUserCache()
+  currentUser.value = cachedUser?.id === payload.id ? { ...payload, ...cachedUser } : payload
+  currentUserReady.value = true
 }
 
 const loadSiteConfig = async () => {

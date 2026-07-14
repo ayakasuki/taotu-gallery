@@ -108,7 +108,10 @@
 
         <label class="soft-check">
           <input v-model="form.is_pinned" type="checkbox" />
-          <i></i>
+          <span class="taotu-checkbox-icon-pair">
+            <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+            <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+          </span>
           <span>置顶公告，用户通知栏会优先展示最新置顶公告</span>
         </label>
 
@@ -735,29 +738,10 @@ function formatDate(value) {
   opacity: 0;
 }
 
-.soft-check i {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(218, 226, 240, 0.92);
-  border-radius: 6px;
-  background: white;
-}
-
-.soft-check input:checked + i {
-  border-color: transparent;
-  background: var(--taotu-pink);
-}
-
-.soft-check input:checked + i::after {
-  content: "";
-  width: 8px;
-  height: 4px;
-  border-left: 2px solid white;
-  border-bottom: 2px solid white;
-  transform: rotate(-45deg) translateY(-1px);
+.soft-check .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
+  --checkbox-icon-color: rgba(218, 226, 240, 0.98);
+  --checkbox-checked-color: var(--taotu-pink);
 }
 
 .editor-actions {

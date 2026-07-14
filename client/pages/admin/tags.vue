@@ -34,7 +34,10 @@
           <div class="bulk-actions">
             <label class="soft-checkbox">
               <input type="checkbox" :checked="currentPageAllSelected" @change="toggleSelectCurrentPage" />
-              <i></i>
+              <span class="taotu-checkbox-icon-pair">
+                <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+              </span>
             </label>
             <strong>已选择 {{ selectedTagIds.length }} 项</strong>
             <button type="button" class="bulk-btn purple" :disabled="selectedTagIds.length === 0" @click="setSelectedTagsPublic">
@@ -50,7 +53,10 @@
               <span>
                 <label class="soft-checkbox mini">
                   <input type="checkbox" :checked="currentPageAllSelected" @change="toggleSelectCurrentPage" />
-                  <i></i>
+                  <span class="taotu-checkbox-icon-pair">
+                    <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                    <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                  </span>
                 </label>
               </span>
               <span>ID</span>
@@ -71,7 +77,10 @@
                       :disabled="tag.isSystemTag"
                       @change="toggleTagSelect(tag)"
                     />
-                    <i></i>
+                    <span class="taotu-checkbox-icon-pair">
+                      <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                      <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                    </span>
                   </label>
                 </span>
                 <span class="tag-id">{{ tagKey(tag) }}</span>
@@ -305,7 +314,10 @@
           <section class="manual-execute-card glass-card">
             <label class="soft-checkbox execute-check">
               <input type="checkbox" v-model="manualOverwrite" />
-              <i></i>
+              <span class="taotu-checkbox-icon-pair">
+                <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+              </span>
               <span>
                 覆盖已有标签
                 <TaotuIcon name="visibility-info" title="勾选后将覆盖图片已存在的平台手动标签。" />
@@ -350,6 +362,13 @@
           <span>是否可组合</span>
           <label class="pink-switch">
             <input type="checkbox" v-model="tagForm.combinable" />
+            <i></i>
+          </label>
+        </label>
+        <label class="modal-toggle">
+          <span>是否公共</span>
+          <label class="pink-switch">
+            <input type="checkbox" v-model="tagForm.is_public" />
             <i></i>
           </label>
         </label>
@@ -471,7 +490,7 @@ const selectedTagIds = ref([])
 
 const showTagModal = ref(false)
 const editingTag = ref(null)
-const tagForm = reactive({ name: '', display_name: '', combinable: true, mutually_exclusive_with: '' })
+const tagForm = reactive({ name: '', display_name: '', combinable: true, is_public: true, mutually_exclusive_with: '' })
 const deleteDialog = reactive({
   show: false,
   type: '',
@@ -736,6 +755,7 @@ function openAddTag() {
   tagForm.name = ''
   tagForm.display_name = ''
   tagForm.combinable = true
+  tagForm.is_public = true
   tagForm.mutually_exclusive_with = ''
   showTagModal.value = true
 }
@@ -745,6 +765,7 @@ function openEditTag(tag) {
   tagForm.name = tag.name || ''
   tagForm.display_name = tag.display_name || ''
   tagForm.combinable = tag.combinable !== false
+  tagForm.is_public = tag.is_public !== false
   tagForm.mutually_exclusive_with = tag.mutually_exclusive_with || ''
   showTagModal.value = true
 }
@@ -865,6 +886,7 @@ async function saveTag() {
         name: tagForm.name.trim(),
         display_name: tagForm.display_name.trim(),
         combinable: tagForm.combinable,
+        is_public: tagForm.is_public,
         mutually_exclusive_with: tagForm.mutually_exclusive_with
       })
     } else {
@@ -876,6 +898,7 @@ async function saveTag() {
           found.name = tagForm.name.trim()
           found.display_name = tagForm.display_name.trim()
           found.combinable = tagForm.combinable
+          found.is_public = tagForm.is_public
           found.mutually_exclusive_with = tagForm.mutually_exclusive_with
         }
       } else {
@@ -891,7 +914,7 @@ async function saveTag() {
           display_name: tagForm.display_name.trim(),
           combinable: tagForm.combinable,
           mutually_exclusive_with: tagForm.mutually_exclusive_with,
-          is_public: true
+          is_public: tagForm.is_public
         })
       }
       applyMutualPairs(all, savedTagId)
@@ -1709,37 +1732,14 @@ h3 {
   display: none;
 }
 
-.soft-checkbox i {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  border: 2px solid rgba(214, 222, 236, 0.95);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.78);
+.soft-checkbox .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
+  --checkbox-icon-color: rgba(214, 222, 236, 0.98);
+  --checkbox-checked-color: #ff79aa;
 }
 
-.soft-checkbox.mini i {
-  width: 14px;
-  height: 14px;
-  flex-basis: 14px;
-}
-
-.soft-checkbox input:checked + i {
-  border-color: #ff79aa;
-  background: #ff79aa;
-}
-
-.soft-checkbox input:checked + i::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 5px;
-  height: 9px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.soft-checkbox.mini .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
 }
 
 .group-card {

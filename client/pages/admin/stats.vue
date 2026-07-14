@@ -32,7 +32,7 @@
               <line v-for="y in [24, 66, 108, 150, 192, 234]" :key="y" x1="0" :y1="y" x2="640" :y2="y" />
             </g>
             <path class="area-path" :d="apiAreaPath" />
-            <polyline class="line-path" :points="apiLinePoints" />
+            <path class="line-path" :d="apiLinePath" />
           </svg>
           <div class="x-axis">
             <span v-for="label in chartLabels" :key="label">{{ label }}</span>
@@ -287,10 +287,11 @@ const chartLabels = computed(() => {
   return labels.filter((_, index) => index % 4 === 0 || index === labels.length - 1)
 })
 const apiLinePoints = computed(() => buildLinePoints(opsData.value.apiTrend?.values || []))
+const apiLinePath = computed(() => buildSmoothPath(apiLinePoints.value))
 const apiAreaPath = computed(() => {
   const points = apiLinePoints.value
-  if (!points) return ''
-  return `M ${points} L 640 240 L 0 240 Z`
+  if (!points.length) return ''
+  return `${buildSmoothPath(points)} L ${points[points.length - 1].x.toFixed(1)} 240 L 0 240 Z`
 })
 
 function buildLinePoints(values) {
@@ -299,8 +300,21 @@ function buildLinePoints(values) {
   return list.map((value, index) => {
     const x = (index / Math.max(1, list.length - 1)) * 640
     const y = 236 - (value / max) * 210
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
+    return { x, y }
+  })
+}
+
+function buildSmoothPath(points = []) {
+  if (!points.length) return ''
+  if (points.length === 1) return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`
+  const commands = [`M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`]
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index]
+    const next = points[index + 1]
+    const controlDistance = (next.x - current.x) * 0.42
+    commands.push(`C ${(current.x + controlDistance).toFixed(1)} ${current.y.toFixed(1)}, ${(next.x - controlDistance).toFixed(1)} ${next.y.toFixed(1)}, ${next.x.toFixed(1)} ${next.y.toFixed(1)}`)
+  }
+  return commands.join(' ')
 }
 
 const assetUrl = (url) => {

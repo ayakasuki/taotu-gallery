@@ -28,7 +28,7 @@
           <b>{{ stat.change }}</b>
         </div>
         <svg class="trend-line" viewBox="0 0 120 48" aria-hidden="true">
-          <polyline :points="stat.trend" />
+          <path :d="stat.trend" />
         </svg>
       </article>
     </section>
@@ -136,11 +136,25 @@ const buildTrend = (values = []) => {
   const list = Array.isArray(values) && values.length > 0 ? values.map(value => Number(value || 0)) : [0, 0, 0, 0, 0, 0, 0]
   const max = Math.max(...list, 1)
   const lastIndex = Math.max(1, list.length - 1)
-  return list.map((value, index) => {
+  const points = list.map((value, index) => {
     const x = Math.round((index / lastIndex) * 114) + 3
     const y = Math.round(40 - (value / max) * 34) + 4
-    return `${x},${y}`
-  }).join(' ')
+    return { x, y }
+  })
+  return buildSmoothPath(points)
+}
+
+function buildSmoothPath(points = []) {
+  if (!points.length) return ''
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
+  const commands = [`M ${points[0].x} ${points[0].y}`]
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index]
+    const next = points[index + 1]
+    const controlDistance = (next.x - current.x) * 0.42
+    commands.push(`C ${(current.x + controlDistance).toFixed(1)} ${current.y.toFixed(1)}, ${(next.x - controlDistance).toFixed(1)} ${next.y.toFixed(1)}, ${next.x.toFixed(1)} ${next.y.toFixed(1)}`)
+  }
+  return commands.join(' ')
 }
 
 const statDefinitions = [
@@ -430,7 +444,7 @@ onBeforeUnmount(() => {
   color: currentColor;
 }
 
-.trend-line polyline {
+.trend-line path {
   fill: none;
   stroke: currentColor;
   stroke-width: 2;

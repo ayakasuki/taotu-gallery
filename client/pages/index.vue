@@ -161,7 +161,12 @@
             @pointercancel="cancelLongPress"
           >
             <div class="select-checkbox" v-if="waterfallItems[index] && gallerySource === 'mine'" @click.stop="toggleSelect(img.id)">
-              <span class="native-check" :class="{ checked: selectedIds.includes(img.id) }"></span>
+              <TaotuIcon
+                :name="selectedIds.includes(img.id) ? 'checkbox-checked' : 'checkbox'"
+                class="native-check"
+                :class="{ checked: selectedIds.includes(img.id) }"
+                :stateful="false"
+              />
             </div>
             <ImageCard v-if="waterfallItems[index]" :image="img" :mode="displayMode" :showInfo="true" />
           </div>
@@ -179,24 +184,26 @@
         <div ref="loadMoreRef" class="load-more-sentinel" aria-hidden="true"></div>
     </section>
 
-    <!-- 移动到相册弹窗 -->
-    <div v-if="showMoveModal" class="modal-overlay" @click.self="showMoveModal = false">
-      <div class="modal taotu-card taotu-card-pad">
-        <h3>移动到相册</h3>
-        <p class="modal-desc">将选中的 {{ selectedIds.length }} 张图片移动到：</p>
-        <div class="form-group">
-          <TaotuSelect v-model="moveToAlbumId" :options="moveAlbumOptions" />
-        </div>
-        <div class="form-group">
-          <label>或新建相册</label>
-          <input v-model="newAlbumName" class="taotu-input" placeholder="输入新相册名" />
-        </div>
-        <div class="modal-actions">
-          <button class="taotu-btn taotu-btn-primary" @click="moveToAlbum" :disabled="!moveToAlbumId && !newAlbumName">确认移动</button>
-          <button class="taotu-btn taotu-btn-secondary" @click="showMoveModal = false">取消</button>
+    <Teleport to="body">
+      <!-- 移动到相册弹窗 -->
+      <div v-if="showMoveModal" class="modal-overlay move-modal-overlay" @click.self="showMoveModal = false">
+        <div class="modal taotu-card taotu-card-pad">
+          <h3>移动到相册</h3>
+          <p class="modal-desc">将选中的 {{ selectedIds.length }} 张图片移动到：</p>
+          <div class="form-group">
+            <TaotuSelect v-model="moveToAlbumId" :options="moveAlbumOptions" />
+          </div>
+          <div class="form-group">
+            <label>或新建相册</label>
+            <input v-model="newAlbumName" class="taotu-input" placeholder="输入新相册名" />
+          </div>
+          <div class="modal-actions">
+            <button class="taotu-btn taotu-btn-primary" @click="moveToAlbum" :disabled="!moveToAlbumId && !newAlbumName">确认移动</button>
+            <button class="taotu-btn taotu-btn-secondary" @click="showMoveModal = false">取消</button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <ConfirmDeleteDialog
       :show="deleteDialog.show"
@@ -216,7 +223,7 @@ import ImageCard from '~/components/gallery/ImageCard.vue'
 const { tags, selectedTagIds, fetchTags } = useTags()
 const { images, total, page, loading, displayMode, sort, fetchImages, setDisplayMode, setSort } = useGallery()
 const api = useApi()
-const { clearAuthSession, isAuthFailure } = useUiCache()
+const { readAuthPayload, syncAuthCookie } = useUiCache()
 const isLoggedIn = ref(false)
 const isAdmin = ref(false)
 const gallerySource = ref('public')
@@ -274,30 +281,20 @@ const emptyText = computed(() => {
   return '暂无公共图片'
 })
 
+const handleAuthInvalid = () => {
+  isLoggedIn.value = false
+  isAdmin.value = false
+  gallerySource.value = 'public'
+  selectedUserId.value = null
+}
+
 onMounted(async () => {
   await loadDisplayConfig()
-  const token = localStorage.getItem('jwt_token')
-  if (token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      const me = await api.get('/api/admin/auth/me')
-      isLoggedIn.value = true
-      isAdmin.value = me?.role === 'admin' || payload.role === 'admin'
-    } catch (err) {
-      if (isAuthFailure(err)) {
-        clearAuthSession()
-        isLoggedIn.value = false
-        isAdmin.value = false
-        gallerySource.value = 'public'
-      } else {
-        isLoggedIn.value = true
-        isAdmin.value = payload.role === 'admin'
-      }
-    }
-  } else {
-    isLoggedIn.value = false
-    isAdmin.value = false
-  }
+  const payload = readAuthPayload()
+  if (payload) syncAuthCookie()
+  isLoggedIn.value = !!payload
+  isAdmin.value = payload?.role === 'admin'
+  if (!payload) gallerySource.value = 'public'
   await fetchTags()
   await loadTagGroups()
   if (isAdmin.value) await loadUsers()
@@ -310,10 +307,12 @@ onMounted(async () => {
     if (entries.some(entry => entry.isIntersecting)) loadMore()
   }, { rootMargin: '560px 0px' })
   if (loadMoreRef.value) infiniteObserver.observe(loadMoreRef.value)
+  window.addEventListener('taotu:auth-invalid', handleAuthInvalid)
   scheduleLayout()
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('taotu:auth-invalid', handleAuthInvalid)
   if (resizeObserver) resizeObserver.disconnect()
   if (infiniteObserver) infiniteObserver.disconnect()
   if (layoutRaf) cancelAnimationFrame(layoutRaf)
@@ -1166,8 +1165,8 @@ const moveToAlbum = async () => {
   left: 7px;
   z-index: 10;
   cursor: pointer;
-  width: 12px;
-  height: 12px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1182,30 +1181,20 @@ const moveToAlbum = async () => {
 }
 
 .native-check {
-  width: 12px;
-  height: 12px;
-  display: block;
-  border: 2px solid rgba(255,255,255,0.9);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.38);
-  box-shadow: 0 1px 5px rgba(0,0,0,0.22);
+  width: 20px;
+  height: 20px;
+  color: white;
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.34));
+}
+
+.native-check .taotu-svg-icon-layer {
+  transform: scale(1.72);
+  transform-origin: center;
 }
 
 .native-check.checked {
-  border-color: rgba(255,255,255,0.96);
-  background: var(--taotu-pink);
-  box-shadow: 0 0 0 2px rgba(248,95,154,0.22), 0 2px 8px rgba(0,0,0,0.18);
-}
-
-.native-check.checked::after {
-  content: '';
-  display: block;
-  width: 5px;
-  height: 8px;
-  margin: -1px auto 0;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  color: white;
+  filter: drop-shadow(0 0 3px rgba(248,95,154,0.62)) drop-shadow(0 2px 6px rgba(0,0,0,0.22));
 }
 
 .empty-state {
@@ -1229,6 +1218,21 @@ const moveToAlbum = async () => {
 
 .modal {
   width: 420px;
+}
+
+.move-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(58, 62, 82, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.move-modal-overlay .modal {
+  width: min(420px, 92vw);
 }
 
 .modal h3 {

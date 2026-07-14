@@ -80,15 +80,18 @@
 51. **导航右上角弹窗对齐新版下拉语言** — 通知和用户胶囊 hover 菜单必须使用精致小卡片：`2px` 边框、`8px` 圆角、小字号粗体；用户菜单宽度跟随用户胶囊，通知菜单宽度约等于通知按钮 + 用户胶囊组合宽度；菜单内图标最大边等于当前字体高度。
 52. **toast 胶囊图标统一** — 登录、注册、后台保存、错误、警告、成功等 toast 使用 `AdminToast` 和 `TaotuIcon`，成功/警告/错误分别使用圆形勾、警告、叉/禁止类图标，图标颜色跟随 toast 主题色；不要新增散落行内 alert 或无图标 toast。
 53. **密码输入眼睛一致** — 登录页、注册页、忘记密码、用户中心、云同步等密码框必须使用内嵌右侧 eye/eye-off 图标按钮；不要使用独立圆形按钮或文字“显示密码”破坏排版。
-54. **人工标签 hover 预览可复用** — 管理员人工标签和仪表盘人工标签使用 `client/components/ManualImageHoverPreview.vue`；预览固定宽 320px，优先 `medium_url`，自动判断上/下方和左右边界。后续新增人工打标入口必须复用该组件，不要重复写浮层。
-55. **WebDAV 必须动态导入** — `webdav` 当前为 ESM 包，CommonJS 后端服务不能在顶层 `require('webdav')`；必须通过 `import('webdav')` 按需加载并缓存 Promise，否则 PM2 启动会直接失败。
-56. **数字胶囊必须自适应宽度** — 图片数量、浏览数、标签数量、分页/标签 tab 等胶囊或按钮出现数字时必须 `width:max-content` / `white-space:nowrap` / `font-variant-numeric:tabular-nums`，不能按两三位数字写死宽度导致四位数溢出。
-57. **相册详情网格分页按列数计算** — `/albums/:id` 网格模式每页数量必须根据实际容器列数计算，保证第一页尽量填满；不要恢复固定 24 张导致宽屏尾部空出多个图片位。
-58. **后端必须保持原生 ESM** — 根包启用 `"type":"module"`，`server/**/*.js`、迁移、seed、`knexfile.js` 必须使用 `import/export`；禁止新增 `require()` / `module.exports` / `exports.*`。相对导入必须写完整 `.js` 或 `/index.js`，目录导入不可依赖 CommonJS 解析。
-59. **启动顺序不能被静态导入破坏** — `server/index.js` 必须先 `await startupService.bootstrap()`，再动态 `import('./app.js')`；不要把 `app` 静态 import 到入口顶部，否则会绕过启动自检、迁移和首个管理员初始化顺序。
-60. **ESM 路径写法固定** — 需要 `__dirname` 的文件使用 `fileURLToPath(import.meta.url)` + `path.dirname()`；读取 `package.json` 优先用 `fs.readFileSync` + `JSON.parse`，兼容 Node 18/24，不使用 JSON import assertion/attribute。
-61. **Knex CLI 不加旧 --esm** — 当前 Knex 可原生读取 ESM `knexfile.js`，`npm run migrate` 保持 `knex migrate:latest`；不要加 `--esm`，旧 `esm` loader 在 Node 24 会报错。
-62. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
+54. **复选框统一走 Boxicons** — 图库首页、仪表盘、后台图片管理、后台标签管理等复选框必须使用 `checkbox` / `checkbox-checked` 图标，主尺寸当前为 `20px`；不要恢复原生伪勾、CSS 手画勾或过小 14px 外壳。
+55. **确认弹窗关闭按钮主题化** — 删除/高风险确认统一使用 `ConfirmDeleteDialog`；关闭按钮默认主题粉底白色 X，hover 时 X 变深色，不要恢复绿色底或其它不符合粉色主题的关闭按钮。
+56. **人工标签 hover 预览可复用** — 管理员人工标签和仪表盘人工标签使用 `client/components/ManualImageHoverPreview.vue`；预览固定宽 320px，优先 `medium_url`，自动判断上/下方和左右边界。后续新增人工打标入口必须复用该组件，不要重复写浮层。
+57. **前端会话采用被动验证** — 页面切换和普通 `onMounted` 不要主动调用 `/api/admin/auth/me` 造成“需要登录/正在验证管理员权限”闪烁；默认布局、上传页、仪表盘和后台布局先用本地有效 JWT/缓存恢复状态，真正会话有效性由后端 API 返回 `401` 或会话失效类 `403` 后通过 `useApi` 统一 `clearAuthSession()`、广播 `taotu:auth-invalid` 并要求重新登录。
+58. **WebDAV 必须动态导入** — `webdav` 当前为 ESM 包，CommonJS 后端服务不能在顶层 `require('webdav')`；必须通过 `import('webdav')` 按需加载并缓存 Promise，否则 PM2 启动会直接失败。
+59. **数字胶囊必须自适应宽度** — 图片数量、浏览数、标签数量、分页/标签 tab 等胶囊或按钮出现数字时必须 `width:max-content` / `white-space:nowrap` / `font-variant-numeric:tabular-nums`，不能按两三位数字写死宽度导致四位数溢出。
+60. **相册详情网格分页按列数计算** — `/albums/:id` 网格模式每页数量必须根据实际容器列数计算，保证第一页尽量填满；不要恢复固定 24 张导致宽屏尾部空出多个图片位。
+61. **后端必须保持原生 ESM** — 根包启用 `"type":"module"`，`server/**/*.js`、迁移、seed、`knexfile.js` 必须使用 `import/export`；禁止新增 `require()` / `module.exports` / `exports.*`。相对导入必须写完整 `.js` 或 `/index.js`，目录导入不可依赖 CommonJS 解析。
+62. **启动顺序不能被静态导入破坏** — `server/index.js` 必须先 `await startupService.bootstrap()`，再动态 `import('./app.js')`；不要把 `app` 静态 import 到入口顶部，否则会绕过启动自检、迁移和首个管理员初始化顺序。
+63. **ESM 路径写法固定** — 需要 `__dirname` 的文件使用 `fileURLToPath(import.meta.url)` + `path.dirname()`；读取 `package.json` 优先用 `fs.readFileSync` + `JSON.parse`，兼容 Node 18/24，不使用 JSON import assertion/attribute。
+64. **Knex CLI 不加旧 --esm** — 当前 Knex 可原生读取 ESM `knexfile.js`，`npm run migrate` 保持 `knex migrate:latest`；不要加 `--esm`，旧 `esm` loader 在 Node 24 会报错。
+65. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
 
 ## 项目结构
 
@@ -169,14 +172,14 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 
 ## 当前实现状态（v0.3.1）
 
-> v0.3.1 是当前正式版：大框架和业务接口保持稳定，已完成后端 CommonJS 到原生 ES Module 的等价迁移，并收口登录态连续性、权限隔离、私有媒体门禁、页面 Q 弹转场、人工标签预览、相册细节、WebDAV 启动兼容、Boxicons 图标体系与精致下拉/弹窗 UI 规范。
+> v0.3.1 是当前正式版：大框架和业务接口保持稳定，已完成后端 CommonJS 到原生 ES Module 的等价迁移，并收口无感会话切换、权限隔离、私有媒体门禁、页面 Q 弹转场、人工标签预览、相册细节、WebDAV 启动兼容、Boxicons 图标体系与精致下拉/弹窗 UI 规范。
 
 - 访客端和普通用户端已统一新版视觉：默认布局、导航、页脚、首页图库、相册、图片详情、上传、API 文档、登录、注册和仪表盘均已重构。
 - 默认布局主导航已去掉栏目图标；图库首页顶部透明导航只在 `/` 且滚动位于顶端时启用，离开顶部或进入相册/API/上传/仪表盘后立即恢复玻璃导航。主导航 active 使用自定义精确匹配和点击即时同步，避免首次点击路由后按钮不亮或 `/` 默认匹配串路由。
-- 控制类图标统一通过 `TaotuIcon` 渲染 `@boxicons/vue`，默认线性、状态填充、颜色继承；按钮、侧边栏、toast、信息提示和下拉项不要再使用 PNG 占位或字符伪图标。
+- 控制类图标统一通过 `TaotuIcon` 渲染 `@boxicons/vue`，默认线性、状态填充、颜色继承；按钮、侧边栏、toast、复选框、信息提示和下拉项不要再使用 PNG 占位或字符伪图标。旧 PNG/SVG 占位资源已清理，除详情加载 GIF、站点背景等真实资产外，不应新增控制类图标文件。
 - `TaotuSelect` 已替换全站原生下拉框，统一支持副描述、选中勾、自动上下弹出和小卡片动画；菜单宽度等于触发框，边框 `2px`，圆角 `8px`，选项最多 4 项无滚动，超出后内部滚动。
 - 右上角通知/用户胶囊弹窗已统一成精致下拉样式：用户菜单跟随用户胶囊宽度，通知菜单按通知按钮与用户胶囊组合宽度计算，图标最大边等于文字高度。
-- 登录、注册和忘记密码密码框已补齐内嵌 eye/eye-off 图标；后续新增密码框也必须沿用该排版。
+- 登录、注册和忘记密码密码框已补齐内嵌 eye/eye-off 图标；后续新增密码框也必须沿用该排版。复选框统一为 Boxicons `checkbox` / `checkbox-checked`，主尺寸为 `20px`。
 - 管理后台主要入口已重构：概览、图片管理、标签设置、条件标签、站点配置、综合配置、运维监控、用户管理、公告中心，侧边栏入口已按新信息架构合并。
 - 综合配置整合原路径配置、图库管理、数据库只读状态和 API Token；运维监控整合统计、备份恢复和 WebDAV 云同步。
 - 备份恢复已改为真实备份包：整库导出、本地图库真实图片目录打包、manifest 恢复项解析、恢复前弹窗选择恢复内容。
@@ -184,9 +187,9 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - 默认网站背景为 `client/public/site_bg.png`；公开配置无自定义背景时返回 `/site_bg.png`，有自定义背景时不能刷新闪默认图。
 - 站点配置背景模糊使用 `.taotu-shell` 的 `backdrop-filter`，遮罩颜色保存在 `site_config.background.overlayTop/overlayBottom`；不要给 `.taotu-shell` 再叠额外背景色。
 - 页面切换 Q 弹转场已分层并增强力度：图片详情固定模糊背景先渲染，背景图完成或缓存确认后立即弹出内容层；后台子页保留页面根的粉蓝背景和伪元素静态，只对页面根下一级内容做 Q 弹动画；详情加载态使用 `/icons/image/detail-loading-placeholder.gif` 占位，后续可替换为动图资源。
-- 登录态刷新校验只在明确 `401/403` 时清理会话，网络或普通接口失败不再误退出；`clearAuthSession()` 统一清理 Token、用户缓存并广播 `taotu:auth-invalid`。
+- 登录态已改为无感切换与被动验证：页面切换不再主动调用 `/api/admin/auth/me`，默认布局、上传页、仪表盘和后台布局先用本地有效 JWT/用户缓存恢复状态；只有实际请求后端 API 返回 `401` 或未审核/禁用等会话失效类 `403` 时，`useApi` 才触发 `clearAuthSession()`，统一清理 Token、用户缓存和 `taotu_token` Cookie，并广播 `taotu:auth-invalid` 要求重新登录。
 - 后端已完成原生 ES Module 等价迁移：根包使用 `"type":"module"`，入口在 `bootstrap()` 后动态导入 app，所有后端 JS 不再使用 CommonJS；Knex 迁移、PM2 Node 18.19 启动和主要接口 smoke test 已验证。
-- 权限隔离必须前后端同时执行：`client/layouts/admin.vue` 默认不渲染后台 slot，必须通过 `/api/admin/auth/me` 确认为管理员后才显示后台；后端用 `server/middleware/requireAdmin.js` 统一保护站点级后台 API，普通用户只能访问自己的仪表盘、相册、图片、Token 和私有标签等自有资源；私有图片的 `/image` 与 `/thumb` hash 直链也必须经过媒体门禁，前端通过同站 `taotu_token` Cookie 让 `<img>` 请求继承登录态。
+- 权限隔离必须前后端同时执行：后台页面可用本地有效管理员 JWT 先恢复界面以避免闪屏，但所有站点级后台 API 必须由后端 `server/middleware/requireAdmin.js` 统一保护；普通用户即使用 curl 或手改 URL 也只能访问自己的仪表盘、相册、图片、Token 和私有标签等自有资源。私有图片的 `/image` 与 `/thumb` hash 直链也必须经过媒体门禁，前端通过同站 `taotu_token` Cookie 让 `<img>` 请求继承登录态。
 - 首页图库只保留 `grid` / `waterfall`，公开接口 `/api/gallery/config` 决定访客默认模式；网格和瀑布流都使用最短列贴合布局，并采用平均色块占位、中等图优先、前端逐张队列请求和原地淡入，避免一次性加载大量图片造成卡顿。
 - 首页新图片必须在已计算好的画框位置显示，不允许恢复从页面上方或中间移动到目标位置的位移动画；首次硬刷新后触底加载由布局完成后的可视检查兜底触发。
 - 网格模式已做多图滚动优化：屏外卡片允许浏览器跳过绘制，已加载图片释放可见性监听，卡片额外信息层按需渲染，避免大量标签/模糊滤镜常驻影响滚动。
@@ -197,7 +200,7 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - 自定义路径扫描导入必须生成派生缩略图：外部原图目录不写 `.thumbs` 时，缩略图/中等图落在 `data/gallery/.derived/<源图路径hash>/`；`/thumb` 先找原图同目录 `.thumbs`，再找 `.derived`，缺失时按需补生成，最后才回退原图。
 - 图片详情嵌入代码必须按当前尺寸切换 12 种组合，缩略图和中等图需要带对应 `s=thumb` / `s=medium` 参数，不能始终返回完整图地址。
 - 相册“公开所有图片”使用 `albums.all_picture_public` 持久化按钮状态；开启和关闭都要覆盖相册内所有图片的 `is_public`，不要仅按当前图片是否全公开临时推断。
-- 删除/高风险确认统一使用 `client/components/ConfirmDeleteDialog.vue`，组件通过 `Teleport` 固定在浏览器视口中央；不要新增浏览器原生 `confirm()`。
+- 删除/高风险确认统一使用 `client/components/ConfirmDeleteDialog.vue`，组件通过 `Teleport` 固定在浏览器视口中央；关闭按钮默认主题粉底白色 X、hover 时 X 变深色；不要新增浏览器原生 `confirm()` 或绿色关闭按钮。
 - 图片管理支持图库来源、用户/相册联动、文件名搜索、标签筛选和多选批量操作；批量操作入口在搜索按钮右侧，支持批量删除与批量公开/不公开。管理员编辑平台标签时不得覆盖图片所属用户已有私有标签。
 - 标签管理支持公共/私有标签、多选批量操作、分组树和人工标签；普通用户私有标签互斥必须保持用户隔离。
 - 条件标签使用 `conditions.tag_id` 稳定关联 `tags.id`；定时扫描、上传后、路径扫描后都必须增量跳过已标记图片，手动立即扫描才全量 force。
@@ -209,7 +212,7 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - `/api/tags` 必须返回 `mutually_exclusive_with`，图库/API 参数互斥校验统一走 `server/utils/tagConflict.js`。
 - 上传成功链接卡片在 `client/pages/upload.vue`，成功文件会从待上传队列移除，继续选择文件为追加。
 - 自定义路径读取/保存逻辑在 `configService.readPaths/writePaths` 与后台综合配置页，数据库表为 `custom_paths`；`make_public` 持久化路径扫描“批量公开”开关。删除自定义路径时只清理该路径扫描入库的图片记录、`image_tags` 关联和 `data/gallery/.derived` 下对应派生缩略图，不删除外部原始图片，不删除相册和标签定义。
-- 发布路线：当前为 `0.3.1` 正式版；移动端重新适配、主副标题拆分和面板内容收纳进入后续 `0.4.0` / `0.4.x`，稳定后再进入 `1.0.0`。
+- 发布路线：当前为 `0.3.1` 正式版续更；本轮完成无感会话切换、被动 API 失效拦截、Boxicons 复选框、后台标签公共开关、平滑统计曲线和确认弹窗关闭按钮精修。移动端重新适配、主副标题拆分和面板内容收纳进入后续 `0.4.0` / `0.4.x`，稳定后再进入 `1.0.0`。
 
 ## 提交前检查
 

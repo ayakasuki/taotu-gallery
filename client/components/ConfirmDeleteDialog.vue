@@ -80,7 +80,24 @@ defineEmits(['confirm', 'cancel'])
 .confirm-title { display: inline-flex; align-items: center; gap: 10px; }
 .title-icon { width: 32px; height: 32px; flex: 0 0 auto; }
 .confirm-title h2 { margin: 0; color: #ff5f98; font-size: 20px; font-weight: 900; }
-.close-btn { width: 26px; height: 26px; border: 0; border-radius: 6px; background: rgba(213, 255, 179, 0.72); cursor: pointer; }
+.close-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 95, 152, 0.9);
+  color: #fff;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.close-btn:hover {
+  color: #1f2638;
+  background: rgba(255, 95, 152, 0.9);
+  box-shadow: 0 8px 18px rgba(255, 95, 152, 0.18);
+}
 .close-btn .taotu-svg-icon { width: 14px; height: 14px }
 .confirm-preview {
   width: 94px; height: 94px; display: grid; place-items: center; margin: 18px auto 14px;

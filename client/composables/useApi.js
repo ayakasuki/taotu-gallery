@@ -4,6 +4,7 @@
  */
 export function useApi() {
   const config = useRuntimeConfig()
+  const { clearAuthSession } = useUiCache()
 
   const getApiBase = () => config.public.apiBase || ''
 
@@ -12,6 +13,16 @@ export function useApi() {
       return localStorage.getItem('api_token') || ''
     }
     return ''
+  }
+
+  const shouldClearAuth = (url, err, hasJwt) => {
+    if (!import.meta.client || !hasJwt) return false
+    const status = Number(err?.status || err?.statusCode || err?.response?.status || err?.data?.statusCode || 0)
+    if (status === 401) return true
+    if (status !== 403) return false
+    const message = String(err?.data?.error || err?.message || '')
+    if (/未审核|禁用|disabled|pending/i.test(message)) return true
+    return url === '/api/admin/auth/me'
   }
 
   const request = async (url, options = {}) => {
@@ -27,10 +38,15 @@ export function useApi() {
       headers['Authorization'] = `Bearer ${apiToken}`
     }
 
-    return $fetch(`${apiBase}${url}`, {
-      ...options,
-      headers
-    })
+    try {
+      return await $fetch(`${apiBase}${url}`, {
+        ...options,
+        headers
+      })
+    } catch (err) {
+      if (shouldClearAuth(url, err, !!jwt)) clearAuthSession()
+      throw err
+    }
   }
 
   const checkConnection = async () => {

@@ -119,6 +119,45 @@
   box-shadow: var(--taotu-shadow);
 }
 
+.taotu-checkbox-icon-pair {
+  position: relative;
+  width: var(--checkbox-icon-size, 20px);
+  height: var(--checkbox-icon-size, 20px);
+  flex: 0 0 var(--checkbox-icon-size, 20px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--checkbox-icon-color, rgba(166, 177, 197, 0.9));
+}
+
+.taotu-checkbox-icon-pair .taotu-svg-icon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.taotu-checkbox-icon-pair .checkbox-checked-icon {
+  color: var(--checkbox-checked-color, var(--taotu-pink));
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+input:checked + .taotu-checkbox-icon-pair .checkbox-unchecked-icon {
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+input:checked + .taotu-checkbox-icon-pair .checkbox-checked-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+input:disabled + .taotu-checkbox-icon-pair {
+  opacity: 0.45;
+}
+
 .taotu-card-pad,
 .fluent-card {
   padding: var(--space-lg);

@@ -1,12 +1,12 @@
 <template>
   <div class="upload-page">
-    <div v-if="!isLoggedIn" class="auth-required fluent-card">
+    <div v-if="authReady && !isLoggedIn" class="auth-required fluent-card">
       <h2>需要登录</h2>
       <p>登录后才能上传图片</p>
       <NuxtLink to="/login" class="fluent-btn fluent-btn-primary">前往登录</NuxtLink>
     </div>
 
-    <template v-else>
+    <template v-else-if="isLoggedIn">
       <section class="upload-console">
         <div class="upload-tabs">
           <button
@@ -106,7 +106,10 @@
                 <label>是否公开</label>
                 <label class="pretty-check">
                   <input v-model="uploadConfig.isPublic" type="checkbox" />
-                  <span></span>
+                  <span class="taotu-checkbox-icon-pair">
+                    <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                    <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                  </span>
                   公开（所有人可见）
                 </label>
               </div>
@@ -218,11 +221,19 @@ curl -X POST {{ baseUrl }}/api/upload \
 import TagSelector from '~/components/tags/TagSelector.vue'
 
 const config = useRuntimeConfig()
-const { clearAuthSession, isAuthFailure } = useUiCache()
+const api = useApi()
+const { readAuthPayload, syncAuthCookie } = useUiCache()
 const { tags, fetchTags } = useTags()
 
-const isLoggedIn = ref(false)
-const isAdmin = ref(false)
+const getInitialAuthPayload = () => {
+  const payload = readAuthPayload()
+  if (payload) syncAuthCookie()
+  return payload
+}
+const initialAuthPayload = getInitialAuthPayload()
+const isLoggedIn = ref(!!initialAuthPayload)
+const isAdmin = ref(initialAuthPayload?.role === 'admin')
+const authReady = ref(!!initialAuthPayload)
 const siteName = ref('桃图智库')
 const activeTab = ref('file')
 const uploadTabs = [
@@ -231,40 +242,31 @@ const uploadTabs = [
   { key: 'api', label: 'API 上传', icon: 'api-upload' }
 ]
 
+const handleAuthInvalid = () => {
+  isLoggedIn.value = false
+  isAdmin.value = false
+  authReady.value = true
+}
+
 onMounted(async () => {
   try {
-    const api = useApi()
     const siteConfig = await api.get('/api/admin/site-config/public')
     siteName.value = siteConfig.siteName || '桃图智库'
   } catch {}
-  const token = localStorage.getItem('jwt_token')
-  if (token) {
-    try {
-      const me = await api.get('/api/admin/auth/me')
-      isLoggedIn.value = true
-      isAdmin.value = me?.role === 'admin'
-    } catch (err) {
-      if (isAuthFailure(err)) {
-        clearAuthSession()
-        isLoggedIn.value = false
-        isAdmin.value = false
-      } else {
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]))
-          isLoggedIn.value = true
-          isAdmin.value = payload.role === 'admin'
-        } catch {}
-      }
-    }
-  }
+  const payload = readAuthPayload()
+  isLoggedIn.value = !!payload
+  isAdmin.value = payload?.role === 'admin'
+  authReady.value = true
   if (isLoggedIn.value) {
     fetchTags()
     fetchAlbums()
   }
+  window.addEventListener('taotu:auth-invalid', handleAuthInvalid)
   window.addEventListener('paste', handlePaste)
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('taotu:auth-invalid', handleAuthInvalid)
   window.removeEventListener('paste', handlePaste)
   currentXhr.value?.abort()
   selectedFiles.value.forEach(f => URL.revokeObjectURL(f.preview))
@@ -955,27 +957,10 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   display: none;
 }
 
-.pretty-check span {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  background: rgba(220, 225, 238, 0.86);
-}
-
-.pretty-check input:checked + span {
-  background: #f15c96;
-}
-
-.pretty-check input:checked + span::after {
-  content: '';
-  width: 8px;
-  height: 4px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: rotate(-45deg) translateY(-1px);
+.pretty-check .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
+  --checkbox-icon-color: rgba(220, 225, 238, 0.95);
+  --checkbox-checked-color: #f15c96;
 }
 
 .upload-footer {

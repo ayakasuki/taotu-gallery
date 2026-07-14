@@ -163,15 +163,24 @@
             <div class="checkbox-row">
               <label class="soft-check">
                 <input v-model="orientationSelections" type="checkbox" value="landscape" />
-                <i></i>仅横图（宽高比 > 1.1）
+                <span class="taotu-checkbox-icon-pair">
+                  <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                  <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                </span>仅横图（宽高比 > 1.1）
               </label>
               <label class="soft-check">
                 <input v-model="orientationSelections" type="checkbox" value="portrait" />
-                <i></i>仅竖图（宽高比 < 0.9）
+                <span class="taotu-checkbox-icon-pair">
+                  <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                  <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                </span>仅竖图（宽高比 < 0.9）
               </label>
               <label class="soft-check">
                 <input v-model="orientationSelections" type="checkbox" value="square" />
-                <i></i>仅正方形（0.9 - 1.1）
+                <span class="taotu-checkbox-icon-pair">
+                  <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                  <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                </span>仅正方形（0.9 - 1.1）
               </label>
             </div>
           </div>
@@ -1163,31 +1172,10 @@ watch(orientationSelections, (value) => {
   display: none;
 }
 
-.soft-check i {
-  position: relative;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
-  border: 2px solid rgba(202, 211, 226, 0.9);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.74);
-}
-
-.soft-check input:checked + i {
-  border-color: #ff6f9d;
-  background: #ff6f9d;
-}
-
-.soft-check input:checked + i::after {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 1px;
-  width: 6px;
-  height: 11px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.soft-check .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
+  --checkbox-icon-color: rgba(202, 211, 226, 0.96);
+  --checkbox-checked-color: #ff6f9d;
 }
 
 .modal-actions {

@@ -200,7 +200,10 @@
             <div class="image-table-head">
               <label class="soft-checkbox">
                 <input type="checkbox" :checked="allMyImagesSelected" :disabled="myImages.length === 0" @change="toggleSelectAllCurrentImages" />
-                <span></span>
+                <span class="taotu-checkbox-icon-pair">
+                  <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                  <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                </span>
               </label>
               <span>缩略图</span>
               <span>文件名</span>
@@ -214,7 +217,10 @@
               <div v-for="img in myImages" :key="img.id" class="image-table-row" :class="{ selected: selectedImageIds.includes(img.id) }">
                 <label class="soft-checkbox">
                   <input type="checkbox" :checked="selectedImageIds.includes(img.id)" @change="toggleImageSelect(img.id)" />
-                  <span></span>
+                  <span class="taotu-checkbox-icon-pair">
+                    <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                    <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                  </span>
                 </label>
                 <div class="table-thumb"><img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" /></div>
                 <div class="table-file">
@@ -305,7 +311,10 @@
                 <div class="private-tags-head">
                   <label class="soft-checkbox">
                     <input type="checkbox" :checked="allPrivateTagsSelected" :disabled="pagedPrivateTags.length === 0" @change="toggleSelectAllPrivateTags" />
-                    <span></span>
+                    <span class="taotu-checkbox-icon-pair">
+                      <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                      <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                    </span>
                   </label>
                   <span>名称</span>
                   <span>显示名</span>
@@ -317,7 +326,10 @@
                   <div v-for="tag in pagedPrivateTags" :key="tag.id" class="private-tags-row">
                     <label class="soft-checkbox">
                       <input type="checkbox" :checked="selectedPrivateTagIds.includes(tag.id)" @change="togglePrivateTagSelect(tag.id)" />
-                      <span></span>
+                      <span class="taotu-checkbox-icon-pair">
+                        <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                        <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                      </span>
                     </label>
                     <span class="private-name">{{ tag.name }}</span>
                     <span class="private-display">{{ tag.display_name || tag.name }}</span>
@@ -469,7 +481,10 @@
                   <label class="manual-overwrite-row">
                     <span class="manual-check-box">
                       <input type="checkbox" v-model="manualOverwrite" />
-                      <i></i>
+                      <span class="taotu-checkbox-icon-pair">
+                        <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                        <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                      </span>
                     </span>
                     <strong>覆盖已有私有标签</strong>
                     <TaotuIcon name="visibility-info" title="勾选后会先清理这些图片已有的私有标签，再写入本次选择的标签。" />
@@ -772,7 +787,7 @@ import TagSelector from '~/components/tags/TagSelector.vue'
 const api = useApi()
 const config = useRuntimeConfig()
 const router = useRouter()
-const { readCurrentUserCache, writeCurrentUserCache, clearAuthSession, isAuthFailure } = useUiCache()
+const { readCurrentUserCache, writeCurrentUserCache, clearAuthSession, readAuthPayload, isAuthFailure } = useUiCache()
 
 const activeSection = ref('overview')
 const siteName = ref('桃图智库')
@@ -957,9 +972,15 @@ const normalizeAssetUrl = (url) => {
   return `${config.public.apiBase || ''}${url}`
 }
 
+const handleAuthInvalid = () => {
+  user.value = null
+  router.push('/login')
+}
+
 onMounted(async () => {
-  const token = localStorage.getItem('jwt_token')
-  if (!token) { router.push('/login'); return }
+  window.addEventListener('taotu:auth-invalid', handleAuthInvalid)
+  const payload = readAuthPayload()
+  if (!payload) { router.push('/login'); return }
   let shouldRedirectLogin = false
   browserInfo.value = detectBrowserInfo()
   try {
@@ -967,8 +988,7 @@ onMounted(async () => {
     siteName.value = siteConfig?.siteName || '桃图智库'
     const cachedUser = readCurrentUserCache()
     if (cachedUser) user.value = cachedUser
-    user.value = await api.get('/api/admin/auth/me')
-    writeCurrentUserCache(user.value)
+    else user.value = payload
     await Promise.all([loadDashboardOverview(), loadMyTags(), loadMyAlbums(), loadTokens()])
     await Promise.all([loadMyImages(), loadManualImages()])
   } catch (err) {
@@ -981,6 +1001,10 @@ onMounted(async () => {
   if (shouldRedirectLogin) {
     router.push('/login')
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('taotu:auth-invalid', handleAuthInvalid)
 })
 
 const loadDashboardOverview = async () => {
@@ -2324,8 +2348,8 @@ const buildPageItems = (current, total) => {
   background: rgba(255, 237, 245, 0.58);
 }
 .soft-checkbox {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2336,30 +2360,10 @@ const buildPageItems = (current, total) => {
   opacity: 0;
   pointer-events: none;
 }
-.soft-checkbox span {
-  width: 14px;
-  height: 14px;
-  display: block;
-  border: 1px solid rgba(166, 177, 197, 0.8);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.75);
-}
-.soft-checkbox input:checked + span {
-  border-color: #f56b9f;
-  background: #f56b9f;
-  box-shadow: inset 0 0 0 3px #f56b9f;
-}
-.soft-checkbox input:checked + span::after {
-  content: '✓';
-  display: block;
-  color: white;
-  font-size: 10px;
-  line-height: 13px;
-  text-align: center;
-  font-weight: 900;
-}
-.soft-checkbox input:disabled + span {
-  opacity: 0.45;
+.soft-checkbox .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
+  --checkbox-icon-color: rgba(166, 177, 197, 0.9);
+  --checkbox-checked-color: #f56b9f;
 }
 .table-thumb {
   width: 102px;
@@ -3279,26 +3283,10 @@ const buildPageItems = (current, total) => {
   position: absolute;
   opacity: 0;
 }
-.manual-check-box i {
-  width: 14px;
-  height: 14px;
-  display: block;
-  border: 1px solid rgba(255, 126, 174, 0.74);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.7);
-}
-.manual-check-box input:checked + i {
-  background: #ff78a5;
-  border-color: #ff78a5;
-}
-.manual-check-box input:checked + i::after {
-  content: '✓';
-  display: block;
-  color: #fff;
-  font-size: 10px;
-  line-height: 14px;
-  text-align: center;
-  font-weight: 900;
+.manual-check-box .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
+  --checkbox-icon-color: rgba(255, 126, 174, 0.82);
+  --checkbox-checked-color: #ff78a5;
 }
 .manual-run-card > p {
   margin: 7px 0 16px 24px;

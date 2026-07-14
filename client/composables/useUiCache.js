@@ -8,6 +8,19 @@ function isAuthFailure(err) {
   return status === 401 || status === 403
 }
 
+function readAuthPayload() {
+  if (!import.meta.client) return null
+  try {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY)
+    if (!token) return null
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    if (payload.exp && payload.exp * 1000 <= Date.now()) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+
 export function useUiCache() {
   const config = useRuntimeConfig()
 
@@ -91,6 +104,7 @@ export function useUiCache() {
     readCurrentUserCache: () => readJsonCache(CURRENT_USER_CACHE_KEY),
     writeCurrentUserCache: (value) => writeJsonCache(CURRENT_USER_CACHE_KEY, value, 'taotu:current-user-updated'),
     clearCurrentUserCache: () => removeJsonCache(CURRENT_USER_CACHE_KEY, 'taotu:current-user-updated'),
+    readAuthPayload,
     writeAuthToken,
     syncAuthCookie,
     clearAuthSession: () => {

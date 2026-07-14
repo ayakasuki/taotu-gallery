@@ -340,7 +340,10 @@
           <div class="format-row">
             <label v-for="format in formatOptions" :key="format.key" class="format-check">
               <input v-model="form.allowedFormats" type="checkbox" :value="format.key" />
-              <i></i>
+              <span class="taotu-checkbox-icon-pair">
+                <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
+                <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+              </span>
               <b>{{ format.label }}</b>
             </label>
           </div>
@@ -1511,30 +1514,10 @@ onMounted(() => {
   display: none;
 }
 
-.format-check i {
-  position: relative;
-  width: 15px;
-  height: 15px;
-  border: 1px solid rgba(207, 214, 229, 0.92);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.74);
-}
-
-.format-check input:checked + i {
-  border-color: #ff6f9d;
-  background: #ff6f9d;
-}
-
-.format-check input:checked + i::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 5px;
-  height: 9px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.format-check .taotu-checkbox-icon-pair {
+  --checkbox-icon-size: 20px;
+  --checkbox-icon-color: rgba(207, 214, 229, 0.98);
+  --checkbox-checked-color: #ff6f9d;
 }
 
 @media (max-width: 1280px) {

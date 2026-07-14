@@ -60,10 +60,10 @@
       </main>
     </div>
   </div>
-  <div v-else class="admin-access-gate">
+  <div v-else-if="adminAccessReady" class="admin-access-gate">
     <div class="admin-access-card">
-      <strong>{{ adminAccessReady ? '无权访问管理后台' : '正在验证管理员权限' }}</strong>
-      <p>{{ adminAccessReady ? '普通用户不能访问后台页面或后台数据，正在返回你的仪表盘。' : '请稍候，系统正在确认当前会话是否拥有管理员权限。' }}</p>
+      <strong>无权访问管理后台</strong>
+      <p>普通用户不能访问后台页面或后台数据，正在返回你的仪表盘。</p>
     </div>
   </div>
 </template>
@@ -75,11 +75,9 @@ const {
   readSiteConfigCache,
   writeSiteConfigCache,
   readCurrentUserCache,
-  writeCurrentUserCache,
-  clearCurrentUserCache,
   clearAuthSession,
+  readAuthPayload,
   syncAuthCookie,
-  isAuthFailure,
   normalizeAssetUrl
 } = useUiCache()
 const username = ref('管理员')
@@ -90,8 +88,10 @@ const currentUserInfo = ref({ username: '管理员' })
 const siteConfigReady = ref(false)
 const currentUserReady = ref(false)
 const adminMainPop = ref(false)
-const adminAccessReady = ref(false)
-const adminAccessAllowed = ref(false)
+const initialPayload = readAuthPayload()
+const initialAdminPayload = initialPayload?.role === 'admin' ? initialPayload : null
+const adminAccessReady = ref(!!initialAdminPayload)
+const adminAccessAllowed = ref(!!initialAdminPayload)
 
 const topNavItems = [
   { to: '/', label: '图库' },
@@ -174,6 +174,13 @@ const resetAdminUserState = () => {
   currentUserReady.value = true
 }
 
+const handleAuthInvalid = () => {
+  adminAccessAllowed.value = false
+  adminAccessReady.value = true
+  resetAdminUserState()
+  navigateTo('/login', { replace: true })
+}
+
 const denyAdminAccess = (target = '/dashboard') => {
   adminAccessAllowed.value = false
   adminAccessReady.value = true
@@ -200,63 +207,45 @@ onMounted(async () => {
   if (cachedUser) applyCurrentUser(cachedUser)
   window.addEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
   window.addEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
+  window.addEventListener('taotu:auth-invalid', handleAuthInvalid)
 
-  const token = localStorage.getItem('jwt_token')
-  if (!token) {
+  const payload = readAuthPayload()
+  if (!payload) {
     clearAuthSession()
     resetAdminUserState()
     adminAccessReady.value = true
     navigateTo('/login', { replace: true })
     return
   }
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    syncAuthCookie()
-    if (payload.role !== 'admin') {
-      currentUserReady.value = true
-      denyAdminAccess('/dashboard')
-      return
-    }
-    if (!cachedUser || cachedUser.id !== payload.id) {
-      username.value = payload.username || payload.name || '管理员'
-      currentUserInfo.value = { ...payload, username: username.value }
-    }
-  } catch {}
-  currentUserReady.value = !!cachedUser?.avatar
-  try {
-    const [siteConfig, me] = await Promise.all([
-      api.get('/api/admin/site-config/public'),
-      api.get('/api/admin/auth/me')
-    ])
-    if (me?.role !== 'admin') {
-      applySiteConfig(siteConfig)
-      writeSiteConfigCache(siteConfig)
-      denyAdminAccess('/dashboard')
-      return
-    }
-    applySiteConfig(siteConfig)
-    applyCurrentUser(me)
-    writeSiteConfigCache(siteConfig)
-    writeCurrentUserCache(me)
-    adminAccessAllowed.value = true
-    adminAccessReady.value = true
-    triggerAdminMainPop()
-  } catch (err) {
-    if (isAuthFailure(err)) {
-      clearAuthSession()
-      resetAdminUserState()
-      adminAccessReady.value = true
-      navigateTo('/login')
-    }
+  syncAuthCookie()
+  if (payload.role !== 'admin') {
     currentUserReady.value = true
-    adminAccessReady.value = true
+    denyAdminAccess('/dashboard')
+    return
   }
+  if (!cachedUser || cachedUser.id !== payload.id) {
+    username.value = payload.username || payload.name || '管理员'
+    currentUserInfo.value = { ...payload, username: username.value }
+    currentUserReady.value = true
+  } else {
+    currentUserReady.value = true
+  }
+  adminAccessAllowed.value = true
+  adminAccessReady.value = true
+
+  try {
+    const siteConfig = await api.get('/api/admin/site-config/public')
+    applySiteConfig(siteConfig)
+    writeSiteConfigCache(siteConfig)
+  } catch {}
+  triggerAdminMainPop()
 })
 
 onBeforeUnmount(() => {
   if (!import.meta.client) return
   window.removeEventListener('taotu:site-config-updated', handleSiteConfigUpdated)
   window.removeEventListener('taotu:current-user-updated', handleCurrentUserUpdated)
+  window.removeEventListener('taotu:auth-invalid', handleAuthInvalid)
 })
 
 const handleLogout = () => {
