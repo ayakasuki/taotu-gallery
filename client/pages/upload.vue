@@ -17,7 +17,7 @@
             type="button"
             @click="activeTab = tab.key"
           >
-            <img :src="tab.icon" alt="" />
+            <TaotuIcon :name="tab.icon" />
             <span>{{ tab.label }}</span>
           </button>
         </div>
@@ -41,7 +41,7 @@
                 @change="handleFileSelect"
               />
               <div class="dropzone-content">
-                <img src="/icons/upload/upload-cloud-128x128.png" class="dropzone-icon" alt="" />
+                <TaotuIcon name="upload-cloud" class="dropzone-icon" />
                 <p class="dropzone-text">将文件拖拽到这里开始上传</p>
                 <p class="dropzone-hint">支持 JPG / PNG / WebP / GIF / AVIF，最大 20MB / 张</p>
                 <div class="dropzone-actions">
@@ -55,7 +55,7 @@
               <header>
                 <strong>已选择 {{ selectedFiles.length }} 个文件（共 {{ formatSize(selectedTotalSize) }}）</strong>
                 <button type="button" @click="clearFiles">
-                  <img src="/icons/upload/clear-64x64.png" alt="" />
+                  <TaotuIcon name="clear" />
                   清空
                 </button>
               </header>
@@ -169,11 +169,11 @@ curl -X POST {{ baseUrl }}/api/upload \
           <div class="records-actions">
             <TaotuSelect v-model="recordStatusFilter" class="status-filter" :options="recordStatusOptions" />
             <button type="button" class="copy-all-btn" :disabled="successRecords.length === 0" @click="copyAllRecordLinks">
-              <img src="/icons/upload/copy-batch-64x64.png" alt="" />
+              <TaotuIcon name="copy-batch" />
               复制全部链接
             </button>
             <button type="button" class="clear-records-btn" @click="clearUploadRecords">
-              <img src="/icons/upload/clear-64x64.png" alt="" />
+              <TaotuIcon name="clear" />
               清空记录
             </button>
           </div>
@@ -197,7 +197,7 @@ curl -X POST {{ baseUrl }}/api/upload \
             </div>
             <span>{{ record.size ? formatSize(record.size) : '-' }}</span>
             <span class="status-cell" :class="record.success ? 'success' : 'failed'">
-              <img :src="record.success ? '/icons/status/success-64x64.png' : '/icons/status/failure-64x64.png'" alt="" />
+              <TaotuIcon :name="record.success ? 'success' : 'failure'" />
               {{ record.success ? '成功' : '失败' }}
             </span>
             <span class="record-link">{{ record.success ? record.url : '-' }}</span>
@@ -226,9 +226,9 @@ const isAdmin = ref(false)
 const siteName = ref('桃图智库')
 const activeTab = ref('file')
 const uploadTabs = [
-  { key: 'file', label: '文件上传', icon: '/icons/upload/file-upload-64x64.png' },
-  { key: 'url', label: 'URL 上传', icon: '/icons/upload/url-upload-64x64.png' },
-  { key: 'api', label: 'API 上传', icon: '/icons/upload/api-upload-64x64.png' }
+  { key: 'file', label: '文件上传', icon: 'file-upload' },
+  { key: 'url', label: 'URL 上传', icon: 'url-upload' },
+  { key: 'api', label: 'API 上传', icon: 'api-upload' }
 ]
 
 onMounted(async () => {
@@ -650,9 +650,10 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   font-weight: 900;
 }
 
-.tab-btn img {
+.tab-btn .taotu-svg-icon {
   width: 18px;
   height: 18px;
+  color: currentColor;
 }
 
 .tab-btn:hover {
@@ -661,6 +662,11 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 
 .tab-btn.active {
   color: #f54c73;
+}
+
+.tab-btn.active .taotu-svg-icon,
+.tab-btn:hover .taotu-svg-icon {
+  color: currentColor !important;
 }
 
 .tab-btn.active::after {
@@ -701,7 +707,6 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 .dropzone-icon {
   width: 72px;
   height: 72px;
-  object-fit: contain;
 }
 
 .dropzone-text {
@@ -793,9 +798,9 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   padding: 0 12px;
 }
 
-.selected-files-card header img,
-.copy-all-btn img,
-.clear-records-btn img {
+.selected-files-card header .taotu-svg-icon,
+.copy-all-btn .taotu-svg-icon,
+.clear-records-btn .taotu-svg-icon {
   width: 15px;
   height: 15px;
 }
@@ -1132,7 +1137,7 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   gap: 7px;
 }
 
-.status-cell img {
+.status-cell .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }

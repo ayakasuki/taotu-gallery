@@ -3,7 +3,7 @@
     <section class="image-panel">
       <header class="image-title-row">
         <div class="image-title">
-          <img src="/icons/admin/image-management-64x64.png" alt="" />
+          <TaotuIcon name="image-management" />
           <h1>图片管理</h1>
         </div>
       </header>
@@ -16,21 +16,15 @@
           <button type="button" :class="{ active: imgSource === 'user' }" @click="switchSource('user')">用户图库</button>
         </div>
 
-        <select v-if="imgSource === 'user'" v-model="filterUserId" class="soft-select user-filter" @change="onUserFilterChange">
-          <option :value="null">全部用户</option>
-          <option v-for="userItem in users" :key="userItem.id" :value="userItem.id">{{ userItem.username }}</option>
-        </select>
+        <TaotuSelect v-if="imgSource === 'user'" v-model="filterUserId" class="soft-select user-filter" :options="filterUserOptions" @change="onUserFilterChange" />
 
-        <select v-model="filterAlbumId" class="soft-select album-filter" @change="loadImages(1)">
-          <option :value="null">全部相册</option>
-          <option v-for="album in albums" :key="album.id" :value="album.id">{{ album.name }}</option>
-        </select>
+        <TaotuSelect v-model="filterAlbumId" class="soft-select album-filter" :options="filterAlbumOptions" @change="loadImages(1)" />
 
         <input v-model="search" class="name-filter" placeholder="搜索文件名" @keyup.enter="loadImages(1)" />
 
         <div class="tag-filter-wrap">
           <button type="button" class="tag-filter-btn" :class="{ active: filterTagIds.length > 0 }" @click="tagFilterOpen = !tagFilterOpen">
-            <img src="/icons/gallery/tag-add-64x64.png" alt="" />
+            <TaotuIcon name="tag-add" />
             标签筛选
             <span v-if="filterTagIds.length > 0">{{ filterTagIds.length }}</span>
           </button>
@@ -40,18 +34,18 @@
         </div>
 
         <button type="button" class="search-btn" @click="loadImages(1)">
-          <img src="/icons/actions/search-64x64.png" alt="" />
+          <TaotuIcon name="search" />
           搜索
         </button>
 
         <div v-if="selectedIds.length > 0" class="batch-action-wrap" @mouseenter="batchPopoverOpen = true" @mouseleave="batchPopoverOpen = false">
           <button type="button" class="search-btn batch-action-btn" @focus="batchPopoverOpen = true" @click="batchPopoverOpen = !batchPopoverOpen">
-            <img src="/icons/actions/settings-64x64.png" alt="" />
+            <TaotuIcon name="settings" />
             批量操作
           </button>
           <div v-if="batchPopoverOpen" class="batch-popover" @mouseenter="batchPopoverOpen = true">
             <button type="button" class="batch-delete-btn" @click="deleteSelectedImages">
-              <img src="/icons/actions/trash-64x64.png" alt="" />
+              <TaotuIcon name="trash" />
               批量删除已选 {{ selectedIds.length }} 张
             </button>
             <div class="batch-public-card">
@@ -122,10 +116,10 @@
               </span>
               <span class="action-col">
                 <button type="button" class="icon-action edit" @click="openEdit(img)">
-                  <img src="/icons/actions/edit-64x64.png" alt="编辑" />
+                  <TaotuIcon name="edit" alt="编辑" />
                 </button>
                 <button type="button" class="icon-action delete" @click="deleteImage(img)">
-                  <img src="/icons/actions/trash-64x64.png" alt="删除" />
+                  <TaotuIcon name="trash" alt="删除" />
                 </button>
               </span>
             </div>
@@ -154,11 +148,7 @@
           <button type="button" class="page-arrow" :disabled="page >= totalPages" @click="loadImages(page + 1)">›</button>
         </div>
         <div class="page-tools">
-          <select v-model.number="pageSize" class="page-size-select" @change="onPageSizeChange">
-            <option :value="20">20 条/页</option>
-            <option :value="50">50 条/页</option>
-            <option :value="100">100 条/页</option>
-          </select>
+          <TaotuSelect v-model="pageSize" class="page-size-select" :options="pageSizeOptions" @change="onPageSizeChange" />
           <span>跳至</span>
           <input v-model="jumpPage" class="jump-input" @keyup.enter="jumpToPage" />
           <span>页</span>
@@ -199,7 +189,7 @@
                   @focus="openEditDropdown = 'platform'"
                   @keyup.enter.prevent="createPlatformTagFromDraft"
                 />
-                <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                <TaotuIcon name="chevron-down" />
               </div>
               <div v-if="openEditDropdown === 'platform'" class="edit-options-popover">
                 <button
@@ -228,7 +218,7 @@
                   @focus="openEditDropdown = 'private'"
                   @keyup.enter.prevent="createPrivateTagFromDraft"
                 />
-                <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                <TaotuIcon name="chevron-down" />
               </div>
               <div v-if="openEditDropdown === 'private'" class="edit-options-popover private-options">
                 <button
@@ -246,7 +236,7 @@
             </div>
 
             <div class="private-warning">
-              <img src="/icons/status/warning-64x64.png" alt="" />
+              <TaotuIcon name="warning" />
               <p><strong>不会影响或删除其他用户的私有标签</strong>此处仅管理该图片所属用户名下的私有标签，不会影响其他用户的同名标签。</p>
             </div>
           </section>
@@ -287,6 +277,11 @@ const images = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(50)
+const pageSizeOptions = [
+  { label: '20 条/页', value: 20 },
+  { label: '50 条/页', value: 50 },
+  { label: '100 条/页', value: 100 }
+]
 const jumpPage = ref('')
 const loading = ref(false)
 const search = ref('')
@@ -332,6 +327,14 @@ const allPrivateTagOptions = computed(() => [...(editUserTagOptions.value.combin
 const selectedPlatformTags = computed(() => allPlatformTagOptions.value.filter(tag => editTagIds.value.includes(tag.id)))
 const selectedPrivateTags = computed(() => allPrivateTagOptions.value.filter(tag => editUserTagIds.value.includes(tag.id)))
 const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / Number(pageSize.value || 50))))
+const filterUserOptions = computed(() => [
+  { label: '全部用户', value: null },
+  ...users.value.map(userItem => ({ label: userItem.username, value: userItem.id, description: userItem.email || `用户 ID：${userItem.id}` }))
+])
+const filterAlbumOptions = computed(() => [
+  { label: '全部相册', value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id, description: `${album.image_count || album.imageCount || 0} 张图片` }))
+])
 const pageItems = computed(() => buildPageItems(page.value, totalPages.value))
 const allCurrentSelected = computed(() => images.value.length > 0 && images.value.every(img => selectedIds.value.includes(img.id)))
 const selectedImagesPublicState = computed(() => {
@@ -827,10 +830,9 @@ function tagToneById(id) {
   gap: 11px;
 }
 
-.image-title img {
+.image-title .taotu-svg-icon {
   width: 22px;
   height: 22px;
-  object-fit: contain;
 }
 
 .image-title h1 {
@@ -952,11 +954,10 @@ function tagToneById(id) {
   background: rgba(255, 244, 249, 0.9);
 }
 
-.tag-filter-btn img,
-.search-btn img {
+.tag-filter-btn .taotu-svg-icon,
+.search-btn .taotu-svg-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
 }
 
 .tag-filter-btn span {
@@ -1053,10 +1054,9 @@ function tagToneById(id) {
   cursor: pointer;
 }
 
-.batch-delete-btn img {
+.batch-delete-btn .taotu-svg-icon {
   width: 15px;
   height: 15px;
-  object-fit: contain;
 }
 
 .batch-public-card {
@@ -1362,10 +1362,9 @@ function tagToneById(id) {
   cursor: pointer;
 }
 
-.icon-action img {
+.icon-action .taotu-svg-icon {
   width: 15px;
   height: 15px;
-  object-fit: contain;
 }
 
 .icon-action.edit {
@@ -1603,7 +1602,7 @@ function tagToneById(id) {
   cursor: pointer;
 }
 
-.edit-select-box > img {
+.edit-select-box > .taotu-svg-icon {
   position: absolute;
   right: 12px;
   top: 18px;
@@ -1712,7 +1711,7 @@ function tagToneById(id) {
   background: rgba(255, 249, 235, 0.9);
 }
 
-.private-warning img {
+.private-warning .taotu-svg-icon {
   width: 18px;
   height: 18px;
 }

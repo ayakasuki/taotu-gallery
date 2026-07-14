@@ -125,7 +125,7 @@ defineExpose({ show, hide })
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: contain;
+
   background: rgba(255, 255, 255, 0.38);
 }
 

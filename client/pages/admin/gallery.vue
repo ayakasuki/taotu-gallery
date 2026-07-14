@@ -6,7 +6,7 @@
         <h1 class="page-title">本地图库设置</h1>
         <p>配置首页图库默认展示、分页和公开图库浏览体验。</p>
       </div>
-      <img src="/icons/admin/gallery-settings-64x64.png" class="subhero-icon" alt="" />
+      <TaotuIcon name="gallery-settings" class="subhero-icon" />
     </div>
     <div class="fluent-card">
       <h3>图片展示配置</h3>

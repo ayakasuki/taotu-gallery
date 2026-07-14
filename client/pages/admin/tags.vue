@@ -21,18 +21,12 @@
             <h2>标签列表</h2>
             <div class="tag-toolbar">
               <label class="search-box">
-                <img src="/icons/actions/search-64x64.png" alt="" />
+                <TaotuIcon name="search" />
                 <input v-model.trim="tagSearch" placeholder="搜索标签名称 / 显示名 / ID" @keyup.enter="tagPage = 1" />
               </label>
-              <select v-model="tagScope" class="soft-select" @change="tagPage = 1">
-                <option value="all">全部</option>
-                <option value="public">公共标签</option>
-                <option value="private">私有标签</option>
-                <option value="combinable">可组合</option>
-                <option value="exclusive">互斥</option>
-              </select>
+              <TaotuSelect v-model="tagScope" class="soft-select" :options="tagScopeOptions" @change="tagPage = 1" />
               <button type="button" class="primary-action" @click="openAddTag">
-                <img src="/icons/actions/add-64x64.png" alt="" />新建标签
+                <TaotuIcon name="add" />新建标签
               </button>
             </div>
           </header>
@@ -43,14 +37,11 @@
               <i></i>
             </label>
             <strong>已选择 {{ selectedTagIds.length }} 项</strong>
-            <button type="button" class="bulk-btn neutral" @click="toggleSelectCurrentPage">
-              <span></span>全选
-            </button>
             <button type="button" class="bulk-btn purple" :disabled="selectedTagIds.length === 0" @click="setSelectedTagsPublic">
-              <img src="/icons/status/public-64x64.png" alt="" />批量设为公共
+              <TaotuIcon name="public" />批量设为公共
             </button>
             <button type="button" class="bulk-btn danger" :disabled="selectedTagIds.length === 0" @click="deleteSelectedTags">
-              <img src="/icons/actions/trash-64x64.png" alt="" />批量删除
+              <TaotuIcon name="trash" />批量删除
             </button>
           </div>
 
@@ -100,7 +91,7 @@
             <span>共 {{ filteredTags.length }} 条数据</span>
             <div class="pager">
               <button type="button" :disabled="tagPage <= 1" @click="goTagPage(tagPage - 1)">
-                <img src="/icons/gallery/pagination-prev-64x64.png" alt="" />
+                <TaotuIcon name="pagination-prev" />
               </button>
               <button
                 v-for="item in tagPageItems"
@@ -113,14 +104,10 @@
                 {{ item.label }}
               </button>
               <button type="button" :disabled="tagPage >= tagTotalPages" @click="goTagPage(tagPage + 1)">
-                <img src="/icons/gallery/pagination-next-64x64.png" alt="" />
+                <TaotuIcon name="pagination-next" />
               </button>
             </div>
-            <select v-model.number="tagPageSize" class="page-size-select" @change="tagPage = 1">
-              <option :value="10">10 条/页</option>
-              <option :value="20">20 条/页</option>
-              <option :value="50">50 条/页</option>
-            </select>
+            <TaotuSelect v-model="tagPageSize" class="page-size-select" :options="tagPageSizeOptions" @change="tagPage = 1" />
           </footer>
         </article>
 
@@ -128,20 +115,20 @@
           <header class="group-card-header">
             <h2>标签分组管理</h2>
             <button type="button" class="outline-action" @click="openCreateGroup">
-              <img src="/icons/actions/add-64x64.png" alt="" />新建分组
+              <TaotuIcon name="add" />新建分组
             </button>
           </header>
 
           <div class="group-tree pretty-scroll">
             <div class="group-node all-tags active clickable" @click="groupRootExpanded = !groupRootExpanded">
               <button type="button" class="chevron-icon" :class="{ expanded: groupRootExpanded }" aria-label="全部标签">
-                <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                <TaotuIcon name="chevron-down" />
               </button>
               <strong>全部标签</strong>
               <em>({{ manageableTags.length }})</em>
               <div class="group-node-actions">
-                <button type="button" title="全部标签不可编辑" disabled><img src="/icons/actions/edit-64x64.png" alt="" /></button>
-                <button type="button" title="全部标签不可删除" disabled><img src="/icons/actions/trash-64x64.png" alt="" /></button>
+                <button type="button" title="全部标签不可编辑" disabled><TaotuIcon name="edit" /></button>
+                <button type="button" title="全部标签不可删除" disabled><TaotuIcon name="trash" /></button>
               </div>
             </div>
 
@@ -149,13 +136,13 @@
               <div v-for="group in editableGroups" :key="group.id" class="group-section">
                 <div class="group-node clickable" @click="toggleGroupExpand(groupKey(group))">
                   <button type="button" class="chevron-icon" :class="{ expanded: expandedGroups.includes(groupKey(group)) }">
-                    <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                    <TaotuIcon name="chevron-down" />
                   </button>
                   <strong>{{ group.name }}</strong>
                   <em>({{ groupTagCount(group) }})</em>
                   <div class="group-node-actions">
-                    <button type="button" title="编辑分组" @click.stop="openEditGroup(group)"><img src="/icons/actions/edit-64x64.png" alt="" /></button>
-                    <button type="button" title="删除分组" @click.stop="deleteGroup(group)"><img src="/icons/actions/trash-64x64.png" alt="" /></button>
+                    <button type="button" title="编辑分组" @click.stop="openEditGroup(group)"><TaotuIcon name="edit" /></button>
+                    <button type="button" title="删除分组" @click.stop="deleteGroup(group)"><TaotuIcon name="trash" /></button>
                   </div>
                 </div>
                 <div v-if="expandedGroups.includes(groupKey(group))" class="sub-tree">
@@ -164,8 +151,8 @@
                     <strong>{{ sg.name }}</strong>
                     <em>({{ subgroupTagCount(sg) }})</em>
                     <div class="group-node-actions">
-                      <button type="button" title="编辑子分组" @click="openEditSubgroup(group, sg)"><img src="/icons/actions/edit-64x64.png" alt="" /></button>
-                      <button type="button" title="删除子分组" @click="deleteSubgroup(group, sg)"><img src="/icons/actions/trash-64x64.png" alt="" /></button>
+                      <button type="button" title="编辑子分组" @click="openEditSubgroup(group, sg)"><TaotuIcon name="edit" /></button>
+                      <button type="button" title="删除子分组" @click="deleteSubgroup(group, sg)"><TaotuIcon name="trash" /></button>
                     </div>
                   </div>
                 </div>
@@ -185,41 +172,26 @@
           <div class="manual-filters">
             <label>
               <span>来源</span>
-              <select v-model="manualSource" @change="switchManualSource">
-                <option value="all">全部图库</option>
-                <option value="public">公共图库</option>
-                <option value="mine">我的图库</option>
-                <option value="user">用户图库</option>
-              </select>
+              <TaotuSelect v-model="manualSource" :options="manualSourceOptions" @change="switchManualSource" />
             </label>
             <label :class="{ disabled: manualSource !== 'user' }">
               <span>用户</span>
-              <select v-model="manualUserId" :disabled="manualSource !== 'user'" @change="reloadManualContext">
-                <option :value="null">请选择用户</option>
-                <option v-for="user in users" :key="user.id" :value="user.id">{{ user.username }}</option>
-              </select>
+              <TaotuSelect v-model="manualUserId" :options="manualUserOptions" :disabled="manualSource !== 'user'" @change="reloadManualContext" />
             </label>
             <label>
               <span>排序</span>
-              <select v-model="manualSort" @change="loadManualImages(1)">
-                <option value="created_at">最新</option>
-                <option value="view_count">最热门</option>
-                <option value="filename">文件名</option>
-              </select>
+              <TaotuSelect v-model="manualSort" :options="manualSortOptions" @change="loadManualImages(1)" />
             </label>
             <label>
               <span>相册</span>
-              <select v-model="manualAlbum" :disabled="manualSource === 'user' && !manualUserId" @change="loadManualImages(1)">
-                <option :value="null">{{ albumPlaceholder }}</option>
-                <option v-for="album in albums" :key="album.id" :value="album.id">{{ album.name }}</option>
-              </select>
+              <TaotuSelect v-model="manualAlbum" :options="manualAlbumOptions" :disabled="manualSource === 'user' && !manualUserId" @change="loadManualImages(1)" />
             </label>
           </div>
 
           <div class="manual-select-line">
             <span>请选择需要打标签的图片（已选择 {{ manualSelected.length }} 张）</span>
             <span class="manual-hover-tip">
-              <img src="/icons/albums/visibility-info-80x80.png" alt="" />
+              <TaotuIcon name="visibility-info" />
               鼠标停留图片出现该图预览
             </span>
           </div>
@@ -238,7 +210,7 @@
             >
               <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
               <span v-if="manualSelected.includes(img.id)" class="manual-check-mark">
-                <img src="/icons/选中.png" alt="" />
+                <TaotuIcon name="选中" />
               </span>
             </button>
           </div>
@@ -250,7 +222,7 @@
             <span>共 {{ manualTotal }} 张</span>
             <div class="pager">
               <button type="button" :disabled="manualPage <= 1" @click="loadManualImages(manualPage - 1)">
-                <img src="/icons/gallery/pagination-prev-64x64.png" alt="" />
+                <TaotuIcon name="pagination-prev" />
               </button>
               <button
                 v-for="item in manualPageItems"
@@ -263,13 +235,10 @@
                 {{ item.label }}
               </button>
               <button type="button" :disabled="manualPage >= manualTotalPages" @click="loadManualImages(manualPage + 1)">
-                <img src="/icons/gallery/pagination-next-64x64.png" alt="" />
+                <TaotuIcon name="pagination-next" />
               </button>
             </div>
-            <select v-model.number="manualPageSize" class="page-size-select" @change="loadManualImages(1)">
-              <option :value="16">16 条/页</option>
-              <option :value="32">32 条/页</option>
-            </select>
+            <TaotuSelect v-model="manualPageSize" class="page-size-select" :options="manualPageSizeOptions" @change="loadManualImages(1)" />
           </footer>
         </article>
 
@@ -297,7 +266,7 @@
               <div v-for="group in manualTreeGroups" :key="group.key" class="manual-tree-group">
                 <button type="button" class="manual-tree-title" @click="toggleManualGroup(group.key)">
                   <span class="manual-chevron" :class="{ expanded: manualExpandedGroups.includes(group.key) }">
-                    <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                    <TaotuIcon name="chevron-down" />
                   </span>{{ group.name }} <em>({{ group.tags.length + group.children.reduce((sum, child) => sum + child.tags.length, 0) }})</em>
                 </button>
                 <div v-if="manualExpandedGroups.includes(group.key)" class="manual-tree-content">
@@ -313,7 +282,7 @@
                   <div v-for="child in group.children" :key="child.key" class="manual-subgroup">
                     <button type="button" class="manual-tree-title child" @click="toggleManualGroup(child.key)">
                       <span class="manual-chevron" :class="{ expanded: manualExpandedGroups.includes(child.key) }">
-                        <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                        <TaotuIcon name="chevron-down" />
                       </span>{{ child.name }} <em>({{ child.tags.length }})</em>
                     </button>
                     <div v-if="manualExpandedGroups.includes(child.key)" class="manual-tree-content child">
@@ -337,7 +306,10 @@
             <label class="soft-checkbox execute-check">
               <input type="checkbox" v-model="manualOverwrite" />
               <i></i>
-              <span>覆盖已有标签 <em title="勾选后将覆盖图片已存在的平台手动标签。">i</em></span>
+              <span>
+                覆盖已有标签
+                <TaotuIcon name="visibility-info" title="勾选后将覆盖图片已存在的平台手动标签。" />
+              </span>
             </label>
             <p>勾选后将覆盖图片已存在的平台手动标签</p>
             <button
@@ -346,7 +318,7 @@
               :disabled="manualLoading || manualSelected.length === 0 || manualSelectedTagChips.length === 0 || (manualSource === 'user' && !manualUserId)"
               @click="runManualTag"
             >
-              <img src="/icons/actions/scan-64x64.png" alt="" />{{ manualLoading ? '执行中...' : '执行人工标签' }}
+              <TaotuIcon name="scan" />{{ manualLoading ? '执行中...' : '执行人工标签' }}
             </button>
             <strong>将为选中的 {{ manualSelected.length }} 张图片打上所选标签</strong>
           </section>
@@ -409,7 +381,7 @@
           </div>
         </label>
         <button v-if="groupModalMode === 'edit-group'" type="button" class="add-subgroup-btn" @click="openCreateSubgroup(editingGroup)">
-          <img src="/icons/actions/add-64x64.png" alt="" />新建子分组
+          <TaotuIcon name="add" />新建子分组
         </button>
         <label v-if="groupModalShowsTags" class="modal-field tag-select-field">
           <span>分组内标签（可多选）</span>
@@ -457,6 +429,33 @@ const activeTab = ref('manage')
 const tabs = [
   { key: 'manage', label: '标签管理' },
   { key: 'manual', label: '人工标签' }
+]
+const tagScopeOptions = [
+  { label: '全部', value: 'all' },
+  { label: '公共标签', value: 'public' },
+  { label: '私有标签', value: 'private' },
+  { label: '可组合', value: 'combinable' },
+  { label: '互斥', value: 'exclusive' }
+]
+const tagPageSizeOptions = [
+  { label: '10 条/页', value: 10 },
+  { label: '20 条/页', value: 20 },
+  { label: '50 条/页', value: 50 }
+]
+const manualSourceOptions = [
+  { label: '全部图库', value: 'all' },
+  { label: '公共图库', value: 'public' },
+  { label: '我的图库', value: 'mine' },
+  { label: '用户图库', value: 'user' }
+]
+const manualSortOptions = [
+  { label: '最新', value: 'created_at' },
+  { label: '最热门', value: 'view_count' },
+  { label: '文件名', value: 'filename' }
+]
+const manualPageSizeOptions = [
+  { label: '16 条/页', value: 16 },
+  { label: '32 条/页', value: 32 }
 ]
 
 const allTags = ref([])
@@ -546,6 +545,14 @@ const albumPlaceholder = computed(() => {
   if (manualSource.value === 'user') return manualUserId.value ? '该用户全部相册' : '请先选择用户'
   return '全部相册'
 })
+const manualUserOptions = computed(() => [
+  { label: '请选择用户', value: null },
+  ...users.value.map(user => ({ label: user.username, value: user.id, description: user.email || `用户 ID：${user.id}` }))
+])
+const manualAlbumOptions = computed(() => [
+  { label: albumPlaceholder.value, value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id, description: `${album.image_count || album.imageCount || 0} 张图片` }))
+])
 const manualTotalPages = computed(() => Math.max(1, Math.ceil((manualTotal.value || 0) / manualPageSize.value)))
 const manualPageItems = computed(() => buildPageItems(manualPage.value, manualTotalPages.value))
 
@@ -1437,7 +1444,7 @@ h3 {
   background: rgba(255, 255, 255, 0.72);
 }
 
-.search-box img {
+.search-box .taotu-svg-icon {
   width: 15px;
   height: 15px;
   opacity: 0.68;
@@ -1463,7 +1470,13 @@ h3 {
   padding: 0 34px 0 12px;
   border: 1px solid rgba(218, 224, 238, 0.9);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.74) url('/icons/nav/chevron-down-64x64.png') no-repeat right 11px center / 13px 13px;
+  background-color: rgba(255, 255, 255, 0.74);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-position: calc(100% - 17px) 50%, calc(100% - 11px) 50%;
+  background-size: 6px 6px, 6px 6px;
   color: #657188;
   font-size: 13px;
   font-weight: 900;
@@ -1494,11 +1507,11 @@ h3 {
   box-shadow: 0 12px 24px rgba(255, 110, 158, 0.2);
 }
 
-.primary-action img,
-.outline-action img,
-.bulk-btn img,
-.run-manual-btn img,
-.add-subgroup-btn img {
+.primary-action .taotu-svg-icon,
+.outline-action .taotu-svg-icon,
+.bulk-btn .taotu-svg-icon,
+.run-manual-btn .taotu-svg-icon,
+.add-subgroup-btn .taotu-svg-icon {
   width: 15px;
   height: 15px;
 }
@@ -1527,19 +1540,6 @@ h3 {
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
-}
-
-.bulk-btn.neutral {
-  border: 1px solid rgba(224, 229, 240, 0.86);
-  background: rgba(255, 255, 255, 0.72);
-  color: #6b7690;
-}
-
-.bulk-btn.neutral span {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #b7a6ff;
-  border-radius: 3px;
 }
 
 .bulk-btn.purple {
@@ -1690,7 +1690,7 @@ h3 {
   cursor: default;
 }
 
-.pager img {
+.pager .taotu-svg-icon {
   width: 15px;
   height: 15px;
 }
@@ -1811,7 +1811,7 @@ h3 {
   cursor: pointer;
 }
 
-.chevron-icon img {
+.chevron-icon .taotu-svg-icon {
   width: 14px;
   height: 14px;
   display: block;
@@ -1820,7 +1820,7 @@ h3 {
   transition: transform 0.16s ease;
 }
 
-.chevron-icon.expanded img {
+.chevron-icon.expanded .taotu-svg-icon {
   transform: rotate(0deg);
 }
 
@@ -1847,7 +1847,7 @@ h3 {
   cursor: pointer;
 }
 
-.group-node-actions img {
+.group-node-actions .taotu-svg-icon {
   width: 15px;
   height: 15px;
 }
@@ -1942,11 +1942,10 @@ h3 {
   white-space: nowrap;
 }
 
-.manual-hover-tip img {
+.manual-hover-tip .taotu-svg-icon {
   width: 16px;
   height: 16px;
   display: block;
-  object-fit: contain;
 }
 
 .manual-image-grid {
@@ -1999,11 +1998,10 @@ h3 {
   padding: 3px;
 }
 
-.manual-check-mark img {
+.manual-check-mark .taotu-svg-icon {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: contain;
 }
 
 .manual-pagination {
@@ -2135,7 +2133,7 @@ h3 {
   flex: 0 0 16px;
 }
 
-.manual-chevron img {
+.manual-chevron .taotu-svg-icon {
   width: 13px;
   height: 13px;
   display: block;
@@ -2144,7 +2142,7 @@ h3 {
   transition: transform 0.16s ease;
 }
 
-.manual-chevron.expanded img {
+.manual-chevron.expanded .taotu-svg-icon {
   transform: rotate(0deg);
 }
 
@@ -2191,17 +2189,17 @@ h3 {
   font-weight: 900;
 }
 
-.execute-check em {
-  display: inline-grid;
-  place-items: center;
+.execute-check span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.execute-check .taotu-svg-icon {
   width: 14px;
   height: 14px;
-  margin-left: 5px;
-  border: 1px solid rgba(170, 181, 201, 0.8);
-  border-radius: 50%;
   color: #9aa5b8;
-  font-size: 10px;
-  font-style: normal;
+  flex: 0 0 auto;
 }
 
 .manual-execute-card p,

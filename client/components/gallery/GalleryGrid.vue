@@ -89,8 +89,7 @@ const getWaterfallItemStyle = (index) => {
   const item = waterfallItems.value[index]
   if (!item) return { opacity: 0, visibility: 'hidden', transform: 'translate3d(0,0,0)' }
   return {
-    width: item.width + 'px',
-    height: item.height + 'px',
+    width: item.width + 'px', height: item.height + 'px',
     transform: 'translate3d(' + item.left + 'px,' + item.top + 'px,0)'
   }
 }

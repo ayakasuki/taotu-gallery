@@ -17,7 +17,7 @@
     <section class="stats-row" aria-label="核心统计">
       <article v-for="stat in statCards" :key="stat.label" class="metric-card" :class="stat.tone">
         <div class="metric-icon">
-          <img :src="stat.icon" alt="" />
+          <TaotuIcon :name="stat.icon" filled />
         </div>
         <div class="metric-copy">
           <span>{{ stat.label }}</span>
@@ -38,7 +38,7 @@
       <div class="quick-grid">
         <NuxtLink v-for="action in quickActions" :key="action.to" :to="action.to" class="quick-card" :class="action.tone">
           <div class="quick-icon">
-            <img :src="action.icon" alt="" />
+            <TaotuIcon :name="action.icon" filled />
           </div>
           <div>
             <strong>{{ action.title }}</strong>
@@ -69,7 +69,7 @@
               </template>
             </div>
             <span v-if="item.badge" class="ok-badge" :class="item.badgeTone ? `tone-${item.badgeTone}` : ''">{{ item.badge }}</span>
-            <img v-else class="status-icon" src="/icons/admin/status-ok-placeholder.svg" alt="" />
+            <TaotuIcon v-else class="status-icon" name="status-ok-placeholder" />
           </div>
         </div>
       </article>
@@ -82,7 +82,8 @@
         <div class="activity-list">
           <div v-for="activity in activities" :key="activity.id" class="activity-row">
             <div class="activity-avatar" :class="activity.type">
-              <img :src="activity.icon" alt="" />
+              <img v-if="activity.avatarUrl" :src="activity.avatarUrl" alt="" />
+              <TaotuIcon v-else :name="activity.icon" filled />
             </div>
             <p>
               <b v-if="activity.actor">{{ activity.actor }}</b>
@@ -147,25 +148,25 @@ const statDefinitions = [
     key: 'totalImages',
     label: '总图片',
     tone: 'tone-pink',
-    icon: '/icons/admin/image-management-64x64.png'
+    icon: 'image-management'
   },
   {
     key: 'totalAlbums',
     label: '总相册',
     tone: 'tone-purple',
-    icon: '/icons/admin/album-management-64x64.png'
+    icon: 'album-management'
   },
   {
     key: 'totalUsers',
     label: '总用户',
     tone: 'tone-blue',
-    icon: '/icons/admin/users-64x64.png'
+    icon: 'users'
   },
   {
     key: 'todayApiCalls',
     label: '今日 API 调用',
     tone: 'tone-green',
-    icon: '/icons/admin/api-settings-64x64.png'
+    icon: 'api-settings'
   }
 ]
 
@@ -188,28 +189,28 @@ const quickActions = [
     description: '管理标签与分类体系',
     to: '/admin/tags',
     tone: 'tone-pink',
-    icon: '/icons/admin/tag-settings-64x64.png'
+    icon: 'tag-settings'
   },
   {
     title: '备份与云同步',
     description: '备份恢复和 WebDAV 同步',
     to: '/admin/stats',
     tone: 'tone-purple',
-    icon: '/icons/admin/ops-64x64.png'
+    icon: 'ops'
   },
   {
     title: '综合配置',
     description: '路径、图库和 Token 配置',
     to: '/admin/paths',
     tone: 'tone-blue',
-    icon: '/icons/admin/custom-paths-64x64.png'
+    icon: 'custom-paths'
   },
   {
     title: '运维监控',
     description: '系统运行监控与分析',
     to: '/admin/stats',
     tone: 'tone-green',
-    icon: '/icons/admin/stats-64x64.png'
+    icon: 'stats'
   }
 ]
 
@@ -221,8 +222,9 @@ const activities = computed(() => {
     id: item.id || `${item.actor || item.kind}-${item.message || ''}-${item.createdAt || item.time || index}`,
     type: item.kind === 'system' ? 'system' : index % 3 === 1 ? 'user alt' : index % 3 === 2 ? 'user warm' : 'user',
     icon: item.kind === 'system'
-      ? (item.icon || '/icons/admin/ops-64x64.png')
-      : (normalizeAssetUrl(item.avatar) || '/icons/nav/user-avatar-128x128.png'),
+      ? (item.icon || 'ops')
+      : 'user',
+    avatarUrl: item.kind === 'system' ? '' : normalizeAssetUrl(item.avatar),
     actor: item.actor || '',
     message: item.message || '',
     time: item.time || ''
@@ -376,10 +378,9 @@ onBeforeUnmount(() => {
   height: 58px;
 }
 
-.metric-icon img {
+.metric-icon .taotu-svg-icon {
   width: 32px;
   height: 32px;
-  object-fit: contain;
 }
 
 .metric-copy {
@@ -499,10 +500,10 @@ onBeforeUnmount(() => {
   border-radius: 13px;
 }
 
-.quick-icon img {
-  width: 30px;
-  height: 30px;
-  object-fit: contain;
+.quick-icon .taotu-svg-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--metric-tone, currentColor);
 }
 
 .quick-card strong {
@@ -606,7 +607,7 @@ onBeforeUnmount(() => {
   width: 18px;
   height: 18px;
   display: block;
-  object-fit: contain;
+
 }
 
 .ok-badge {
@@ -717,7 +718,12 @@ onBeforeUnmount(() => {
 .activity-avatar.system img {
   width: 15px;
   height: 15px;
-  object-fit: contain;
+
+}
+
+.activity-avatar.system .taotu-svg-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .activity-row p {

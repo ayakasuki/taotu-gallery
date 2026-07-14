@@ -4,11 +4,11 @@
       <section class="confirm-card">
       <header class="confirm-head">
         <div class="confirm-title">
-          <img class="title-icon" :src="titleIcon" alt="" />
+          <TaotuIcon class="title-icon" :name="titleIcon" />
           <h2>{{ title }}</h2>
         </div>
         <button type="button" class="close-btn" @click="$emit('cancel')">
-          <img :src="closeIcon" alt="" />
+          <TaotuIcon :name="closeIcon" />
         </button>
       </header>
 
@@ -45,9 +45,9 @@ defineProps({
   description: { type: String, default: '此操作不可恢复，请谨慎操作。' },
   effectTitle: { type: String, default: '删除影响' },
   effects: { type: Array, default: () => [] },
-  titleIcon: { type: String, default: '/icons/actions/delete-64x64.png' },
+  titleIcon: { type: String, default: 'delete' },
   previewIcon: { type: String, default: '' },
-  closeIcon: { type: String, default: '/icons/actions/close-64x64.png' },
+  closeIcon: { type: String, default: 'close' },
   confirmText: { type: String, default: '确认删除' },
   cancelText: { type: String, default: '取消' },
   loadingText: { type: String, default: '处理中...' },
@@ -78,10 +78,10 @@ defineEmits(['confirm', 'cancel'])
 }
 .confirm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .confirm-title { display: inline-flex; align-items: center; gap: 10px; }
-.title-icon { width: 32px; height: 32px; object-fit: contain; flex: 0 0 auto; }
+.title-icon { width: 32px; height: 32px; flex: 0 0 auto; }
 .confirm-title h2 { margin: 0; color: #ff5f98; font-size: 20px; font-weight: 900; }
 .close-btn { width: 26px; height: 26px; border: 0; border-radius: 6px; background: rgba(213, 255, 179, 0.72); cursor: pointer; }
-.close-btn img { width: 14px; height: 14px; object-fit: contain; }
+.close-btn .taotu-svg-icon { width: 14px; height: 14px }
 .confirm-preview {
   width: 94px; height: 94px; display: grid; place-items: center; margin: 18px auto 14px;
   border: 8px solid rgba(255, 228, 239, 0.9); border-radius: 18px; background: rgba(255,255,255,0.88); overflow: hidden;

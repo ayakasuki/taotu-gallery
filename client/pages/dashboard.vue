@@ -22,7 +22,7 @@
         </div>
         <nav class="dashboard-nav">
           <button v-for="item in navItems" :key="item.key" class="nav-item" :class="{ active: activeSection === item.key }" @click="activeSection = item.key">
-            <img :src="item.icon" class="taotu-icon taotu-icon-20" alt="" />
+            <TaotuIcon :name="item.icon" class="taotu-icon taotu-icon-20" />
             <span>{{ item.label }}</span>
           </button>
         </nav>
@@ -34,7 +34,7 @@
             <div class="content-header dashboard-overview-title"><h2>概览</h2></div>
             <div class="stats-row">
               <div class="stat-card">
-                <div class="stat-icon stat-icon-pink"><img src="/icons/dashboard/image-management-64x64.png" alt="" /></div>
+                <div class="stat-icon stat-icon-pink"><TaotuIcon name="image-management" filled /></div>
                 <div class="stat-copy">
                   <span class="stat-label">我的图片数量</span>
                   <strong class="stat-value">{{ formatCount(dashboardStats.images) }}</strong>
@@ -42,7 +42,7 @@
                 </div>
               </div>
               <div class="stat-card">
-                <div class="stat-icon stat-icon-purple"><img src="/icons/dashboard/storage-96x96.png" alt="" /></div>
+                <div class="stat-icon stat-icon-purple"><TaotuIcon name="storage" filled /></div>
                 <div class="stat-copy">
                   <span class="stat-label">当前页存储</span>
                   <strong class="stat-value">{{ splitSize(dashboardStats.storage).value }} <em>{{ splitSize(dashboardStats.storage).unit }}</em></strong>
@@ -50,7 +50,7 @@
                 </div>
               </div>
               <div class="stat-card">
-                <div class="stat-icon stat-icon-violet"><img src="/icons/dashboard/private-tags-96x96.png" alt="" /></div>
+                <div class="stat-icon stat-icon-violet"><TaotuIcon name="private-tags" filled /></div>
                 <div class="stat-copy">
                   <span class="stat-label">私有标签数量</span>
                   <strong class="stat-value">{{ formatCount(dashboardStats.privateTags) }}</strong>
@@ -58,7 +58,7 @@
                 </div>
               </div>
               <div class="stat-card">
-                <div class="stat-icon stat-icon-orange"><img src="/icons/dashboard/albums-64x64.png" alt="" /></div>
+                <div class="stat-icon stat-icon-orange"><TaotuIcon name="albums" filled /></div>
                 <div class="stat-copy">
                   <span class="stat-label">我的相册数量</span>
                   <strong class="stat-value">{{ formatCount(dashboardStats.albums) }}</strong>
@@ -71,12 +71,12 @@
               <h3>快捷操作</h3>
               <div class="quick-actions">
                 <NuxtLink to="/upload" class="action-card action-upload">
-                  <span class="action-icon"><img src="/icons/upload/upload-cloud-128x128.png" alt="" /></span>
+                  <span class="action-icon"><TaotuIcon name="upload-cloud" filled /></span>
                   <span class="action-text"><strong>上传图片</strong><small>支持拖拽或批量上传 JPG / PNG / WEBP</small></span>
                   <span class="action-arrow">›</span>
                 </NuxtLink>
                 <NuxtLink to="/api-docs" class="action-card action-api">
-                  <span class="action-icon"><img src="/icons/upload/api-upload-64x64.png" alt="" /></span>
+                  <span class="action-icon"><TaotuIcon name="api-upload" filled /></span>
                   <span class="action-text"><strong>API 接口</strong><small>获取 API Token，开始调用数据接口</small></span>
                   <span class="action-arrow">›</span>
                 </NuxtLink>
@@ -97,7 +97,7 @@
                 </NuxtLink>
               </div>
               <div v-else class="recent-empty">
-                <img src="/icons/empty/no-images-256x256.png" alt="" />
+                <TaotuIcon name="no-images" />
                 <p>还没有上传图片</p>
               </div>
             </div>
@@ -152,7 +152,7 @@
               <span class="filter-label">来源</span>
               <button type="button" class="filter-static-select">
                 <span>我的图库</span>
-                <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                <TaotuIcon name="chevron-down" />
               </button>
             </div>
             <div class="filter-field album-field">
@@ -160,18 +160,18 @@
               <TaotuSelect v-model="imageAlbumId" class="image-filter-select" :options="myAlbumOptions" @change="loadMyImages(1)" />
             </div>
             <div class="filter-search">
-              <img src="/icons/actions/search-64x64.png" alt="" />
+              <TaotuIcon name="search" />
               <input v-model="imageSearchDraft" type="text" placeholder="搜索文件名" @keyup.enter="applyImageSearch" />
             </div>
             <div class="filter-field tag-filter-field">
               <button type="button" class="filter-dropdown-btn" :class="{ active: showImageMoreFilters || imageFilterTagIds.length > 0 }" @click="showImageMoreFilters = !showImageMoreFilters">
-                <img src="/icons/dashboard/tag-settings-64x64.png" alt="" />
+                <TaotuIcon name="tag-settings" />
                 <span>{{ imageFilterTagIds.length > 0 ? `标签筛选 (${imageFilterTagIds.length})` : '标签筛选' }}</span>
-                <img class="dropdown-caret" src="/icons/nav/chevron-down-64x64.png" alt="" />
+                <TaotuIcon name="chevron-down" class="dropdown-caret" />
               </button>
             </div>
             <button type="button" class="image-search-btn" @click="applyImageSearch">
-              <img src="/icons/actions/search-64x64.png" alt="" />
+              <TaotuIcon name="search" />
               <span>搜索</span>
             </button>
           </div>
@@ -184,15 +184,15 @@
             <div class="image-batch-row">
               <span>批量操作:</span>
               <button type="button" class="batch-action-btn public-btn" :disabled="selectedImageIds.length === 0" @click="batchSetMyImagesPublic(true)">
-                <img src="/icons/status/public-64x64.png" alt="" />
+                <TaotuIcon name="public" />
                 <span>设为公开</span>
               </button>
               <button type="button" class="batch-action-btn private-btn" :disabled="selectedImageIds.length === 0" @click="batchSetMyImagesPublic(false)">
-                <img src="/icons/status/private-64x64.png" alt="" />
+                <TaotuIcon name="private" />
                 <span>取消公开</span>
               </button>
               <button type="button" class="batch-action-btn danger-btn" :disabled="selectedImageIds.length === 0" @click="batchDeleteMyImages">
-                <img src="/icons/actions/delete-64x64.png" alt="" />
+                <TaotuIcon name="delete" />
                 <span>批量删除</span>
               </button>
             </div>
@@ -239,11 +239,11 @@
                 </label>
                 <div class="table-actions">
                   <button type="button" class="row-action-btn edit-action" @click="openImageEdit(img)">
-                    <img src="/icons/actions/edit-64x64.png" alt="" />
+                    <TaotuIcon name="edit" />
                     <span>编辑</span>
                   </button>
                   <button type="button" class="row-action-btn delete-action" @click="deleteMyImage(img)">
-                    <img src="/icons/actions/delete-64x64.png" alt="" />
+                    <TaotuIcon name="delete" />
                     <span>删除</span>
                   </button>
                 </div>
@@ -291,11 +291,11 @@
                 <div class="private-actions">
                   <span class="private-selected-count">已选择 {{ selectedPrivateTagIds.length }} 项</span>
                   <button type="button" class="private-action-btn private-delete-btn" :disabled="selectedPrivateTagIds.length === 0" @click="deleteSelectedPrivateTags">
-                    <img src="/icons/actions/delete-64x64.png" alt="" />
+                    <TaotuIcon name="delete" />
                     <span>批量删除</span>
                   </button>
                   <button type="button" class="private-action-btn private-create-btn" @click="openTagCreate">
-                    <img src="/icons/actions/add-64x64.png" alt="" />
+                    <TaotuIcon name="add" />
                     <span>新建标签</span>
                   </button>
                 </div>
@@ -309,8 +309,8 @@
                   </label>
                   <span>名称</span>
                   <span>显示名</span>
-                  <span class="head-with-info">是否可组合<i title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。">i</i></span>
-                  <span class="head-with-info">互斥标签<i title="互斥标签会成组互相排斥，选择其中一个时应避免同时选择同组其它标签。">i</i></span>
+                  <span class="head-with-info">是否可组合<TaotuIcon name="visibility-info" title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。" /></span>
+                  <span class="head-with-info">互斥标签<TaotuIcon name="visibility-info" title="互斥标签会成组互相排斥，选择其中一个时应避免同时选择同组其它标签。" /></span>
                   <span>操作</span>
                 </div>
                 <div class="private-tags-body">
@@ -325,11 +325,11 @@
                     <span class="mutual-summary">{{ formatMutualNames(tag.mutually_exclusive_with) || '-' }}</span>
                     <span class="private-row-actions">
                       <button type="button" class="private-row-btn edit" @click="openTagEdit(tag)">
-                        <img src="/icons/actions/edit-64x64.png" alt="" />
+                        <TaotuIcon name="edit" />
                         <span>编辑</span>
                       </button>
                       <button type="button" class="private-row-btn delete" @click="deleteMyTag(tag)">
-                        <img src="/icons/actions/delete-64x64.png" alt="" />
+                        <TaotuIcon name="delete" />
                         <span>删除</span>
                       </button>
                     </span>
@@ -341,7 +341,7 @@
                   <div class="private-footer-tools">
                     <div class="tag-page-nav">
                       <button type="button" class="tag-page-arrow" :disabled="privateTagPage <= 1" @click="goPrivateTagPage(privateTagPage - 1)">
-                        <img src="/icons/gallery/pagination-prev-64x64.png" alt="" />
+                        <TaotuIcon name="pagination-prev" />
                       </button>
                       <button
                         v-for="item in privateTagPageItems"
@@ -353,7 +353,7 @@
                         @click="!item.ellipsis && goPrivateTagPage(item.page)"
                       >{{ item.label }}</button>
                       <button type="button" class="tag-page-arrow" :disabled="privateTagPage >= privateTagTotalPages" @click="goPrivateTagPage(privateTagPage + 1)">
-                        <img src="/icons/gallery/pagination-next-64x64.png" alt="" />
+                        <TaotuIcon name="pagination-next" />
                       </button>
                     </div>
                     <TaotuSelect v-model="privateTagPageSize" class="tag-page-size-select" :options="privateTagPageSizeOptions" @change="onPrivateTagPageSizeChange" />
@@ -375,7 +375,7 @@
                     <span>来源</span>
                     <button type="button" class="manual-static-select">
                       <span>我的图库</span>
-                      <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                      <TaotuIcon name="chevron-down" />
                     </button>
                   </div>
                   <div class="manual-filter-field">
@@ -390,7 +390,7 @@
                 <div class="manual-select-line">
                   <span>请选择需要打标签的图片（已选择 {{ manualSelected.length }} 张）</span>
                   <span class="manual-hover-tip">
-                    <img src="/icons/albums/visibility-info-80x80.png" alt="" />
+                    <TaotuIcon name="visibility-info" />
                     鼠标停留图片出现该图预览
                   </span>
                 </div>
@@ -409,7 +409,7 @@
                   >
                     <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
                     <span v-if="manualSelected.includes(img.id)" class="manual-check-mark">
-                      <img src="/icons/选中.png" alt="" />
+                      <TaotuIcon name="选中" />
                     </span>
                   </button>
                   <div v-if="manualImages.length === 0" class="manual-empty">暂无图片</div>
@@ -418,7 +418,7 @@
                   <span>共 {{ formatCount(manualTotal) }} 张</span>
                   <div class="manual-page-nav">
                     <button type="button" class="tag-page-arrow" :disabled="manualPage <= 1" @click="loadManualImages(manualPage - 1)">
-                      <img src="/icons/gallery/pagination-prev-64x64.png" alt="" />
+                      <TaotuIcon name="pagination-prev" />
                     </button>
                     <button
                       v-for="item in manualPageItems"
@@ -430,7 +430,7 @@
                       @click="!item.ellipsis && loadManualImages(item.page)"
                     >{{ item.label }}</button>
                     <button type="button" class="tag-page-arrow" :disabled="manualPage >= manualTotalPages" @click="loadManualImages(manualPage + 1)">
-                      <img src="/icons/gallery/pagination-next-64x64.png" alt="" />
+                      <TaotuIcon name="pagination-next" />
                     </button>
                   </div>
                   <TaotuSelect v-model="manualPageSize" class="tag-page-size-select" :options="manualPageSizeOptions" @change="onManualPageSizeChange" />
@@ -451,7 +451,7 @@
                       placeholder="请选择或输入私有标签"
                       @keyup.enter.prevent="addManualTagFromInput"
                     />
-                    <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                    <TaotuIcon name="chevron-down" />
                     <datalist id="manual-private-tag-list">
                       <option v-for="tag in myTags" :key="tag.id" :value="tag.display_name || tag.name"></option>
                     </datalist>
@@ -472,7 +472,7 @@
                       <i></i>
                     </span>
                     <strong>覆盖已有私有标签</strong>
-                    <em title="勾选后会先清理这些图片已有的私有标签，再写入本次选择的标签。">i</em>
+                    <TaotuIcon name="visibility-info" title="勾选后会先清理这些图片已有的私有标签，再写入本次选择的标签。" />
                   </label>
                   <p>勾选后将覆盖图片已存在的私有标签</p>
                   <button type="button" class="manual-run-btn" :disabled="manualLoading || manualSelected.length === 0 || (!manualOverwrite && manualTagIds.length === 0 && !manualTagDraft.trim())" @click="runManualTag">
@@ -538,7 +538,7 @@
                     <div class="password-input-wrap">
                       <input v-model="passwordForm.newPassword" :type="showNewPassword ? 'text' : 'password'" placeholder="请输入新密码（至少8位，包含字母和数字）" />
                       <button type="button" @click="showNewPassword = !showNewPassword">
-                        <img :src="showNewPassword ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+                        <TaotuIcon :name="showNewPassword ? 'eye-off' : 'eye'" />
                       </button>
                     </div>
                   </label>
@@ -547,7 +547,7 @@
                     <div class="password-input-wrap">
                       <input v-model="passwordForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" placeholder="请再次输入新密码" @keyup.enter="changeOwnPassword" />
                       <button type="button" @click="showConfirmPassword = !showConfirmPassword">
-                        <img :src="showConfirmPassword ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+                        <TaotuIcon :name="showConfirmPassword ? 'eye-off' : 'eye'" />
                       </button>
                     </div>
                   </label>
@@ -582,7 +582,7 @@
               <h2>API Token <span>管理</span></h2>
               <p>使用 API Token 访问{{ siteName }} API，注意妥善保管，切勿泄露给他人。</p>
               <button type="button" class="token-create-button" @click="openTokenModal">
-                <img src="/icons/actions/add-64x64.png" alt="" />
+                <TaotuIcon name="add" />
                 <span>生成新 Token</span>
               </button>
             </div>
@@ -626,7 +626,7 @@
                 <span>共 {{ formatCount(myTokens.length) }} 条</span>
                 <div class="token-page-nav">
                   <button type="button" class="tag-page-arrow" :disabled="tokenPage <= 1" @click="goTokenPage(tokenPage - 1)">
-                    <img src="/icons/gallery/pagination-prev-64x64.png" alt="" />
+                    <TaotuIcon name="pagination-prev" />
                   </button>
                   <button
                     v-for="item in tokenPageItems"
@@ -638,7 +638,7 @@
                     @click="!item.ellipsis && goTokenPage(item.page)"
                   >{{ item.label }}</button>
                   <button type="button" class="tag-page-arrow" :disabled="tokenPage >= tokenTotalPages" @click="goTokenPage(tokenPage + 1)">
-                    <img src="/icons/gallery/pagination-next-64x64.png" alt="" />
+                    <TaotuIcon name="pagination-next" />
                   </button>
                 </div>
               </div>
@@ -688,17 +688,17 @@
           </div>
         </div>
         <div class="tag-modal-switch-row">
-          <span>是否可组合 <i title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。">i</i></span>
+          <span>是否可组合 <TaotuIcon name="visibility-info" title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。" /></span>
           <label class="tag-switch" :class="{ active: tagForm.combinable }">
             <input type="checkbox" v-model="tagForm.combinable" />
             <i></i>
           </label>
         </div>
         <div class="tag-modal-field">
-          <label>互斥私有标签 <i title="互斥标签会成组互相排斥，选择其中一个时应避免同时选择同组其它标签。">i</i></label>
+          <label>互斥私有标签 <TaotuIcon name="visibility-info" title="互斥标签会成组互相排斥，选择其中一个时应避免同时选择同组其它标签。" /></label>
           <div class="tag-mutual-select">
             <span>{{ tagForm.mutualIds.length > 0 ? `已选择 ${tagForm.mutualIds.length} 个互斥标签` : '请选择互斥的私有标签（可多选）' }}</span>
-            <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+            <TaotuIcon name="chevron-down" />
           </div>
           <div class="tag-mutual-list">
             <button
@@ -727,7 +727,7 @@
           <label>私有标签</label>
           <button type="button" class="edit-tag-select" @click="showEditTagPicker = !showEditTagPicker">
             <span>搜索或选择标签</span>
-            <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+            <TaotuIcon name="chevron-down" />
           </button>
         </div>
         <div v-if="showEditTagPicker" class="edit-tag-picker">
@@ -878,10 +878,10 @@ const dashboardStats = reactive({
 })
 
 const navItems = [
-  { key: 'overview', label: '统计', icon: '/icons/dashboard/overview-64x64.png' },
-  { key: 'images', label: '图片管理', icon: '/icons/dashboard/image-management-64x64.png' },
-  { key: 'tags', label: '标签设置', icon: '/icons/dashboard/tag-settings-64x64.png' },
-  { key: 'security', label: '账户与安全', icon: '/icons/dashboard/account-security-64x64.png' }
+  { key: 'overview', label: '统计', icon: 'overview' },
+  { key: 'images', label: '图片管理', icon: 'image-management' },
+  { key: 'tags', label: '标签设置', icon: 'tag-settings' },
+  { key: 'security', label: '账户与安全', icon: 'account-security' }
 ]
 
 const userInitial = computed(() => (user.value?.username || 'U').slice(0, 1).toUpperCase())
@@ -1620,10 +1620,9 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
-.nav-item img {
+.nav-item .taotu-svg-icon {
   width: 18px;
   height: 18px;
-  object-fit: contain;
   opacity: 0.68;
 }
 .nav-item:hover {
@@ -1634,7 +1633,7 @@ const buildPageItems = (current, total) => {
   border-color: rgba(255, 178, 207, 0.72);
   color: #f05f98;
 }
-.nav-item.active img {
+.nav-item.active .taotu-svg-icon {
   opacity: 1;
 }
 .dashboard-content {
@@ -1707,15 +1706,14 @@ const buildPageItems = (current, total) => {
   border-radius: 8px;
   border: 1px solid rgba(230, 220, 235, 0.82);
 }
-.stat-icon img {
+.stat-icon .taotu-svg-icon {
   width: 34px;
   height: 34px;
-  object-fit: contain;
 }
-.stat-icon-pink { background: rgba(255, 233, 242, 0.72); }
-.stat-icon-purple { background: rgba(243, 239, 255, 0.78); }
-.stat-icon-violet { background: rgba(246, 239, 255, 0.82); }
-.stat-icon-orange { background: rgba(255, 241, 232, 0.76); }
+.stat-icon-pink { background: rgba(255, 233, 242, 0.72); color: #ff8fb9; }
+.stat-icon-purple { background: rgba(243, 239, 255, 0.78); color: #a995ff; }
+.stat-icon-violet { background: rgba(246, 239, 255, 0.82); color: #b087ff; }
+.stat-icon-orange { background: rgba(255, 241, 232, 0.76); color: #ffad7a; }
 .stat-copy {
   min-width: 0;
 }
@@ -1793,11 +1791,14 @@ const buildPageItems = (current, total) => {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
+  color: #ff8fb9;
 }
-.action-icon img {
+.action-api .action-icon {
+  color: #a995ff;
+}
+.action-icon .taotu-svg-icon {
   width: 40px;
   height: 40px;
-  object-fit: contain;
 }
 .action-text {
   min-width: 0;
@@ -1907,7 +1908,6 @@ const buildPageItems = (current, total) => {
 .recent-empty img {
   width: 112px;
   height: 112px;
-  object-fit: contain;
   opacity: 0.78;
 }
 .overview-side-stack {
@@ -2130,7 +2130,7 @@ const buildPageItems = (current, total) => {
   padding: 0 8px 0 12px;
   cursor: default;
 }
-.filter-static-select img,
+.filter-static-select .taotu-svg-icon,
 .dropdown-caret {
   width: 13px;
   height: 13px;
@@ -2164,7 +2164,7 @@ const buildPageItems = (current, total) => {
   border-radius: 7px;
   background: rgba(255,255,255,0.62);
 }
-.filter-search img {
+.filter-search .taotu-svg-icon {
   width: 15px;
   height: 15px;
   opacity: 0.55;
@@ -2187,7 +2187,7 @@ const buildPageItems = (current, total) => {
   padding: 0 10px;
   cursor: pointer;
 }
-.filter-dropdown-btn > img:first-child {
+.filter-dropdown-btn > .taotu-svg-icon:first-child {
   width: 15px;
   height: 15px;
   opacity: 0.68;
@@ -2215,10 +2215,9 @@ const buildPageItems = (current, total) => {
   cursor: pointer;
   box-shadow: 0 10px 22px rgba(242, 96, 151, 0.2);
 }
-.image-search-btn img {
+.image-search-btn .taotu-svg-icon {
   width: 14px;
   height: 14px;
-  filter: brightness(0) invert(1);
 }
 .tag-filter-panel {
   padding: 14px;
@@ -2254,7 +2253,7 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: pointer;
 }
-.batch-action-btn img {
+.batch-action-btn .taotu-svg-icon {
   width: 14px;
   height: 14px;
 }
@@ -2511,7 +2510,7 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: pointer;
 }
-.row-action-btn img {
+.row-action-btn .taotu-svg-icon {
   width: 13px;
   height: 13px;
 }
@@ -2643,7 +2642,7 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: pointer;
 }
-.edit-tag-select img {
+.edit-tag-select .taotu-svg-icon {
   width: 14px;
   height: 14px;
   opacity: 0.62;
@@ -2821,7 +2820,7 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: pointer;
 }
-.private-action-btn img {
+.private-action-btn .taotu-svg-icon {
   width: 14px;
   height: 14px;
 }
@@ -2864,22 +2863,14 @@ const buildPageItems = (current, total) => {
   align-items: center;
   gap: 4px;
 }
-.head-with-info i,
-.tag-modal-switch-row i,
-.tag-modal-field label i,
-.manual-overwrite-row em {
+.head-with-info .taotu-svg-icon,
+.tag-modal-switch-row .taotu-svg-icon,
+.tag-modal-field label .taotu-svg-icon,
+.manual-overwrite-row .taotu-svg-icon {
   width: 12px;
   height: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(149, 159, 180, 0.55);
-  border-radius: 50%;
   color: #9aa3b6;
-  font-size: 9px;
-  line-height: 1;
-  font-style: normal;
-  font-weight: 900;
+  flex: 0 0 auto;
   cursor: help;
 }
 .private-tags-body {
@@ -2923,7 +2914,7 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: pointer;
 }
-.private-row-btn img {
+.private-row-btn .taotu-svg-icon {
   width: 13px;
   height: 13px;
   opacity: 0.72;
@@ -2977,7 +2968,7 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: pointer;
 }
-.tag-page-arrow img {
+.tag-page-arrow .taotu-svg-icon {
   width: 13px;
   height: 13px;
   opacity: 0.55;
@@ -3075,7 +3066,7 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: default;
 }
-.manual-static-select img {
+.manual-static-select .taotu-svg-icon {
   width: 13px;
   height: 13px;
   opacity: 0.58;
@@ -3106,11 +3097,10 @@ const buildPageItems = (current, total) => {
   font-size: 12px;
   white-space: nowrap;
 }
-.manual-hover-tip img {
+.manual-hover-tip .taotu-svg-icon {
   width: 16px;
   height: 16px;
   display: block;
-  object-fit: contain;
 }
 .manual-image-grid {
   display: grid;
@@ -3152,11 +3142,10 @@ const buildPageItems = (current, total) => {
   padding: 2px;
   box-shadow: 0 6px 12px rgba(242, 96, 151, 0.22);
 }
-.manual-check-mark img {
+.manual-check-mark .taotu-svg-icon {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: contain;
 }
 .manual-pagination-row {
   height: 38px;
@@ -3232,7 +3221,7 @@ const buildPageItems = (current, total) => {
 .manual-tag-input input::placeholder {
   color: #a8afbf;
 }
-.manual-tag-input img {
+.manual-tag-input .taotu-svg-icon {
   width: 13px;
   height: 13px;
   opacity: 0.58;
@@ -3478,7 +3467,7 @@ const buildPageItems = (current, total) => {
   font-size: 12px;
   font-weight: 900;
 }
-.tag-mutual-select img {
+.tag-mutual-select .taotu-svg-icon {
   width: 13px;
   height: 13px;
   opacity: 0.58;
@@ -3751,7 +3740,7 @@ const buildPageItems = (current, total) => {
   background: transparent;
   cursor: pointer;
 }
-.password-input-wrap img {
+.password-input-wrap .taotu-svg-icon {
   width: 15px;
   height: 15px;
   opacity: 0.54;
@@ -3889,10 +3878,9 @@ const buildPageItems = (current, total) => {
   box-shadow: 0 12px 24px rgba(154, 120, 244, 0.2);
   margin: 13px 0px;
 }
-.token-create-button img {
+.token-create-button .taotu-svg-icon {
   width: 14px;
   height: 14px;
-  filter: brightness(0) invert(1);
 }
 .new-token-warning {
   position: relative;
@@ -4212,7 +4200,7 @@ const buildPageItems = (current, total) => {
 .manual-card:hover { border-color: var(--fluent-border); }
 .manual-card.selected { border-color: var(--fluent-blue); background: var(--fluent-blue-light); }
 .manual-thumb { width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; background: var(--fluent-hover); border-radius: var(--radius-sm); overflow: hidden; position: relative; }
-.manual-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
+.manual-thumb img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
 .check-mark { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; background: var(--fluent-blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; }
 .manual-name { width: 200px; margin-top: var(--space-xs); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .selected-count { margin-left: auto; font-size: 13px; color: var(--fluent-blue); font-weight: 500; }

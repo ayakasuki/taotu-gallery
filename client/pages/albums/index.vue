@@ -17,7 +17,7 @@
             :class="{ active: source === tab.key }"
             @click="switchSource(tab.key)"
           >
-            <img :src="tab.icon" class="tab-icon" alt="" />
+            <TaotuIcon :name="tab.icon" class="tab-icon" />
             <span>{{ tab.label }}</span>
             <b>{{ tab.count }}</b>
           </button>
@@ -25,7 +25,7 @@
 
         <div class="toolbar-right">
           <div class="album-search">
-            <img src="/icons/albums/search-64x64.png" alt="" />
+            <TaotuIcon name="search" />
             <input v-model="search" type="search" placeholder="搜索相册名称、描述" @input="handleSearchInput" />
           </div>
 
@@ -37,7 +37,7 @@
               title="网格"
               @click="viewMode = 'grid'"
             >
-              <img src="/icons/albums/grid-view-64x64.png" alt="" />
+              <TaotuIcon name="grid-view" />
             </button>
             <button
               type="button"
@@ -46,12 +46,12 @@
               title="列表"
               @click="viewMode = 'list'"
             >
-              <img src="/icons/albums/list-view-64x64.png" alt="" />
+              <TaotuIcon name="list-view" />
             </button>
           </div>
 
           <button v-if="isLoggedIn" type="button" class="create-btn" @click="openCreate">
-            <img src="/icons/albums/create-plus-64x64.png" alt="" />
+            <TaotuIcon name="create-plus" />
             <span>创建相册</span>
           </button>
         </div>
@@ -59,12 +59,12 @@
     </section>
 
     <section v-if="loading" class="album-state">
-      <img src="/icons/status/loading-64x64.png" alt="" />
+      <TaotuIcon name="loading" />
       <span>加载中...</span>
     </section>
 
     <section v-else-if="albums.length === 0" class="album-state empty">
-      <img src="/icons/empty/no-albums-256x256.png" alt="" />
+      <TaotuIcon name="no-albums" />
       <span>暂无相册</span>
     </section>
 
@@ -73,7 +73,7 @@
         <div class="album-cover" @click="navigateTo(`/albums/${album.id}`)">
           <img v-if="getCoverUrl(album)" :src="getCoverUrl(album)" :alt="album.name" loading="lazy" />
           <div v-else class="no-cover">
-            <img src="/icons/albums/album-empty-256x256.png" alt="" />
+            <TaotuIcon name="album-empty" />
             <span>无封面</span>
           </div>
         </div>
@@ -96,7 +96,7 @@
             <span class="card-actions">
               <button type="button" class="enter-btn" @click="navigateTo(`/albums/${album.id}`)">进入相册</button>
               <button v-if="isOwner(album)" type="button" class="manage-btn" title="管理相册" @click="openManage(album)">
-                <img src="/icons/albums/manage-64x64.png" alt="" />
+                <TaotuIcon name="manage" />
               </button>
             </span>
           </div>
@@ -108,7 +108,7 @@
       <span>共 {{ total }} 个相册</span>
       <div class="page-controls">
         <button type="button" class="page-arrow" :disabled="page <= 1" @click="loadPage(page - 1)">
-          <img src="/icons/albums/pagination-prev-64x64.png" alt="" />
+          <TaotuIcon name="pagination-prev" />
         </button>
         <button
           v-for="item in paginationItems"
@@ -122,7 +122,7 @@
           {{ item.label }}
         </button>
         <button type="button" class="page-arrow" :disabled="page >= totalPages" @click="loadPage(page + 1)">
-          <img src="/icons/albums/pagination-next-64x64.png" alt="" />
+          <TaotuIcon name="pagination-next" />
         </button>
       </div>
       <span class="pagination-spacer"></span>
@@ -131,7 +131,7 @@
     <div v-if="showCreate" class="album-modal-layer" @click.self="closeCreate">
       <section class="create-modal">
         <button type="button" class="modal-close" @click="closeCreate">
-          <img src="/icons/actions/close-64x64.png" alt="" />
+          <TaotuIcon name="close" />
         </button>
         <h3>创建相册</h3>
 
@@ -166,7 +166,7 @@
 
     <aside v-if="managingAlbum" class="manage-panel">
       <button type="button" class="panel-close" @click="closeManage">
-        <img src="/icons/actions/close-64x64.png" alt="" />
+        <TaotuIcon name="close" />
       </button>
 
       <h3>管理相册</h3>
@@ -174,7 +174,7 @@
       <div class="manage-summary">
         <div class="summary-cover">
           <img v-if="getCoverUrl(managingAlbum)" :src="getCoverUrl(managingAlbum)" :alt="managingAlbum.name" />
-          <img v-else src="/icons/albums/album-empty-256x256.png" alt="" />
+          <TaotuIcon name="album-empty" v-else />
         </div>
         <div class="summary-main">
           <strong>{{ managingAlbum.name }}</strong>
@@ -186,11 +186,11 @@
 
       <div class="manage-quick">
         <button type="button" @click="activeManageTab = 'settings'">
-          <img src="/icons/albums/edit-info-64x64.png" alt="" />
+          <TaotuIcon name="edit-info" />
           编辑名称
         </button>
         <button type="button" class="danger" @click="deleteAlbum">
-          <img src="/icons/actions/trash-64x64.png" alt="" />
+          <TaotuIcon name="trash" />
           删除相册
         </button>
       </div>
@@ -223,7 +223,7 @@
         <div v-else class="manage-empty">相册内暂无图片</div>
 
         <button type="button" class="remove-selected" :disabled="selectedManageIds.length === 0" @click="removeSelectedFromAlbum">
-          <img src="/icons/actions/trash-64x64.png" alt="" />
+          <TaotuIcon name="trash" />
           从相册移除（已选 {{ selectedManageIds.length }} 张）
         </button>
       </template>
@@ -261,7 +261,7 @@
               <strong>公开所有图片</strong>
               <span>公开该相册所有图片</span>
               <small class="setting-warning">
-                <img src="/icons/status/warning-64x64.png" alt="" />
+                <TaotuIcon name="warning" />
                 该操作会覆盖相册已有公开属性，操作前请知悉！
               </small>
             </div>
@@ -337,9 +337,9 @@ const deleteDialog = reactive({
 })
 
 const sourceTabs = computed(() => [
-  { key: 'all', label: '全部相册', count: counts.all, icon: '/icons/albums/album-64x64.png' },
-  { key: 'public', label: '公共相册', count: counts.public, icon: '/icons/albums/public-64x64.png' },
-  { key: 'mine', label: '我的相册', count: counts.mine, icon: '/icons/albums/private-64x64.png' }
+  { key: 'all', label: '全部相册', count: counts.all, icon: 'album' },
+  { key: 'public', label: '公共相册', count: counts.public, icon: 'public' },
+  { key: 'mine', label: '我的相册', count: counts.mine, icon: 'private' }
 ])
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
@@ -744,7 +744,6 @@ const confirmDeleteDialog = async () => {
 .tab-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
 }
 
 .album-tab b {
@@ -771,10 +770,9 @@ const confirmDeleteDialog = async () => {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), 0 8px 24px rgba(86, 76, 110, 0.04);
 }
 
-.album-search img {
+.album-search .taotu-svg-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
   opacity: 0.7;
 }
 
@@ -815,10 +813,9 @@ const confirmDeleteDialog = async () => {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.72);
 }
 
-.view-btn img {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
+.view-btn .taotu-svg-icon {
+  width: 22px;
+  height: 22px;
 }
 
 .create-btn {
@@ -839,10 +836,9 @@ const confirmDeleteDialog = async () => {
   box-shadow: 0 12px 26px rgba(248, 95, 154, 0.24);
 }
 
-.create-btn img {
+.create-btn .taotu-svg-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
 }
 
 .album-wall {
@@ -899,19 +895,24 @@ const confirmDeleteDialog = async () => {
 }
 
 .no-cover {
-  display: grid;
-  place-items: center;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   color: #c3c8d5;
   font-size: 13px;
   border: 1px dashed rgba(201, 207, 223, 0.78);
 }
 
-.no-cover img {
-  width: 54px;
-  height: 54px;
-  object-fit: contain;
+.no-cover .taotu-svg-icon {
+  width: 48px;
+  height: 48px;
   opacity: 0.62;
+}
+
+.no-cover span {
+  line-height: 1.2;
 }
 
 .album-meta {
@@ -1035,10 +1036,9 @@ const confirmDeleteDialog = async () => {
   justify-content: center;
 }
 
-.manage-btn img {
+.manage-btn .taotu-svg-icon {
   width: 18px;
   height: 18px;
-  object-fit: contain;
 }
 
 .album-state {
@@ -1050,10 +1050,9 @@ const confirmDeleteDialog = async () => {
   font-weight: 900;
 }
 
-.album-state img {
+.album-state .taotu-svg-icon {
   width: 96px;
   height: 96px;
-  object-fit: contain;
 }
 
 .album-pagination {
@@ -1095,10 +1094,9 @@ const confirmDeleteDialog = async () => {
   justify-content: center;
 }
 
-.page-arrow img {
+.page-arrow .taotu-svg-icon {
   width: 14px;
   height: 14px;
-  object-fit: contain;
 }
 
 .page-number.active {
@@ -1146,11 +1144,10 @@ const confirmDeleteDialog = async () => {
   right: 24px;
 }
 
-.modal-close img,
-.panel-close img {
+.modal-close .taotu-svg-icon,
+.panel-close .taotu-svg-icon {
   width: 18px;
   height: 18px;
-  object-fit: contain;
 }
 
 .create-modal h3,
@@ -1350,7 +1347,7 @@ const confirmDeleteDialog = async () => {
   font-weight: 900;
 }
 
-.manage-quick button img {
+.manage-quick button .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -1571,10 +1568,9 @@ const confirmDeleteDialog = async () => {
   line-height: 1.4;
 }
 
-.setting-warning img {
+.setting-warning .taotu-svg-icon {
   width: 15px;
   height: 15px;
-  object-fit: contain;
 }
 
 .pink-switch {

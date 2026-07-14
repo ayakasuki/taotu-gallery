@@ -7,7 +7,7 @@
         <p>管理站内公告、草稿与置顶通知，发布后会出现在用户导航通知栏。</p>
       </div>
       <button type="button" class="primary-action" @click="openCreate">
-        <img src="/icons/actions/add-64x64.png" alt="" />新增公告
+        <TaotuIcon name="add" />新增公告
       </button>
     </header>
 
@@ -59,7 +59,7 @@
           <span>{{ formatDate(item.created_at) }}</span>
           <div class="row-actions">
             <button type="button" class="icon-action edit" title="编辑公告" @click="openEdit(item)">
-              <img src="/icons/actions/edit-64x64.png" alt="" />
+              <TaotuIcon name="edit" />
             </button>
             <button
               v-if="item.status === 'draft'"
@@ -70,7 +70,7 @@
               发布
             </button>
             <button type="button" class="icon-action delete" title="删除公告" @click="deleteAnnouncement(item)">
-              <img src="/icons/actions/trash-64x64.png" alt="" />
+              <TaotuIcon name="trash" />
             </button>
           </div>
         </div>
@@ -125,10 +125,10 @@
         <footer class="editor-actions">
           <button type="button" class="ghost-btn" @click="closeEditor">取消</button>
           <button type="button" class="draft-btn" :disabled="saving" @click="saveAnnouncement('draft')">
-            <img src="/icons/actions/save-64x64.png" alt="" />存为草稿
+            <TaotuIcon name="save" />存为草稿
           </button>
           <button type="button" class="publish-btn" :disabled="saving" @click="saveAnnouncement('published')">
-            <img src="/icons/actions/confirm-64x64.png" alt="" />发布
+            <TaotuIcon name="confirm" />发布
           </button>
         </footer>
       </section>
@@ -396,12 +396,11 @@ function formatDate(value) {
   box-shadow: 0 12px 24px rgba(248, 95, 154, 0.22);
 }
 
-.primary-action img,
-.publish-btn img,
-.draft-btn img {
+.primary-action .taotu-svg-icon,
+.publish-btn .taotu-svg-icon,
+.draft-btn .taotu-svg-icon {
   width: 18px;
   height: 18px;
-  object-fit: contain;
 }
 
 .primary-action:hover,
@@ -561,10 +560,9 @@ function formatDate(value) {
   cursor: pointer;
 }
 
-.icon-action img {
+.icon-action .taotu-svg-icon {
   width: 18px;
   height: 18px;
-  object-fit: contain;
 }
 
 .icon-action.delete {

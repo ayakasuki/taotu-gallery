@@ -5,7 +5,7 @@
         <div class="panel-title">
           <h1>API 参数配置</h1>
           <span class="help-tip" tabindex="0">
-            <img src="/icons/status/warning-64x64.png" alt="" />
+            <TaotuIcon name="warning" />
             <span class="help-popover">未注册用户无需 Token 即可访问公共图库。生成 Token 后可通过 Authorization Header 或 URL 参数 ?tk= 认证访问私有内容。</span>
           </span>
         </div>
@@ -22,10 +22,10 @@
                 @input="tokenDropdownOpen = true; debouncedRefresh()"
               />
               <button type="button" class="token-dropdown-btn" title="选择 Token" @click="toggleTokenDropdown">
-                <img src="/icons/nav/chevron-down-64x64.png" alt="" />
+                <TaotuIcon name="chevron-down" />
               </button>
               <button type="button" title="显示 Token" @click="showToken = !showToken">
-                <img :src="showToken ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+                <TaotuIcon :name="showToken ? 'eye-off' : 'eye'" />
               </button>
             </div>
             <div v-if="tokenDropdownOpen" class="token-menu">
@@ -34,10 +34,15 @@
                 :key="token.id"
                 type="button"
                 class="token-option"
+                :class="{ selected: apiToken === token.token }"
+                :title="`${token.label || `Token #${token.id}`}\n${maskToken(token.token)}`"
                 @click="selectToken(token)"
               >
-                <strong>{{ token.label || `Token #${token.id}` }}</strong>
-                <span>{{ maskToken(token.token) }}</span>
+                <span class="token-option-copy">
+                  <strong>{{ token.label || `Token #${token.id}` }}</strong>
+                  <span>{{ maskToken(token.token) }}</span>
+                </span>
+                <TaotuIcon v-if="apiToken === token.token" name="success" />
               </button>
               <div v-if="tokenOptions.length === 0" class="token-empty">当前账号暂无 API Token</div>
               <div v-else-if="filteredTokenOptions.length === 0" class="token-empty">没有匹配的 Token</div>
@@ -57,7 +62,7 @@
               :class="{ active: selectedEndpoint === ep.key }"
               @click="selectedEndpoint = ep.key; onEndpointChange()"
             >
-              <img :src="ep.icon" alt="" />
+              <TaotuIcon :name="ep.icon" />
               <span>{{ ep.label }}</span>
             </button>
           </div>
@@ -115,7 +120,7 @@
         </label>
 
         <div v-if="previewError" class="error-banner">
-          <img src="/icons/api/config-warning-64x64.png" alt="" />
+          <TaotuIcon name="config-warning" />
           <span>{{ previewError }}</span>
           <button type="button" @click="previewError = ''">×</button>
         </div>
@@ -123,7 +128,7 @@
         <div class="sidebar-actions">
           <button class="reset-btn" type="button" @click="resetConfig">重置</button>
           <button class="send-btn" type="button" @click="fetchPreview(true)">
-            <img src="/icons/api/send-request-64x64.png" alt="" />
+            <TaotuIcon name="send-request" />
             发送请求
           </button>
         </div>
@@ -133,7 +138,7 @@
         <header class="result-heading">
           <h2>请求与结果</h2>
           <span class="status-pill" :class="{ loading: previewLoading, error: !!previewError }">
-            <img :src="previewLoading ? '/icons/status/loading-64x64.png' : (previewError ? '/icons/status/failure-64x64.png' : '/icons/status/success-64x64.png')" alt="" />
+            <TaotuIcon :name="previewLoading ? 'loading' : (previewError ? 'failure' : 'success')" />
             {{ previewLoading ? '请求中' : (previewError ? '请求异常' : '请求成功') }}
           </span>
         </header>
@@ -143,7 +148,7 @@
           <div class="url-box">
             <input :value="generatedUrl" readonly />
             <button class="copy-pink" @click="copyText(generatedUrl)">
-              <img src="/icons/api/copy-url-64x64.png" alt="" />
+              <TaotuIcon name="copy-url" />
               复制 URL
             </button>
           </div>
@@ -156,7 +161,7 @@
               <div class="code-block">
                 <pre><code v-html="curlExample"></code></pre>
                 <button class="copy-btn-corner" @click="copyText(curlExamplePlain)">
-                  <img src="/icons/actions/copy-64x64.png" alt="" />
+                  <TaotuIcon name="copy" />
                   复制 cURL
                 </button>
               </div>
@@ -174,7 +179,7 @@
             <header class="preview-head">
               <h3>实时预览</h3>
               <button class="copy-outline" @click="copyText(previewCopyText)">
-                <img src="/icons/actions/copy-64x64.png" alt="" />
+                <TaotuIcon name="copy" />
                 复制结果
               </button>
             </header>
@@ -187,7 +192,7 @@
 
             <div v-if="previewLoading" class="preview-loading">正在请求 API...</div>
             <div v-else-if="previewNoImage" class="preview-empty">
-              <img src="/icons/empty/search-empty-256x256.png" alt="" />
+              <TaotuIcon name="search-empty" />
               <span>暂无符合条件的图片</span>
             </div>
             <div v-else-if="previewMode === 'images' && previewImages.length > 0" class="preview-grid">
@@ -206,12 +211,12 @@
               <pre><code>{{ previewText || previewJsonText }}</code></pre>
             </div>
             <div v-else class="preview-empty">
-              <img src="/icons/empty/no-data-256x256.png" alt="" />
+              <TaotuIcon name="no-data" />
               <span>点击发送请求获取预览</span>
             </div>
 
             <button v-if="previewImages.length > visiblePreviewLimit" class="load-more-preview" type="button" @click="visiblePreviewLimit += 9">
-              <img src="/icons/actions/refresh-64x64.png" alt="" />
+              <TaotuIcon name="refresh" />
               加载更多（还有 {{ previewImages.length - visiblePreviewLimit }} 张）
             </button>
           </article>
@@ -255,13 +260,13 @@ const visiblePreviewLimit = ref(9)
 const requestSeq = ref(0)
 
 const endpoints = [
-  { key: 'images', label: '图片列表', icon: '/icons/api/image-list-64x64.png', showTags: true, showAlbum: true, showCount: true },
-  { key: 'images-random', label: '随机图片', icon: '/icons/api/random-image-64x64.png', showTags: true, showAlbum: true, showCount: true },
-  { key: 'albums', label: '相册列表', icon: '/icons/api/album-list-64x64.png', showTags: false, showAlbum: false, showCount: true },
-  { key: 'albums-random', label: '随机相册', icon: '/icons/api/random-album-64x64.png', showTags: false, showAlbum: false, showCount: true },
-  { key: 'embed-image', label: '图片嵌入', icon: '/icons/api/embed-image-64x64.png', showTags: true, showAlbum: false, showCount: false },
-  { key: 'embed-album', label: '相册嵌入', icon: '/icons/api/embed-album-64x64.png', showTags: false, showAlbum: false, showCount: false },
-  { key: 'tags', label: '标签列表', icon: '/icons/api/tag-list-64x64.png', showTags: false, showAlbum: false, showCount: false }
+  { key: 'images', label: '图片列表', icon: 'image-list', showTags: true, showAlbum: true, showCount: true },
+  { key: 'images-random', label: '随机图片', icon: 'random-image', showTags: true, showAlbum: true, showCount: true },
+  { key: 'albums', label: '相册列表', icon: 'album-list', showTags: false, showAlbum: false, showCount: true },
+  { key: 'albums-random', label: '随机相册', icon: 'random-album', showTags: false, showAlbum: false, showCount: true },
+  { key: 'embed-image', label: '图片嵌入', icon: 'embed-image', showTags: true, showAlbum: false, showCount: false },
+  { key: 'embed-album', label: '相册嵌入', icon: 'embed-album', showTags: false, showAlbum: false, showCount: false },
+  { key: 'tags', label: '标签列表', icon: 'tag-list', showTags: false, showAlbum: false, showCount: false }
 ]
 
 const currentEp = computed(() => endpoints.find(e => e.key === selectedEndpoint.value) || endpoints[0])
@@ -622,7 +627,7 @@ onBeforeUnmount(() => {
   cursor: help;
 }
 
-.help-tip img {
+.help-tip .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -729,16 +734,16 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.token-input img {
+.token-input .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
 
-.token-dropdown-btn img {
+.token-dropdown-btn .taotu-svg-icon {
   transition: transform 0.16s ease;
 }
 
-.token-picker.open .token-dropdown-btn img {
+.token-picker.open .token-dropdown-btn .taotu-svg-icon {
   transform: rotate(180deg);
 }
 
@@ -748,47 +753,101 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   z-index: 25;
-  max-height: 238px;
+  max-height: 221px;
   overflow-y: auto;
-  padding: 6px;
-  border: 1px solid rgba(220, 225, 238, 0.88);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.96);
+  padding: 7px;
+  border: 1px solid rgba(202, 204, 210, 0.88);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 16px 38px rgba(84, 74, 112, 0.16);
   backdrop-filter: blur(18px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(248, 95, 154, 0.5) rgba(255, 240, 246, 0.7);
+}
+
+.token-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.token-menu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(248, 95, 154, 0.5);
+}
+
+.token-menu::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 240, 246, 0.72);
 }
 
 .token-option {
   width: 100%;
   min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 4px;
-  border: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 15px;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+  border: 2px solid rgba(226, 226, 226, 0.9);
   border-radius: 8px;
-  background: transparent;
-  color: #4b566e;
+  background: rgba(246, 246, 246, 0.76);
+  color: rgba(122, 127, 140, 0.56);
   cursor: pointer;
-  padding: 7px 10px;
+  padding: 6px 9px;
   text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: border-color var(--taotu-transition), background var(--taotu-transition), color var(--taotu-transition), transform var(--taotu-transition), box-shadow var(--taotu-transition);
+}
+
+.token-option:last-child {
+  margin-bottom: 0;
 }
 
 .token-option:hover {
-  background: rgba(255, 235, 244, 0.72);
+  border-color: rgba(248, 95, 154, 0.82);
+  background: rgba(255, 247, 251, 0.94);
+  color: var(--taotu-pink);
+  transform: translateY(-0.5px);
+  box-shadow: 0 6px 14px rgba(248, 95, 154, 0.08);
+}
+
+.token-option.selected {
+  border-color: rgba(248, 95, 154, 0.95);
+  background: rgba(255, 246, 250, 0.98);
+  color: #f05b96;
+}
+
+.token-option-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
 }
 
 .token-option strong {
-  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 15px;
   font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.token-option span,
+.token-option-copy span,
 .token-empty {
-  color: #9aa3b8;
-  font-size: 12px;
-  font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, currentColor 48%, #c8c8c8);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-option > .taotu-svg-icon {
+  width: 15px;
+  height: 15px;
+  color: #f05b96;
 }
 
 .token-empty {
@@ -824,9 +883,9 @@ onBeforeUnmount(() => {
   color: #f15c96;
 }
 
-.endpoint-btn img {
-  width: 15px;
-  height: 15px;
+.endpoint-btn .taotu-svg-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .section-head {
@@ -933,7 +992,7 @@ onBeforeUnmount(() => {
   font-weight: 900;
 }
 
-.error-banner img {
+.error-banner .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -982,11 +1041,11 @@ onBeforeUnmount(() => {
   color: #fff;
 }
 
-.send-btn img,
+.send-btn .taotu-svg-icon,
 .copy-pink img,
 .copy-outline img,
-.copy-btn-corner img,
-.load-more-preview img {
+.copy-btn-corner .taotu-svg-icon,
+.load-more-preview .taotu-svg-icon {
   width: 15px;
   height: 15px;
 }
@@ -1024,7 +1083,7 @@ onBeforeUnmount(() => {
   color: #f15c72;
 }
 
-.status-pill img {
+.status-pill .taotu-svg-icon {
   width: 15px;
   height: 15px;
 }
@@ -1248,7 +1307,6 @@ onBeforeUnmount(() => {
 }
 
 .single-preview img {
-  object-fit: contain;
 }
 
 .preview-data {
@@ -1275,10 +1333,9 @@ onBeforeUnmount(() => {
   font-weight: 900;
 }
 
-.preview-empty img {
+.preview-empty .taotu-svg-icon {
   width: 96px;
   height: 96px;
-  object-fit: contain;
 }
 
 .load-more-preview {

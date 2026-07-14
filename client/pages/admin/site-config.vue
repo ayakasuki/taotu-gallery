@@ -7,13 +7,13 @@
       </div>
       <div class="global-actions">
         <button type="button" class="ghost-action" :disabled="loading" @click="reloadSiteConfig">
-          <img src="/icons/actions/refresh-64x64.png" alt="" />重置
+          <TaotuIcon name="refresh" />重置
         </button>
         <button type="button" class="ghost-action" :disabled="saving" @click="saveSiteConfig('全部配置已保存')">
           保存全部
         </button>
         <button type="button" class="primary-action" :disabled="saving || changingPassword" @click="saveAllChanges">
-          <img src="/icons/actions/confirm-64x64.png" alt="" />保存所有更改
+          <TaotuIcon name="confirm" />保存所有更改
         </button>
       </div>
     </header>
@@ -23,7 +23,7 @@
         <div class="card-heading">
           <h2>品牌与显示</h2>
           <span class="saved-badge" :class="{ dirty: isCardDirty('brand') }">
-            <img :src="cardBadgeIcon('brand')" alt="" />{{ cardBadgeText('brand') }}
+            <TaotuIcon :name="cardBadgeIcon('brand')" />{{ cardBadgeText('brand') }}
           </span>
         </div>
 
@@ -42,7 +42,7 @@
               </div>
               <div class="upload-copy">
                 <button type="button" class="outline-action compact" :disabled="uploadingIcon" @click="iconInput?.click()">
-                  <img src="/icons/actions/edit-64x64.png" alt="" />{{ uploadingIcon ? '上传中...' : '更换图标' }}
+                  <TaotuIcon name="edit" />{{ uploadingIcon ? '上传中...' : '更换图标' }}
                 </button>
                 <p>建议尺寸 64x64px，支持 PNG / ICO</p>
                 <b v-if="form.icon">已上传</b>
@@ -66,7 +66,7 @@
             </div>
             <div class="upload-copy">
               <button type="button" class="outline-action compact" :disabled="uploadingBg" @click="bgInput?.click()">
-                <img src="/icons/actions/edit-64x64.png" alt="" />{{ uploadingBg ? '上传中...' : '更换背景图' }}
+                <TaotuIcon name="edit" />{{ uploadingBg ? '上传中...' : '更换背景图' }}
               </button>
               <p>建议尺寸 1920x1080px 或更高</p>
               <b v-if="form.bgUrl">已上传</b>
@@ -132,7 +132,7 @@
 
         <div class="card-footer">
           <button type="button" class="primary-action" :disabled="saving" @click="saveSiteConfig('外观配置已保存')">
-            <img src="/icons/actions/edit-64x64.png" alt="" />保存外观
+            <TaotuIcon name="edit" />保存外观
           </button>
         </div>
       </article>
@@ -141,7 +141,7 @@
         <div class="card-heading">
           <h2>访问与注册</h2>
           <span class="saved-badge" :class="{ dirty: isCardDirty('access') }">
-            <img :src="cardBadgeIcon('access')" alt="" />{{ cardBadgeText('access') }}
+            <TaotuIcon :name="cardBadgeIcon('access')" />{{ cardBadgeText('access') }}
           </span>
         </div>
 
@@ -189,7 +189,7 @@
 
         <div class="card-footer">
           <button type="button" class="primary-action" :disabled="saving" @click="saveSiteConfig('访问与注册已保存')">
-            <img src="/icons/actions/refresh-64x64.png" alt="" />保存访问与注册
+            <TaotuIcon name="refresh" />保存访问与注册
           </button>
         </div>
       </article>
@@ -198,7 +198,7 @@
         <div class="card-heading">
           <h2>管理员账号与密码</h2>
           <span class="saved-badge" :class="{ dirty: isCardDirty('password') }">
-            <img :src="cardBadgeIcon('password')" alt="" />{{ cardBadgeText('password') }}
+            <TaotuIcon :name="cardBadgeIcon('password')" />{{ cardBadgeText('password') }}
           </span>
         </div>
 
@@ -207,7 +207,7 @@
           <div class="password-input">
             <input v-model="form.oldPassword" :type="showPassword.old ? 'text' : 'password'" class="soft-input" placeholder="请输入旧密码" autocomplete="current-password" />
             <button type="button" @click="showPassword.old = !showPassword.old">
-              <img :src="showPassword.old ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+              <TaotuIcon :name="showPassword.old ? 'eye-off' : 'eye'" />
             </button>
           </div>
         </label>
@@ -217,7 +217,7 @@
           <div class="password-input">
             <input v-model="form.newPassword" :type="showPassword.new ? 'text' : 'password'" class="soft-input" placeholder="请输入新密码" autocomplete="new-password" />
             <button type="button" @click="showPassword.new = !showPassword.new">
-              <img :src="showPassword.new ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+              <TaotuIcon :name="showPassword.new ? 'eye-off' : 'eye'" />
             </button>
           </div>
         </label>
@@ -227,7 +227,7 @@
           <div class="password-input">
             <input v-model="form.confirmPassword" :type="showPassword.confirm ? 'text' : 'password'" class="soft-input" placeholder="请再次输入新密码" autocomplete="new-password" />
             <button type="button" @click="showPassword.confirm = !showPassword.confirm">
-              <img :src="showPassword.confirm ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+              <TaotuIcon :name="showPassword.confirm ? 'eye-off' : 'eye'" />
             </button>
           </div>
           <small>密码长度至少 8 位，建议包含大小写字母、数字和符号</small>
@@ -235,7 +235,7 @@
 
         <div class="card-footer">
           <button type="button" class="primary-action" :disabled="changingPassword" @click="changePassword">
-            <img src="/icons/actions/edit-64x64.png" alt="" />{{ changingPassword ? '保存中...' : '保存密码' }}
+            <TaotuIcon name="edit" />{{ changingPassword ? '保存中...' : '保存密码' }}
           </button>
         </div>
       </article>
@@ -244,7 +244,7 @@
         <div class="card-heading">
           <h2>邮件服务（SMTP）</h2>
           <span class="saved-badge" :class="{ dirty: isCardDirty('smtp') }">
-            <img :src="cardBadgeIcon('smtp')" alt="" />{{ cardBadgeText('smtp') }}
+            <TaotuIcon :name="cardBadgeIcon('smtp')" />{{ cardBadgeText('smtp') }}
           </span>
         </div>
 
@@ -259,11 +259,7 @@
           </label>
           <label class="field-block">
             <span>SSL / TLS</span>
-            <select v-model="form.smtpSecurity" class="soft-input soft-select">
-              <option value="STARTTLS">STARTTLS</option>
-              <option value="SSL/TLS">SSL/TLS</option>
-              <option value="NONE">不加密</option>
-            </select>
+            <TaotuSelect v-model="form.smtpSecurity" class="soft-input soft-select" :options="smtpSecurityOptions" />
           </label>
         </div>
 
@@ -277,7 +273,7 @@
             <div class="password-input">
               <input v-model="form.smtpPassword" :type="showPassword.smtp ? 'text' : 'password'" class="soft-input" placeholder="请输入授权码" autocomplete="new-password" />
               <button type="button" @click="showPassword.smtp = !showPassword.smtp">
-                <img :src="showPassword.smtp ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+                <TaotuIcon :name="showPassword.smtp ? 'eye-off' : 'eye'" />
               </button>
             </div>
           </label>
@@ -295,10 +291,10 @@
 
         <div class="split-footer">
           <button type="button" class="outline-action mail-test" :disabled="testingSmtp" @click="testSmtp">
-            <img src="/icons/upload/url-upload-64x64.png" alt="" />{{ testingSmtp ? '发送中...' : '发送测试' }}
+            <TaotuIcon name="url-upload" />{{ testingSmtp ? '发送中...' : '发送测试' }}
           </button>
           <button type="button" class="primary-action" :disabled="saving" @click="saveSiteConfig('邮件配置已保存')">
-            <img src="/icons/actions/edit-64x64.png" alt="" />保存邮件配置
+            <TaotuIcon name="edit" />保存邮件配置
           </button>
         </div>
       </article>
@@ -307,7 +303,7 @@
         <div class="card-heading">
           <h2>上传与图片处理</h2>
           <span class="saved-badge" :class="{ dirty: isCardDirty('image') }">
-            <img :src="cardBadgeIcon('image')" alt="" />{{ cardBadgeText('image') }}
+            <TaotuIcon :name="cardBadgeIcon('image')" />{{ cardBadgeText('image') }}
           </span>
         </div>
 
@@ -352,7 +348,7 @@
 
         <div class="card-footer">
           <button type="button" class="primary-action" :disabled="saving" @click="saveSiteConfig('图片配置已保存')">
-            <img src="/icons/actions/edit-64x64.png" alt="" />保存图片配置
+            <TaotuIcon name="edit" />保存图片配置
           </button>
         </div>
       </article>
@@ -361,7 +357,7 @@
         <div class="card-heading">
           <h2>安全与部署</h2>
           <span class="saved-badge" :class="{ dirty: isCardDirty('security') }">
-            <img :src="cardBadgeIcon('security')" alt="" />{{ cardBadgeText('security') }}
+            <TaotuIcon :name="cardBadgeIcon('security')" />{{ cardBadgeText('security') }}
           </span>
         </div>
 
@@ -391,7 +387,7 @@
 
         <div class="card-footer">
           <button type="button" class="primary-action" :disabled="saving" @click="saveSiteConfig('安全配置已保存')">
-            <img src="/icons/actions/edit-64x64.png" alt="" />保存安全配置
+            <TaotuIcon name="edit" />保存安全配置
           </button>
         </div>
       </article>
@@ -414,6 +410,11 @@ const formatOptions = [
   { key: 'png', label: 'PNG' },
   { key: 'webp', label: 'WebP' },
   { key: 'gif', label: 'GIF' }
+]
+const smtpSecurityOptions = [
+  { label: 'STARTTLS', value: 'STARTTLS', description: '推荐，常用于 587 端口' },
+  { label: 'SSL/TLS', value: 'SSL/TLS', description: '常用于 465 端口' },
+  { label: '不加密', value: 'NONE', description: '仅在可信内网或测试环境使用' }
 ]
 
 const form = reactive({
@@ -521,7 +522,7 @@ function cardBadgeText(cardKey) {
 }
 
 function cardBadgeIcon(cardKey) {
-  return isCardDirty(cardKey) ? '/icons/status/warning-64x64.png' : '/icons/admin/status-ok-placeholder.svg'
+  return isCardDirty(cardKey) ? 'warning' : 'status-ok-placeholder'
 }
 
 markAllCardsSaved()
@@ -606,8 +607,7 @@ function buildSiteConfigPayload() {
     },
     background: buildBackgroundConfig(),
     mediumSize: {
-      width: Math.max(1, Number(form.mediumWidth || 1920)),
-      height: Math.max(1, Number(form.mediumHeight || 1080))
+      width: Math.max(1, Number(form.mediumWidth || 1920)), height: Math.max(1, Number(form.mediumHeight || 1080))
     },
     defaultQuota: {
       storageLimit: Math.max(0, Number(form.defaultStorageLimit || 0)) * 1024 * 1024,
@@ -645,8 +645,7 @@ function buildPublicSiteConfigCache(overrides = {}) {
     icon: form.icon || null,
     logo: null,
     mediumSize: {
-      width: Math.max(1, Number(form.mediumWidth || 1920)),
-      height: Math.max(1, Number(form.mediumHeight || 1080))
+      width: Math.max(1, Number(form.mediumWidth || 1920)), height: Math.max(1, Number(form.mediumHeight || 1080))
     },
     ...overrides
   }
@@ -965,12 +964,11 @@ onMounted(() => {
   cursor: default;
 }
 
-.ghost-action img,
-.primary-action img,
-.outline-action img {
+.ghost-action .taotu-svg-icon,
+.primary-action .taotu-svg-icon,
+.outline-action .taotu-svg-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
 }
 
 .outline-action.compact {
@@ -1032,7 +1030,7 @@ onMounted(() => {
   color: #c98a27;
 }
 
-.saved-badge img {
+.saved-badge .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -1083,10 +1081,12 @@ onMounted(() => {
 .soft-select {
   appearance: none;
   padding-right: 34px;
-  background-image: url('/icons/nav/chevron-down-64x64.png');
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
   background-repeat: no-repeat;
-  background-position: right 11px center;
-  background-size: 13px 13px;
+  background-position: calc(100% - 17px) 50%, calc(100% - 11px) 50%;
+  background-size: 6px 6px, 6px 6px;
 }
 
 .brand-top-row {
@@ -1131,7 +1131,7 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   padding: 5px;
-  object-fit: contain;
+
 }
 
 .upload-copy {
@@ -1417,7 +1417,7 @@ onMounted(() => {
   cursor: pointer;
 }
 
-.password-input img {
+.password-input .taotu-svg-icon {
   width: 18px;
   height: 18px;
   opacity: 0.64;

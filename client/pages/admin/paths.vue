@@ -7,7 +7,7 @@
           <p>管理图库数据源路径，支持本地目录和外部存储路径</p>
         </div>
         <div v-if="scanToast.show" class="scan-toast" :class="{ error: scanToast.error, warning: scanToast.warning }">
-          <img :src="scanToast.error ? '/icons/admin/status-error-placeholder.svg' : (scanToast.warning ? '/icons/status/warning-64x64.png' : '/icons/admin/status-ok-placeholder.svg')" alt="" />
+          <TaotuIcon :name="scanToast.error ? 'status-error-placeholder' : (scanToast.warning ? 'warning' : 'status-ok-placeholder')" />
           <div>
             <strong>{{ scanToast.title }}</strong>
             <span>{{ scanToast.message }}</span>
@@ -18,13 +18,13 @@
 
       <div class="path-toolbar">
         <button type="button" class="primary-action" @click="showAdd = true">
-          <img src="/icons/actions/add-64x64.png" alt="" />添加路径
+          <TaotuIcon name="add" />添加路径
         </button>
         <button type="button" class="plain-action" @click="savePaths">
-          <img src="/icons/actions/save-64x64.png" alt="" />保存配置
+          <TaotuIcon name="save" />保存配置
         </button>
         <button type="button" class="scan-action" :disabled="scanning" @click="scanAll">
-          <img src="/icons/actions/refresh-64x64.png" alt="" />{{ scanning ? '扫描中...' : '扫描所有路径' }}
+          <TaotuIcon name="refresh" />{{ scanning ? '扫描中...' : '扫描所有路径' }}
         </button>
       </div>
 
@@ -66,10 +66,10 @@
             <span><i class="status-pill" :class="pathItem.status === 'warning' ? 'warn' : 'ok'">{{ pathItem.statusText || (pathItem.status === 'warning' ? '警告' : '正常') }}</i></span>
             <span class="row-actions">
               <button type="button" class="scan-row-btn" :disabled="scanning" @click="scanPath(pathItem)">
-                <img src="/icons/actions/scan-64x64.png" alt="" />扫描
+                <TaotuIcon name="scan" />扫描
               </button>
               <button type="button" class="delete-row-btn" @click="removePath(index)">
-                <img src="/icons/actions/trash-64x64.png" alt="" />删除
+                <TaotuIcon name="trash" />删除
               </button>
             </span>
           </div>
@@ -81,7 +81,7 @@
 
       <section v-if="showAdd" class="add-path-panel">
         <div class="add-title-row">
-          <h2><img src="/icons/actions/add-64x64.png" alt="" />添加路径</h2>
+          <h2><TaotuIcon name="add" />添加路径</h2>
           <button type="button" @click="showAdd = false">×</button>
         </div>
 
@@ -110,10 +110,7 @@
               <label><input v-model="newPath.albumMode" type="radio" value="new" />新建相册</label>
             </div>
 
-            <select v-if="newPath.albumMode === 'existing'" v-model="newPath.albumId" class="soft-select">
-              <option :value="null">请选择已有相册</option>
-              <option v-for="album in albums" :key="album.id" :value="album.id">{{ album.name }}</option>
-            </select>
+            <TaotuSelect v-if="newPath.albumMode === 'existing'" v-model="newPath.albumId" class="soft-select" :options="albumSelectOptions" />
             <input v-if="newPath.albumMode === 'new'" v-model="newPath.albumName" class="soft-input" placeholder="请输入新相册名称" />
 
             <div class="switch-row">
@@ -142,10 +139,7 @@
           <div class="add-inner-card tags-card">
             <label class="field-line">
               <span>标签分组</span>
-              <select v-model="selectedGroupId">
-                <option value="">请选择标签分组</option>
-                <option v-for="group in tagGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
-              </select>
+              <TaotuSelect v-model="selectedGroupId" :options="tagGroupSelectOptions" />
             </label>
 
             <div class="existing-tag-picker">
@@ -191,7 +185,7 @@
 
     <aside class="config-side">
       <section class="side-card database-card">
-        <h2><img src="/icons/admin/database-64x64.png" alt="" />数据库状态（只读）</h2>
+        <h2><TaotuIcon name="database" />数据库状态（只读）</h2>
         <div class="db-info-panel">
           <div><span>数据库类型</span><b>{{ dbStatus.type || '-' }}</b></div>
           <div><span>版本</span><b>{{ compactVersion(dbStatus.version) }}</b></div>
@@ -204,20 +198,20 @@
       </section>
 
       <section class="side-card display-card">
-        <h2><img src="/icons/admin/gallery-settings-64x64.png" alt="" />图库默认展示模式</h2>
+        <h2><TaotuIcon name="gallery-settings" />图库默认展示模式</h2>
         <p>设置图库页面的默认展示样式</p>
         <div class="display-choice-row">
           <button type="button" :class="{ active: displayMode === 'grid' }" @click="setDisplayMode('grid')">
-            <img src="/icons/gallery/grid-64x64.png" alt="" /><span>网格</span>
+            <TaotuIcon name="grid" /><span>网格</span>
           </button>
           <button type="button" :class="{ active: displayMode === 'waterfall' }" @click="setDisplayMode('waterfall')">
-            <img src="/icons/gallery/waterfall-64x64.png" alt="" /><span>瀑布流</span>
+            <TaotuIcon name="waterfall" /><span>瀑布流</span>
           </button>
         </div>
       </section>
 
       <section class="side-card token-card">
-        <h2><img src="/icons/admin/api-settings-64x64.png" alt="" />API Token 管理</h2>
+        <h2><TaotuIcon name="api-settings" />API Token 管理</h2>
         <p>用于第三方应用访问你的图库数据</p>
         <div v-if="pagedTokens.length" class="token-list-mini">
         <div v-for="token in pagedTokens" :key="token.id" class="token-mini-card">
@@ -227,10 +221,10 @@
             <code>{{ tokenVisible[token.id] ? token.token : maskToken(token.token) }}</code>
           </div>
           <button type="button" @click="toggleToken(token.id)">
-            <img :src="tokenVisible[token.id] ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+            <TaotuIcon :name="tokenVisible[token.id] ? 'eye-off' : 'eye'" />
           </button>
           <button type="button" @click="toggleTokenMenu(token.id)">
-            <img src="/icons/admin/paths/more-actions-placeholder.svg" alt="更多" />
+            <TaotuIcon name="more-actions-placeholder" />
           </button>
           <div v-if="tokenMenuOpen === token.id" class="token-action-menu">
             <button type="button" @click="copyToken(token.token)">复制 Token</button>
@@ -343,6 +337,14 @@ const tokenPaginationItems = computed(() => {
 })
 
 const tagGroups = computed(() => buildPathTagGroups(rawTagGroups.value))
+const albumSelectOptions = computed(() => [
+  { label: '请选择已有相册', value: null },
+  ...albums.value.map(album => ({ label: album.name, value: album.id, description: `${album.image_count || album.imageCount || 0} 张图片` }))
+])
+const tagGroupSelectOptions = computed(() => [
+  { label: '请选择标签分组', value: '' },
+  ...tagGroups.value.map(group => ({ label: group.name, value: group.id, description: `包含 ${getGroupAllTagIds(group).length} 个标签` }))
+])
 
 const selectableGroupTags = computed(() => {
   const group = tagGroups.value.find(item => String(item.id) === String(selectedGroupId.value))
@@ -761,13 +763,13 @@ function maskToken(value) {
 .scan-toast { width: 300px; min-height: 58px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(73, 198, 151, 0.28); border-left: 3px solid #42c391; border-radius: 9px; background: rgba(247, 255, 251, 0.88); box-shadow: 0 16px 34px rgba(70, 140, 120, 0.1); }
 .scan-toast.error { border-color: rgba(236, 95, 120, 0.28); border-left-color: #ec6b86; background: rgba(255, 246, 249, 0.9); }
 .scan-toast.warning { border-color: rgba(232, 172, 75, 0.3); border-left-color: #e3a13f; background: rgba(255, 251, 240, 0.92); }
-.scan-toast img { width: 18px; height: 18px; } .scan-toast strong { display: block; color: #2fba86; font-size: 13px; font-weight: 900; } .scan-toast.error strong { color: #df6680; }
+.scan-toast .taotu-svg-icon { width: 18px; height: 18px; } .scan-toast strong { display: block; color: #2fba86; font-size: 13px; font-weight: 900; } .scan-toast.error strong { color: #df6680; }
 .scan-toast.warning strong { color: #c88727; }
 .scan-toast span { color: #8b96aa; font-size: 12px; font-weight: 800; } .scan-toast button { border: none; background: transparent; color: #98a3b7; font-size: 18px; cursor: pointer; }
 .path-toolbar { display: flex; gap: 12px; margin: 12px 0 20px; }
 .path-toolbar button, .row-actions button, .add-footer button, .generate-token-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; padding: 0 14px; border-radius: 7px; font-size: 13px; font-weight: 900; white-space: nowrap; cursor: pointer; transition: transform 0.16s ease; }
 .path-toolbar button:active, .row-actions button:active, .add-footer button:active, .generate-token-btn:active { transform: scale(0.985); }
-.path-toolbar img, .row-actions img { width: 15px; height: 15px; object-fit: contain; }
+.path-toolbar .taotu-svg-icon, .row-actions .taotu-svg-icon { width: 15px; height: 15px }
 .primary-action, .confirm-add { border: none; background: linear-gradient(90deg, #f45f93, #ff78a9); color: white; box-shadow: 0 10px 22px rgba(244, 95, 147, 0.2); }
 .plain-action, .cancel-add { border: 1px solid rgba(218, 224, 238, 0.92); background: rgba(255,255,255,0.72); color: #66728a; }
 .scan-action { border: 1px solid rgba(153, 123, 244, 0.36); background: rgba(248, 244, 255, 0.82); color: #8d72e8; }
@@ -790,7 +792,7 @@ function maskToken(value) {
 .tag-summary i { background: #f2f4f8; color: #8b96aa; } .tag-summary em, .tag-summary b { color: #9aa4b7; font-style: normal; font-weight: 900; }
 .row-actions { display: flex; justify-content: flex-end; gap: 7px; min-width: 108px; }
 .row-actions button { flex: 0 0 52px; width: 52px; min-height: 26px; padding: 0 5px; gap: 4px; border-radius: 6px; font-size: 12px; line-height: 1; }
-.row-actions img { width: 13px; height: 13px; }
+.row-actions .taotu-svg-icon { width: 13px; height: 13px; }
 .scan-row-btn { border: 1px solid rgba(153, 123, 244, 0.28); background: rgba(247, 243, 255, 0.82); color: #8c72e8; }
 .delete-row-btn { border: 1px solid rgba(255, 111, 157, 0.26); background: rgba(255, 241, 246, 0.86); color: #ff6f9d; }
 .default-action { justify-self: center; color: #8792a8; font-size: 17px; }
@@ -798,7 +800,7 @@ function maskToken(value) {
 .path-hint { margin: 13px 0 0; color: #9aa4b7; font-size: 12px; font-weight: 800; }
 .add-path-panel { margin: 16px -8px -8px; padding: 16px; border: 1px solid rgba(255, 111, 157, 0.34); border-radius: 14px; background: linear-gradient(135deg, rgba(255, 246, 250, 0.9), rgba(255,255,255,0.72)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); }
 .add-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.add-title-row h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: #3c4962; font-size: 16px; font-weight: 900; } .add-title-row img { width: 18px; height: 18px; } .add-title-row button { border: none; background: transparent; color: #7f899d; font-size: 22px; cursor: pointer; }
+.add-title-row h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: #3c4962; font-size: 16px; font-weight: 900; } .add-title-row .taotu-svg-icon { width: 18px; height: 18px; } .add-title-row button { border: none; background: transparent; color: #7f899d; font-size: 22px; cursor: pointer; }
 .add-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; }
 .add-inner-card { min-height: 174px; padding: 13px; border-radius: 9px; }
 .field-line { display: grid; gap: 6px; margin-bottom: 12px; color: #5f6c84; font-size: 12px; font-weight: 900; }
@@ -822,16 +824,16 @@ function maskToken(value) {
 .config-side { display: grid; gap: 16px; }
 .side-card { padding: 16px; border-radius: 13px; }
 .side-card h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; color: #3f4c64; font-size: 15px; font-weight: 900; }
-.side-card h2 img { width: 20px; height: 20px; object-fit: contain; }
+.side-card h2 .taotu-svg-icon { width: 20px; height: 20px }
 .side-card > p { margin: -3px 0 14px; color: #8f9aaf; font-size: 12px; font-weight: 800; }
 .db-info-panel { padding: 12px; border: 1px solid rgba(226, 230, 241, 0.74); border-radius: 9px; background: rgba(255,255,255,0.52); }
 .db-info-panel div { display: flex; justify-content: space-between; gap: 12px; min-height: 28px; color: #8792a7; font-size: 12px; font-weight: 900; }
 .db-info-panel b { color: #5c6880; font-weight: 900; text-align: right; }
 .db-info-panel p { margin: 8px 0 0; padding-top: 12px; border-top: 1px solid rgba(226, 230, 241, 0.8); color: #9aa4b7; font-size: 11px; font-weight: 900; line-height: 1.6; }
 .display-choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.display-choice-row button { min-height: 76px; display: grid; place-items: center; gap: 6px; border: 1px solid rgba(226, 230, 241, 0.84); border-radius: 8px; background: rgba(255,255,255,0.62); color: #6f7a90; font-size: 13px; font-weight: 900; cursor: pointer; }
+.display-choice-row button { min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 11px 8px; border: 1px solid rgba(226, 230, 241, 0.84); border-radius: 8px; background: rgba(255,255,255,0.62); color: #6f7a90; font-size: 13px; font-weight: 900; cursor: pointer; }
 .display-choice-row button.active { border-color: rgba(255, 111, 157, 0.7); background: rgba(255, 241, 247, 0.82); color: #ff6f9d; }
-.display-choice-row img { width: 25px; height: 25px; object-fit: contain; }
+.display-choice-row .taotu-svg-icon { width: 24px; height: 24px }
 .token-list-mini { display: grid; gap: 8px; }
 .token-mini-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 28px 28px; gap: 7px; align-items: center; padding: 11px; border: 1px solid rgba(226, 230, 241, 0.74); border-radius: 8px; background: rgba(255,255,255,0.58); }
 .token-mini-card strong, .token-mini-card span, .token-mini-card code { display: block; }
@@ -839,7 +841,7 @@ function maskToken(value) {
 .token-mini-card span { margin: 4px 0 5px; color: #9aa4b7; font-size: 11px; font-weight: 800; }
 .token-mini-card code { overflow: hidden; color: #63708a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .token-mini-card button { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid rgba(226, 230, 241, 0.84); border-radius: 6px; background: rgba(255,255,255,0.68); cursor: pointer; }
-.token-mini-card button img { width: 14px; height: 14px; object-fit: contain; }
+.token-mini-card button .taotu-svg-icon { width: 14px; height: 14px }
 .token-action-menu { position: absolute; top: 42px; right: 8px; z-index: 5; min-width: 112px; padding: 6px; border: 1px solid rgba(226, 230, 241, 0.9); border-radius: 8px; background: rgba(255,255,255,0.96); box-shadow: 0 16px 32px rgba(72, 84, 112, 0.14); }
 .token-action-menu button { width: 100%; height: 28px; justify-content: flex-start; padding: 0 8px; border: none; background: transparent; color: #657188; font-size: 12px; font-weight: 900; }
 .token-action-menu button:hover { background: rgba(247, 243, 255, 0.9); color: #8b72e8; }

@@ -8,18 +8,18 @@
         </div>
         <div class="toolbar-actions">
           <button type="button" class="add-user-btn" @click="openAddDialog">
-            <img src="/icons/actions/add-64x64.png" alt="" />
+            <TaotuIcon name="add" />
             添加用户
           </button>
           <button type="button" class="refresh-btn" @click="loadUsers" :disabled="loading" aria-label="刷新用户列表">
-            <img src="/icons/actions/refresh-64x64.png" alt="" />
+            <TaotuIcon name="refresh" />
           </button>
         </div>
       </header>
 
       <div class="filter-bar">
         <label class="search-box">
-          <img src="/icons/actions/search-64x64.png" alt="" />
+          <TaotuIcon name="search" />
           <input v-model="filters.search" type="search" placeholder="搜索用户名或邮箱" @keyup.enter="applyFilters" />
         </label>
         <TaotuSelect v-model="filters.role" class="filter-select" :options="roleFilterOptions" @change="applyFilters" />
@@ -130,11 +130,11 @@
         <div class="pager-controls">
           <TaotuSelect v-model="pagination.pageSize" class="page-size-select" :options="pageSizeOptions" @change="changePageSize" />
           <button type="button" class="page-arrow" :disabled="pagination.page <= 1" @click="goPage(pagination.page - 1)">
-            <img src="/icons/albums/pagination-prev-64x64.png" alt="" />
+            <TaotuIcon name="pagination-prev" />
           </button>
           <button type="button" class="page-num active">{{ pagination.page }}</button>
           <button type="button" class="page-arrow" :disabled="pagination.page >= pagination.totalPages" @click="goPage(pagination.page + 1)">
-            <img src="/icons/albums/pagination-next-64x64.png" alt="" />
+            <TaotuIcon name="pagination-next" />
           </button>
         </div>
       </footer>
@@ -145,7 +145,7 @@
         <header class="dialog-header">
           <h2>{{ editingUser ? '编辑用户' : '添加用户' }}</h2>
           <button type="button" class="dialog-close" @click="closeFormDialog">
-            <img src="/icons/actions/close-64x64.png" alt="" />
+            <TaotuIcon name="close" />
           </button>
         </header>
 
@@ -159,7 +159,7 @@
           <div class="password-field">
             <input v-model="form.password" :type="showPassword ? 'text' : 'password'" class="dialog-input" placeholder="请输入密码" />
             <button type="button" @click="showPassword = !showPassword" aria-label="切换密码显示">
-              <img :src="showPassword ? '/icons/actions/eye-off-64x64.png' : '/icons/actions/eye-64x64.png'" alt="" />
+              <TaotuIcon :name="showPassword ? 'eye-off' : 'eye'" />
             </button>
           </div>
         </div>
@@ -202,12 +202,12 @@
             <h2>删除用户</h2>
           </div>
           <button type="button" class="dialog-close" @click="closeDeleteDialog">
-            <img src="/icons/actions/close-64x64.png" alt="" />
+            <TaotuIcon name="close" />
           </button>
         </header>
 
         <div class="delete-hero">
-          <img src="/icons/actions/trash-64x64.png" alt="" />
+          <TaotuIcon name="trash" />
         </div>
         <h3>确定要删除用户「{{ deletingUser.username }}」吗？</h3>
         <p>此操作不可恢复，用户的所有数据将被永久删除。</p>
@@ -655,13 +655,12 @@ function formatDateTime(value) {
   font-weight: 900;
 }
 
-.add-user-btn img,
-.refresh-btn img,
-.page-arrow img,
-.dialog-close img {
+.add-user-btn .taotu-svg-icon,
+.refresh-btn .taotu-svg-icon,
+.page-arrow .taotu-svg-icon,
+.dialog-close .taotu-svg-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
 }
 
 .refresh-btn {
@@ -695,7 +694,7 @@ function formatDateTime(value) {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
-.search-box img {
+.search-box .taotu-svg-icon {
   width: 15px;
   height: 15px;
   opacity: 0.55;
@@ -1064,7 +1063,7 @@ function formatDateTime(value) {
   cursor: not-allowed;
 }
 
-.page-arrow img {
+.page-arrow .taotu-svg-icon {
   opacity: 0.62;
 }
 
@@ -1206,7 +1205,7 @@ function formatDateTime(value) {
   cursor: pointer;
 }
 
-.password-field img {
+.password-field .taotu-svg-icon {
   width: 17px;
   height: 17px;
   opacity: 0.6;
@@ -1268,7 +1267,7 @@ function formatDateTime(value) {
 .delete-hero img {
   width: 88px;
   height: 88px;
-  object-fit: contain;
+
   padding: 13px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 222, 230, 0.95), rgba(255, 244, 247, 0.18));

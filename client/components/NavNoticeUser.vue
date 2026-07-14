@@ -1,39 +1,50 @@
 <template>
-  <div class="nav-notice-user">
+  <div
+    ref="navClusterRef"
+    class="nav-notice-user"
+    :style="{
+      '--notice-menu-width': `${noticeMenuWidth}px`,
+      '--user-menu-width': `${userMenuWidth}px`
+    }"
+  >
     <div
       class="nav-popover notification-popover"
       @mouseenter="openNoticeMenu"
       @mouseleave="scheduleNoticeClose"
     >
-      <button type="button" class="notification-button" title="通知" @click="toggleNoticeMenu">
-        <img src="/icons/nav/notification-64x64.png" class="nav-icon icon-20" alt="" />
+      <button ref="noticeButtonRef" type="button" class="notification-button" title="通知" @click="toggleNoticeMenu">
+        <TaotuIcon name="notification" class="nav-icon icon-20" />
         <span v-if="unreadCount > 0" class="notice-badge">{{ badgeText }}</span>
       </button>
 
-      <div v-if="noticeMenuOpen" class="nav-mini-menu notice-menu">
-        <div class="notice-list pretty-scroll" :class="{ scrollable: notifications.length > 3 }">
-          <button v-if="!notifications.length" type="button" class="mini-menu-button empty">
-            <img src="/icons/nav/no-message-64x64.svg" alt="" />
-            <span>暂无消息</span>
-          </button>
+      <Transition name="nav-menu-drop">
+        <div v-if="noticeMenuOpen" class="nav-mini-menu notice-menu">
+          <div class="notice-list pretty-scroll" :class="{ scrollable: notifications.length > 4 }">
+            <button v-if="!notifications.length" type="button" class="mini-menu-button empty">
+              <TaotuIcon name="no-message" />
+              <span>暂无消息</span>
+            </button>
 
-          <button
-            v-for="notice in notifications"
-            :key="notice.id"
-            type="button"
-            class="mini-menu-button notice-item"
-            :class="{ unread: !notice.is_read, pinned: notice.is_pinned }"
-            @click="openNoticeDetail(notice)"
-          >
-            <i v-if="!notice.is_read" class="unread-dot"></i>
-            <img src="/icons/nav/announcement-64x64.svg" alt="" />
-            <span class="notice-thumb">
-              <img :src="noticeThumb(notice)" alt="" />
-            </span>
-            <span class="notice-title">{{ notice.title }}</span>
-          </button>
+            <button
+              v-for="notice in notifications"
+              :key="notice.id"
+              type="button"
+              class="mini-menu-button notice-item"
+              :class="{ unread: !notice.is_read, pinned: notice.is_pinned }"
+              :title="notice.title"
+              @click="openNoticeDetail(notice)"
+            >
+              <i v-if="!notice.is_read" class="unread-dot"></i>
+              <TaotuIcon name="announcements" />
+              <span class="notice-thumb">
+                <img v-if="noticeThumb(notice)" :src="noticeThumb(notice)" alt="" />
+                <TaotuIcon v-else name="system-message" />
+              </span>
+              <span class="notice-title">{{ notice.title }}</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </Transition>
     </div>
 
     <div
@@ -41,19 +52,21 @@
       @mouseenter="openUserMenu"
       @mouseleave="scheduleUserClose"
     >
-      <button type="button" class="user-pill" @click="userMenuOpen = !userMenuOpen">
+      <button ref="userPillRef" type="button" class="user-pill" @click="userMenuOpen = !userMenuOpen">
         <img v-if="avatarUrl" :src="avatarUrl" class="user-avatar" alt="" />
         <span v-else-if="fallbackReady" class="user-avatar fallback">{{ userInitial }}</span>
         <span class="user-name">{{ displayName }}</span>
-        <img src="/icons/nav/chevron-down-64x64.png" class="nav-icon icon-16" alt="" />
+        <TaotuIcon name="chevron-down" class="nav-icon icon-16" />
       </button>
 
-      <div v-if="userMenuOpen" class="nav-mini-menu user-menu">
-        <button type="button" class="mini-menu-button logout-button" @click="emit('logout')">
-          <img src="/icons/nav/logout-64x64.png" alt="" />
-          <span>退出</span>
-        </button>
-      </div>
+      <Transition name="nav-menu-drop">
+        <div v-if="userMenuOpen" class="nav-mini-menu user-menu">
+          <button type="button" class="mini-menu-button logout-button" title="退出" @click="emit('logout')">
+            <TaotuIcon name="logout" />
+            <span>退出</span>
+          </button>
+        </div>
+      </Transition>
     </div>
 
     <Teleport to="body">
@@ -62,7 +75,8 @@
           <button type="button" class="notice-close" @click="closeNoticeDetail">×</button>
           <h2>{{ activeNotice.title }}</h2>
           <div class="notice-subline">
-            <img :src="notifierIcon(activeNotice)" alt="" />
+            <img v-if="notifierIcon(activeNotice)" :src="notifierIcon(activeNotice)" alt="" />
+            <TaotuIcon v-else name="system-message" />
             <span>{{ notifierName(activeNotice) }}</span>
           </div>
           <pre class="notice-body">{{ activeNotice.content || '' }}</pre>
@@ -91,13 +105,29 @@ const notifications = ref([])
 const activeNotice = ref(null)
 const loaded = ref(false)
 const loading = ref(false)
+const navClusterRef = ref(null)
+const noticeButtonRef = ref(null)
+const userPillRef = ref(null)
+const noticeMenuWidth = ref(184)
+const userMenuWidth = ref(120)
 let noticeCloseTimer = null
 let userCloseTimer = null
+let menuResizeObserver = null
 
 const displayName = computed(() => props.user?.username || props.user?.name || props.usernameFallback || '用户')
 const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase())
 const unreadCount = computed(() => notifications.value.filter(item => !item.is_read).length)
 const badgeText = computed(() => unreadCount.value > 99 ? '99' : String(unreadCount.value))
+
+function updateMenuWidths() {
+  const noticeWidth = noticeButtonRef.value?.offsetWidth || 36
+  const userWidth = userPillRef.value?.offsetWidth || 120
+  const clusterStyle = navClusterRef.value ? window.getComputedStyle(navClusterRef.value) : null
+  const gap = Number.parseFloat(clusterStyle?.columnGap || clusterStyle?.gap || '12') || 12
+  userMenuWidth.value = Math.max(86, Math.round(userWidth))
+  noticeMenuWidth.value = Math.max(156, Math.round(noticeWidth + gap + userWidth))
+}
+
 async function loadNotifications(force = false) {
   if (!props.isLoggedIn || loading.value || (loaded.value && !force)) return
   loading.value = true
@@ -164,12 +194,12 @@ function closeNoticeDetail() {
 
 function noticeThumb(notice) {
   const avatar = notice?.notifier?.avatar || notice?.author?.avatar || ''
-  return normalizeAssetUrl(notice?.cover_url || avatar) || '/icons/nav/system-message-64x64.svg'
+  return normalizeAssetUrl(notice?.cover_url || avatar)
 }
 
 function notifierIcon(notice) {
   const avatar = notice?.notifier?.avatar || notice?.author?.avatar || ''
-  return normalizeAssetUrl(avatar) || '/icons/nav/system-message-64x64.svg'
+  return normalizeAssetUrl(avatar)
 }
 
 function notifierName(notice) {
@@ -190,11 +220,21 @@ watch(() => props.isLoggedIn, (loggedIn) => {
 
 onMounted(() => {
   if (props.isLoggedIn) loadNotifications()
+  nextTick(updateMenuWidths)
+  if (typeof ResizeObserver !== 'undefined') {
+    menuResizeObserver = new ResizeObserver(updateMenuWidths)
+    if (navClusterRef.value) menuResizeObserver.observe(navClusterRef.value)
+    if (noticeButtonRef.value) menuResizeObserver.observe(noticeButtonRef.value)
+    if (userPillRef.value) menuResizeObserver.observe(userPillRef.value)
+  }
+  window.addEventListener('resize', updateMenuWidths)
 })
 
 onBeforeUnmount(() => {
   if (noticeCloseTimer) clearTimeout(noticeCloseTimer)
   if (userCloseTimer) clearTimeout(userCloseTimer)
+  if (menuResizeObserver) menuResizeObserver.disconnect()
+  window.removeEventListener('resize', updateMenuWidths)
 })
 </script>
 
@@ -300,7 +340,6 @@ onBeforeUnmount(() => {
 }
 
 .nav-icon {
-  object-fit: contain;
 }
 
 .icon-20 {
@@ -318,12 +357,22 @@ onBeforeUnmount(() => {
   top: calc(100% - 2px);
   right: 0;
   z-index: 260;
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 18px 42px rgba(96, 72, 116, 0.16);
+  box-sizing: border-box;
+  padding: 7px;
+  border: 2px solid rgba(238, 210, 226, 0.88);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 42px rgba(96, 72, 116, 0.14);
   backdrop-filter: blur(24px);
+  transform-origin: top right;
+}
+
+.notice-menu {
+  width: var(--notice-menu-width, 184px);
+}
+
+.user-menu {
+  width: var(--user-menu-width, 120px);
 }
 
 .nav-mini-menu::before {
@@ -336,9 +385,9 @@ onBeforeUnmount(() => {
 }
 
 .notice-list {
-  max-height: 130px;
+  max-height: 137px;
   display: grid;
-  gap: 6px;
+  gap: 5px;
   overflow-y: hidden;
   padding-right: 0;
 }
@@ -350,17 +399,20 @@ onBeforeUnmount(() => {
 
 .mini-menu-button {
   position: relative;
-  width: 120px;
-  height: 38px;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(238, 210, 226, 0.66);
-  border-radius: 11px;
+  gap: 5px;
+  box-sizing: border-box;
+  border: 2px solid rgba(238, 210, 226, 0.76);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--taotu-text);
-  font-size: 13px;
-  font-weight: 850;
+  font-size: 11.5px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
   cursor: pointer;
   outline: none;
   transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
@@ -372,15 +424,14 @@ onBeforeUnmount(() => {
   border-color: rgba(248, 95, 154, 0.22);
 }
 
-.mini-menu-button img {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  object-fit: contain;
+.mini-menu-button .taotu-svg-icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 1em;
 }
 
 .notice-item {
-  padding: 0 8px 0 12px;
+  padding: 0 8px 0 11px;
   gap: 5px;
   justify-content: flex-start;
 }
@@ -393,19 +444,19 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 5px;
   top: 50%;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #ff3b5f;
   transform: translateY(-50%);
 }
 
 .notice-thumb {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 1em;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(245, 248, 255, 0.92);
 }
 
@@ -425,8 +476,26 @@ onBeforeUnmount(() => {
 
 .logout-button {
   justify-content: flex-start;
-  padding: 0 13px;
+  padding: 0 9px;
   color: var(--taotu-danger);
+}
+
+.mini-menu-button > span:not(.notice-thumb) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-menu-drop-enter-active,
+.nav-menu-drop-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.22, 1.2, 0.36, 1);
+}
+
+.nav-menu-drop-enter-from,
+.nav-menu-drop-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scaleY(0.94);
 }
 
 .pretty-scroll::-webkit-scrollbar {
@@ -506,9 +575,11 @@ onBeforeUnmount(() => {
   font-weight: 850;
 }
 
-.notice-subline img {
-  width: 24px;
-  height: 24px;
+.notice-subline img,
+.notice-subline .taotu-svg-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
   border-radius: 50%;
   object-fit: cover;
 }

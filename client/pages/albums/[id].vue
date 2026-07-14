@@ -3,7 +3,7 @@
     <section v-if="album" class="album-hero-band">
       <div class="album-hero-layout">
         <NuxtLink to="/albums" class="back-link">
-          <img src="/icons/image/back-64x64.png" alt="" />
+          <TaotuIcon name="back" />
           <span>返回相册列表</span>
         </NuxtLink>
 
@@ -17,7 +17,7 @@
             <div class="title-row">
               <h1>{{ album.name }}</h1>
               <span class="visibility-badge" :class="{ public: album.is_public }">
-                <img src="/icons/albums/visibility-info-80x80.png" alt="" />
+                <TaotuIcon name="visibility-info" />
                 {{ album.is_public ? '公开' : '私有' }}
               </span>
             </div>
@@ -26,15 +26,15 @@
 
             <div class="album-stats">
               <span>
-                <img src="/icons/albums/image-count-80x80.png" alt="" />
+                <TaotuIcon name="image-count" />
                 {{ album.image_count || sortedImages.length || 0 }} 张图片
               </span>
               <span>
-                <img src="/icons/albums/updated-time-80x80.png" alt="" />
+                <TaotuIcon name="updated-time" />
                 {{ formatDate(album.updated_at || album.created_at) }} 更新
               </span>
               <span>
-                <img src="/icons/albums/views-80x80.png" alt="" />
+                <TaotuIcon name="views" />
                 {{ formatViews(albumViews) }} 浏览
               </span>
             </div>
@@ -60,7 +60,7 @@
               title="网格"
               @click="viewMode = 'grid'"
             >
-              <img src="/icons/albums/grid-view-64x64.png" alt="" />
+              <TaotuIcon name="grid-view" />
             </button>
             <button
               type="button"
@@ -69,14 +69,14 @@
               title="列表"
               @click="viewMode = 'list'"
             >
-              <img src="/icons/albums/list-view-64x64.png" alt="" />
+              <TaotuIcon name="list-view" />
             </button>
           </div>
         </div>
       </header>
 
       <div v-if="loading" class="loading-wall">
-        <img src="/icons/status/loading-64x64.png" alt="" />
+        <TaotuIcon name="loading" />
         <span>加载中...</span>
       </div>
 
@@ -93,7 +93,7 @@
             >
               <img :src="imageUrl(item.image)" :alt="item.image.alt || item.image.filename || '图片'" loading="lazy" />
               <span class="view-chip">
-                <img src="/icons/albums/views-80x80.png" alt="" />
+                <TaotuIcon name="views" />
                 {{ formatViews(item.image.view_count || 0) }}
               </span>
             </button>
@@ -110,7 +110,7 @@
           >
             <img :src="imageUrl(img)" :alt="img.alt || img.filename || '图片'" loading="lazy" />
             <span class="view-chip">
-              <img src="/icons/albums/views-80x80.png" alt="" />
+              <TaotuIcon name="views" />
               {{ formatViews(img.view_count || 0) }}
             </span>
           </button>
@@ -131,7 +131,7 @@
       <span>共 {{ sortedImages.length }} 张图片</span>
       <div class="page-controls">
         <button type="button" class="page-arrow" :disabled="page <= 1" @click="loadPage(page - 1)">
-          <img src="/icons/albums/pagination-prev-64x64.png" alt="" />
+          <TaotuIcon name="pagination-prev" />
         </button>
         <button
           v-for="item in paginationItems"
@@ -145,14 +145,14 @@
           {{ item.label }}
         </button>
         <button type="button" class="page-arrow" :disabled="page >= totalPages" @click="loadPage(page + 1)">
-          <img src="/icons/albums/pagination-next-64x64.png" alt="" />
+          <TaotuIcon name="pagination-next" />
         </button>
       </div>
       <span class="pagination-spacer"></span>
     </footer>
 
     <div v-if="!album && !loading" class="empty-state taotu-card">
-      <img src="/icons/empty/no-albums-256x256.png" alt="" />
+      <TaotuIcon name="no-albums" />
       <p>相册不存在</p>
     </div>
   </div>
@@ -403,10 +403,9 @@ watch(pageSize, () => {
   backdrop-filter: blur(18px);
 }
 
-.back-link img {
+.back-link .taotu-svg-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
 }
 
 .album-header {
@@ -486,10 +485,9 @@ watch(pageSize, () => {
   color: #25ba91;
 }
 
-.visibility-badge img {
+.visibility-badge .taotu-svg-icon {
   width: 16px;
   height: 16px;
-  object-fit: contain;
 }
 
 .album-desc {
@@ -527,10 +525,9 @@ watch(pageSize, () => {
   white-space: nowrap;
 }
 
-.album-stats img {
+.album-stats .taotu-svg-icon {
   width: 22px;
   height: 22px;
-  object-fit: contain;
 }
 
 .album-wall {
@@ -617,10 +614,9 @@ watch(pageSize, () => {
   backdrop-filter: blur(16px);
 }
 
-.view-btn img {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
+.view-btn .taotu-svg-icon {
+  width: 22px;
+  height: 22px;
 }
 
 .waterfall-layout {
@@ -700,10 +696,9 @@ watch(pageSize, () => {
   backdrop-filter: blur(10px);
 }
 
-.view-chip img {
+.view-chip .taotu-svg-icon {
   width: 14px;
   height: 14px;
-  object-fit: contain;
 }
 
 .detail-pagination {
@@ -745,10 +740,9 @@ watch(pageSize, () => {
   justify-content: center;
 }
 
-.page-arrow img {
+.page-arrow .taotu-svg-icon {
   width: 14px;
   height: 14px;
-  object-fit: contain;
 }
 
 .page-number.active {
@@ -774,22 +768,27 @@ watch(pageSize, () => {
   font-weight: 900;
 }
 
-.loading-wall img,
-.empty-state img {
+.loading-wall .taotu-svg-icon,
+.empty-state .taotu-svg-icon {
   width: 72px;
   height: 72px;
-  object-fit: contain;
 }
 
 .album-empty {
   width: min(100%, 1420px);
   margin: 0 auto;
   min-height: 156px;
-  justify-content: flex-end;
-  padding-right: 126px;
+  justify-content: center;
+  padding: 0 24px;
   border: 1px solid rgba(226, 218, 234, 0.72);
   border-radius: 12px;
   background: rgba(255,255,255,0.62);
+}
+
+.album-empty > div:not(.empty-mascot) {
+  display: grid;
+  justify-items: center;
+  text-align: center;
 }
 
 .album-empty h3 {
@@ -841,7 +840,7 @@ watch(pageSize, () => {
     font-size: 13px;
   }
 
-  .album-stats img {
+  .album-stats .taotu-svg-icon {
     width: 18px;
     height: 18px;
   }

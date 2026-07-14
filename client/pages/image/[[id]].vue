@@ -8,7 +8,7 @@
       <div class="detail-topbar">
         <div class="topbar-left">
           <NuxtLink to="/" class="soft-back">
-            <img src="/icons/image/back-64x64.png" class="detail-icon icon-16" alt="" />
+            <TaotuIcon name="back" class="detail-icon icon-16" />
             返回图库
           </NuxtLink>
           <div class="breadcrumb">
@@ -20,7 +20,7 @@
           </div>
         </div>
         <NuxtLink to="/" class="close-page" title="关闭">
-          <img src="/icons/image/close-64x64.png" class="detail-icon icon-18" alt="" />
+          <TaotuIcon name="close" class="detail-icon icon-18" />
         </NuxtLink>
       </div>
 
@@ -33,7 +33,7 @@
             :class="{ active: currentSize === size.key }"
             @click="currentSize = size.key"
           >
-            <img :src="size.icon" class="detail-icon icon-16" alt="" />
+            <TaotuIcon :name="size.icon" class="detail-icon icon-16" />
             <span>{{ size.label }}</span>
           </button>
         </div>
@@ -53,13 +53,13 @@
             </button>
           </TransitionGroup>
           <button class="load-more-thumbs" :disabled="thumbLoading || !canAdvanceRail" @click="advanceThumbRail">
-            <img src="/icons/image/load-more-64x64.png" class="detail-icon icon-16" alt="" />
+            <TaotuIcon name="load-more" class="detail-icon icon-16" />
           </button>
         </aside>
 
         <main class="viewer-column">
           <button class="side-nav prev" :disabled="!prevImage" @click="goSibling(-1)" title="上一张">
-            <img src="/icons/image/previous-64x64.png" class="detail-icon icon-22" alt="" />
+            <TaotuIcon name="previous" class="detail-icon icon-22" />
           </button>
           <section ref="viewerRef" class="image-viewer">
             <img
@@ -75,29 +75,29 @@
             />
           </section>
           <button class="side-nav next" :disabled="!canGoNext" @click="goSibling(1)" title="下一张">
-            <img src="/icons/image/next-64x64.png" class="detail-icon icon-22" alt="" />
+            <TaotuIcon name="next" class="detail-icon icon-22" />
           </button>
 
           <div class="viewer-actions">
             <button class="action-btn" title="放大" @click="zoomIn">
-              <img src="/icons/image/zoom-in-64x64.png" class="detail-icon icon-18" alt="" />
+              <TaotuIcon name="zoom-in" class="detail-icon icon-18" />
             </button>
             <button class="action-btn" title="缩小" @click="zoomOut">
-              <img src="/icons/image/zoom-out-64x64.png" class="detail-icon icon-18" alt="" />
+              <TaotuIcon name="zoom-out" class="detail-icon icon-18" />
             </button>
             <span class="zoom-text">{{ Math.round(zoom * 100) }}%</span>
             <button class="action-btn" title="重置" @click="resetZoom">
-              <img src="/icons/image/reset-64x64.png" class="detail-icon icon-18" alt="" />
+              <TaotuIcon name="reset" class="detail-icon icon-18" />
             </button>
             <button class="action-btn" title="全屏" @click="toggleFullscreen">
-              <img src="/icons/image/fullscreen-64x64.png" class="detail-icon icon-18" alt="" />
+              <TaotuIcon name="fullscreen" class="detail-icon icon-18" />
             </button>
             <span class="action-separator"></span>
             <button class="action-btn heart" title="收藏">
-              <img src="/icons/image/favorite-64x64.png" class="detail-icon icon-18" alt="" />
+              <TaotuIcon name="favorite" class="detail-icon icon-18" />
             </button>
             <button class="action-btn mint" title="下载" @click="downloadImage">
-              <img src="/icons/image/download-64x64.png" class="detail-icon icon-18" alt="" />
+              <TaotuIcon name="download" class="detail-icon icon-18" />
             </button>
           </div>
         </main>
@@ -107,7 +107,7 @@
             <div class="title-row">
               <h1>{{ imageTitle }}</h1>
               <button class="collect-btn" type="button">
-                <img src="/icons/image/favorite-64x64.png" class="detail-icon icon-16" alt="" />
+                <TaotuIcon name="favorite" class="detail-icon icon-16" />
                 收藏
               </button>
             </div>
@@ -162,7 +162,7 @@
             <div v-else class="empty-tags">暂无标签</div>
             <button v-if="tagList.length > tagPreviewCount" class="view-more" @click="showAllTags = !showAllTags">
               {{ showAllTags ? '收起' : '查看更多' }}
-              <img src="/icons/nav/chevron-down-64x64.png" class="detail-icon icon-14" :class="{ rotate: showAllTags }" alt="" />
+              <TaotuIcon name="chevron-down" class="detail-icon icon-14" :class="{ rotate: showAllTags }" />
             </button>
           </section>
 
@@ -176,7 +176,7 @@
                 <div class="copy-field">
                   <input :value="item.value" readonly />
                   <button type="button" @click="copyText(item.value)">
-                    <img src="/icons/image/copy-code-64x64.png" class="detail-icon icon-15" alt="" />
+                    <TaotuIcon name="copy-code" class="detail-icon icon-15" />
                     复制
                   </button>
                 </div>
@@ -230,9 +230,9 @@ let panDrag = null
 let momentumFrame = 0
 let panVelocity = { x: 0, y: 0 }
 const sizeOptions = [
-  { key: 'thumb', label: '缩略图', icon: '/icons/image/thumbnail-64x64.png' },
-  { key: 'medium', label: '中等', icon: '/icons/image/medium-64x64.png' },
-  { key: 'full', label: '完整', icon: '/icons/image/full-64x64.png' }
+  { key: 'thumb', label: '缩略图', icon: 'thumbnail' },
+  { key: 'medium', label: '中等', icon: 'medium' },
+  { key: 'full', label: '完整', icon: 'full' }
 ]
 
 const imageTitle = computed(() => image.value?.alt || image.value?.title || image.value?.filename || '图片')
@@ -1064,7 +1064,7 @@ onBeforeUnmount(() => {
   max-width: 100%;
   max-height: 100%;
   display: block;
-  object-fit: contain;
+
   border-radius: 8px;
   transform-origin: center center;
   opacity: 0;
@@ -1447,7 +1447,7 @@ onBeforeUnmount(() => {
 
 .detail-icon {
   display: block;
-  object-fit: contain;
+
 }
 
 .icon-14 { width: 14px; height: 14px; }
@@ -1485,7 +1485,7 @@ onBeforeUnmount(() => {
 .detail-loading-placeholder img {
   width: 96px;
   height: 96px;
-  object-fit: contain;
+
   opacity: 0.78;
 }
 

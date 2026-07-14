@@ -4,12 +4,7 @@
       <section class="filter-section">
         <button class="filter-heading" @click="toggleFilterSection('source')">
           <span>图库来源</span>
-          <img
-            src="/icons/nav/chevron-down-64x64.png"
-            class="heading-caret"
-            :class="{ expanded: openSections.source }"
-            alt=""
-          />
+          <TaotuIcon name="chevron-down" class="heading-caret" :class="{ expanded: openSections.source }" />
         </button>
         <div v-show="openSections.source" class="filter-body">
           <button class="source-row" :class="{ active: gallerySource === 'public' }" @click="switchSource('public')">
@@ -34,12 +29,7 @@
       <section class="filter-section">
         <button class="filter-heading" @click="toggleFilterSection('sort')">
           <span>排序</span>
-          <img
-            src="/icons/nav/chevron-down-64x64.png"
-            class="heading-caret"
-            :class="{ expanded: openSections.sort }"
-            alt=""
-          />
+          <TaotuIcon name="chevron-down" class="heading-caret" :class="{ expanded: openSections.sort }" />
         </button>
         <div v-show="openSections.sort" class="filter-body">
           <button
@@ -57,20 +47,15 @@
       <section class="filter-section">
         <button class="filter-heading" @click="toggleFilterSection('mode')">
           <span>展示模式</span>
-          <img
-            src="/icons/nav/chevron-down-64x64.png"
-            class="heading-caret"
-            :class="{ expanded: openSections.mode }"
-            alt=""
-          />
+          <TaotuIcon name="chevron-down" class="heading-caret" :class="{ expanded: openSections.mode }" />
         </button>
         <div v-show="openSections.mode" class="mode-buttons">
           <button class="mode-card" :class="{ active: displayMode === 'grid' }" @click="handleModeChange('grid')">
-            <img src="/icons/gallery/grid-64x64.png" alt="" />
+            <TaotuIcon name="grid" />
             <span>网格</span>
           </button>
           <button class="mode-card" :class="{ active: displayMode === 'waterfall' }" @click="handleModeChange('waterfall')">
-            <img src="/icons/gallery/waterfall-64x64.png" alt="" />
+            <TaotuIcon name="waterfall" />
             <span>瀑布流</span>
           </button>
         </div>
@@ -80,12 +65,7 @@
         <div class="filter-heading static-heading">
           <button class="heading-main" @click="toggleFilterSection('tags')">
             <span>标签分组</span>
-            <img
-              src="/icons/nav/chevron-down-64x64.png"
-              class="heading-caret"
-              :class="{ expanded: openSections.tags }"
-              alt=""
-            />
+            <TaotuIcon name="chevron-down" class="heading-caret" :class="{ expanded: openSections.tags }" />
           </button>
           <button class="expand-all-btn" @click.stop="toggleExpandAll">{{ allGroupsExpanded ? '收起全部' : '展开全部' }}</button>
         </div>
@@ -98,12 +78,7 @@
                 <b>{{ getGroupAllTagIds(group).length }}</b>
               </button>
               <button class="tree-caret" @click="group._expanded = !group._expanded">
-                <img
-                  src="/icons/nav/chevron-down-64x64.png"
-                  class="tree-caret-icon"
-                  :class="{ expanded: group._expanded }"
-                  alt=""
-                />
+                <TaotuIcon name="chevron-down" class="tree-caret-icon" :class="{ expanded: group._expanded }" />
               </button>
             </div>
             <div v-show="group._expanded" class="tree-content">
@@ -125,12 +100,7 @@
                     <b>{{ getFilteredTagIds(sg.tagIds).length }}</b>
                   </button>
                   <button class="tree-caret small" @click="sg._expanded = !sg._expanded">
-                    <img
-                      src="/icons/nav/chevron-down-64x64.png"
-                      class="tree-caret-icon"
-                      :class="{ expanded: sg._expanded }"
-                      alt=""
-                    />
+                    <TaotuIcon name="chevron-down" class="tree-caret-icon" :class="{ expanded: sg._expanded }" />
                   </button>
                 </div>
                 <div v-show="sg._expanded" class="tag-chip-list">
@@ -158,15 +128,15 @@
           <span class="selected-note">已选择 {{ selectedIds.length }} 项</span>
           <button class="taotu-btn taotu-btn-secondary" @click="selectedIds = []">清空选择</button>
           <button class="taotu-btn taotu-btn-secondary" @click="selectAllCurrent">
-            <img src="/icons/gallery/multi-select-64x64.png" class="taotu-icon taotu-icon-18" alt="" />
+            <TaotuIcon name="multi-select" class="taotu-icon taotu-icon-18" />
             全选
           </button>
           <button class="taotu-btn taotu-btn-danger" @click="batchDelete">
-            <img src="/icons/actions/delete-64x64.png" class="taotu-icon taotu-icon-18" alt="" />
+            <TaotuIcon name="delete" class="taotu-icon taotu-icon-18" />
             批量删除
           </button>
           <button class="taotu-btn taotu-btn-primary" @click="showMoveModal = true">
-            <img src="/icons/gallery/move-album-64x64.png" class="taotu-icon taotu-icon-18" alt="" />
+            <TaotuIcon name="move-album" class="taotu-icon taotu-icon-18" />
             移动到相册
           </button>
         </div>
@@ -198,11 +168,11 @@
         </div>
 
         <div v-if="images.length === 0 && !loading" class="empty-state">
-          <img src="/icons/empty/no-images-256x256.png" class="taotu-icon taotu-icon-128" alt="" />
+          <TaotuIcon name="no-images" class="taotu-icon taotu-icon-128" />
           <p>{{ emptyText }}</p>
         </div>
         <div v-if="loading" class="empty-state">
-          <img src="/icons/status/loading-64x64.png" class="taotu-icon taotu-icon-64" alt="" />
+          <TaotuIcon name="loading" class="taotu-icon taotu-icon-64" />
           <p>加载中...</p>
         </div>
 
@@ -650,8 +620,7 @@ const getItemStyle = (img, index) => {
   }
   return {
     position: 'absolute',
-    width: item.width + 'px',
-    height: item.height + 'px',
+    width: item.width + 'px', height: item.height + 'px',
     opacity: 1,
     visibility: 'visible',
     transform: 'translate3d(' + item.left + 'px,' + item.top + 'px,0)'
@@ -832,7 +801,7 @@ const moveToAlbum = async () => {
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
-  object-fit: contain;
+
   opacity: 0.62;
   transform: rotate(0deg);
   transition: transform 0.18s ease, opacity 0.18s ease;
@@ -931,10 +900,9 @@ const moveToAlbum = async () => {
   cursor: pointer;
 }
 
-.mode-card img {
+.mode-card .taotu-svg-icon {
   width: 24px;
   height: 24px;
-  object-fit: contain;
 }
 
 .mode-card.active {
@@ -1039,7 +1007,7 @@ const moveToAlbum = async () => {
 .tree-caret-icon {
   width: 14px;
   height: 14px;
-  object-fit: contain;
+
   opacity: 0.58;
   transform: rotate(0deg);
   transition: transform 0.18s ease, opacity 0.18s ease;

@@ -38,18 +38,18 @@
           <section v-for="group in menuGroups" :key="group.title" class="menu-group">
             <h3>{{ group.title }}</h3>
             <NuxtLink v-for="item in group.items" :key="item.to" :to="item.to" class="sidebar-link">
-              <img :src="item.icon" class="taotu-icon taotu-icon-20" alt="" />
+              <TaotuIcon :name="item.icon" class="taotu-icon taotu-icon-20" />
               <span>{{ item.label }}</span>
             </NuxtLink>
           </section>
         </nav>
         <div class="sidebar-footer">
           <NuxtLink to="/" class="sidebar-action">
-            <img src="/icons/admin/return-front-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
+            <TaotuIcon name="return-front" class="taotu-icon taotu-icon-20" />
             返回前台
           </NuxtLink>
           <button class="sidebar-action danger" @click="handleLogout">
-            <img src="/icons/nav/logout-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
+            <TaotuIcon name="logout" class="taotu-icon taotu-icon-20" />
             退出登录
           </button>
         </div>
@@ -112,36 +112,36 @@ const menuGroups = [
   {
     title: '内容管理',
     items: [
-      { to: '/admin', label: '概览', icon: '/icons/admin/overview-64x64.png' },
-      { to: '/admin/images', label: '图片管理', icon: '/icons/admin/image-management-64x64.png' },
-      { to: '/admin/paths', label: '综合配置', icon: '/icons/admin/custom-paths-64x64.png' }
+      { to: '/admin', label: '概览', icon: 'overview' },
+      { to: '/admin/images', label: '图片管理', icon: 'image-management' },
+      { to: '/admin/paths', label: '综合配置', icon: 'custom-paths' }
     ]
   },
   {
     title: '标签体系',
     items: [
-      { to: '/admin/tags', label: '标签设置', icon: '/icons/admin/tag-settings-64x64.png' },
-      { to: '/admin/conditions', label: '条件标签', icon: '/icons/admin/condition-tags-64x64.png' },
-      { to: '/admin/models', label: '模型管理', icon: '/icons/admin/model-management-64x64.png' }
+      { to: '/admin/tags', label: '标签设置', icon: 'tag-settings' },
+      { to: '/admin/conditions', label: '条件标签', icon: 'condition-tags' },
+      { to: '/admin/models', label: '模型管理', icon: 'model-management' }
     ]
   },
   {
     title: '用户与权限',
     items: [
-      { to: '/admin/users', label: '用户管理', icon: '/icons/admin/users-64x64.png' }
+      { to: '/admin/users', label: '用户管理', icon: 'users' }
     ]
   },
   {
     title: '站点设置',
     items: [
-      { to: '/admin/site-config', label: '网站配置', icon: '/icons/admin/site-config-64x64.png' },
-      { to: '/admin/announcements', label: '公告中心', icon: '/icons/admin/announcements-64x64.svg' }
+      { to: '/admin/site-config', label: '网站配置', icon: 'site-config' },
+      { to: '/admin/announcements', label: '公告中心', icon: 'announcements' }
     ]
   },
   {
     title: '运维工具',
     items: [
-      { to: '/admin/stats', label: '运维监控', icon: '/icons/admin/stats-64x64.png' }
+      { to: '/admin/stats', label: '运维监控', icon: 'stats' }
     ]
   }
 ]
@@ -340,7 +340,7 @@ const handleLogout = () => {
 .brand-icon {
   width: 34px;
   height: 34px;
-  object-fit: contain;
+
 }
 
 .brand-fallback {
@@ -541,7 +541,7 @@ const handleLogout = () => {
 .admin-main :deep(.subhero-icon) {
   width: 68px;
   height: 68px;
-  object-fit: contain;
+
 }
 
 .admin-main :deep(.page-title::after) {

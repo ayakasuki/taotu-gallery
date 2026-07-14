@@ -38,7 +38,7 @@
             />
 
             <NuxtLink v-else to="/login" class="taotu-btn taotu-btn-primary login-btn">
-              <img src="/icons/nav/login-64x64.png" class="taotu-icon taotu-icon-18" alt="" />
+              <TaotuIcon name="login" class="taotu-icon taotu-icon-18" />
               登录
             </NuxtLink>
           </div>
@@ -108,12 +108,12 @@ const isDefaultBackground = (background = {}) => {
 }
 
 const navItems = computed(() => [
-  { to: '/', label: '图库', icon: '/icons/nav/gallery-64x64.png', visible: true },
-  { to: '/albums', label: '相册', icon: '/icons/nav/albums-64x64.png', visible: true },
-  { to: '/api-docs', label: 'API', icon: '/icons/nav/api-64x64.png', visible: true },
-  { to: '/upload', label: '上传', icon: '/icons/nav/upload-64x64.png', visible: isLoggedIn.value },
-  { to: '/dashboard', label: '仪表盘', icon: '/icons/nav/dashboard-64x64.png', visible: isLoggedIn.value },
-  { to: '/admin', label: '管理', icon: '/icons/nav/admin-64x64.png', visible: isAdmin.value }
+  { to: '/', label: '图库', icon: 'gallery', visible: true },
+  { to: '/albums', label: '相册', icon: 'albums', visible: true },
+  { to: '/api-docs', label: 'API', icon: 'api', visible: true },
+  { to: '/upload', label: '上传', icon: 'upload', visible: isLoggedIn.value },
+  { to: '/dashboard', label: '仪表盘', icon: 'dashboard', visible: isLoggedIn.value },
+  { to: '/admin', label: '管理', icon: 'admin', visible: isAdmin.value }
 ])
 
 const visibleNavItems = computed(() => navItems.value.filter(item => item.visible))
@@ -428,7 +428,7 @@ const handleLogout = () => {
 .brand-icon {
   width: 36px;
   height: 36px;
-  object-fit: contain;
+
 }
 
 .brand-fallback {

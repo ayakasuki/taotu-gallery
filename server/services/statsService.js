@@ -343,7 +343,7 @@ async function getRecentActivities(limit = 7) {
         ? `${row.username ? '上传' : '收录'}了 1 张图片到相册「${row.album_name}」`
         : `${row.username ? '上传' : '收录'}了 1 张图片「${row.filename || `#${row.id}`}」`,
       avatar: row.avatar || null,
-      icon: row.username ? null : '/icons/admin/image-management-64x64.png',
+      icon: row.username ? null : 'image-management',
       createdAt: row.created_at
     });
   }
@@ -355,7 +355,7 @@ async function getRecentActivities(limit = 7) {
       actor: row.username || '',
       message: `创建了相册「${row.name || `#${row.id}`}」`,
       avatar: row.avatar || null,
-      icon: row.username ? null : '/icons/admin/album-management-64x64.png',
+      icon: row.username ? null : 'album-management',
       createdAt: row.created_at
     });
   }
@@ -392,7 +392,7 @@ async function getRecentActivities(limit = 7) {
       actor: row.username || '',
       message: `调用了 API ${row.method || 'GET'} ${stripQuery(row.endpoint)}，状态 ${row.status_code || '-'}`,
       avatar: row.avatar || null,
-      icon: isUserAction ? null : '/icons/admin/api-settings-64x64.png',
+      icon: isUserAction ? null : 'api-settings',
       createdAt: row.created_at
     });
   }

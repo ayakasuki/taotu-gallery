@@ -21,7 +21,7 @@
       </div>
 
       <div v-else-if="reviewSubmitted" class="closed-msg review-success-msg">
-        <img src="/icons/status/review-approved_128x128.png" class="review-success-icon" alt="" />
+        <TaotuIcon name="review-approved" class="review-success-icon" />
         <h2>注册成功，等待管理员审核账户。</h2>
         <p>审核通过后即可登录使用，若站点已配置 SMTP，系统会通过邮箱通知你审核结果。</p>
         <NuxtLink to="/login" class="fluent-btn fluent-btn-primary">返回登录页</NuxtLink>
@@ -40,12 +40,43 @@
 
         <div class="form-group">
           <label class="form-label">密码</label>
-          <input v-model="form.password" type="password" class="fluent-input" placeholder="请输入密码" />
+          <div class="password-field">
+            <input
+              v-model="form.password"
+              :type="showPassword ? 'text' : 'password'"
+              class="fluent-input"
+              placeholder="请输入密码"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              :title="showPassword ? '隐藏密码' : '显示密码'"
+              @click="showPassword = !showPassword"
+            >
+              <TaotuIcon :name="showPassword ? 'eye-off' : 'eye'" />
+            </button>
+          </div>
         </div>
 
         <div class="form-group">
           <label class="form-label">确认密码</label>
-          <input v-model="form.confirmPassword" type="password" class="fluent-input" placeholder="再次输入密码" @keyup.enter="handleRegister" />
+          <div class="password-field">
+            <input
+              v-model="form.confirmPassword"
+              :type="showConfirmPassword ? 'text' : 'password'"
+              class="fluent-input"
+              placeholder="再次输入密码"
+              @keyup.enter="handleRegister"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              :title="showConfirmPassword ? '隐藏密码' : '显示密码'"
+              @click="showConfirmPassword = !showConfirmPassword"
+            >
+              <TaotuIcon :name="showConfirmPassword ? 'eye-off' : 'eye'" />
+            </button>
+          </div>
         </div>
 
         <div class="form-group">
@@ -84,7 +115,7 @@
       <aside class="register-side">
         <div class="side-card fluent-card">
           <div class="side-heading">
-            <img src="/icons/status/loading-64x64.png" class="taotu-icon taotu-icon-32" alt="" />
+            <TaotuIcon name="loading" class="taotu-icon taotu-icon-32" />
             <div>
               <h2>注册配置</h2>
               <p>系统会先读取站点注册策略</p>
@@ -100,7 +131,7 @@
         </div>
 
         <div class="side-card notice-card fluent-card" v-if="!registrationOpen && !configLoading">
-          <img src="/icons/empty/registration-closed-256x256.png" class="taotu-icon taotu-icon-96" alt="" />
+          <TaotuIcon name="registration-closed" class="taotu-icon taotu-icon-96" />
           <h2>注册功能暂未开放</h2>
           <p>当前注册功能处于受限状态，请等待管理员开放。</p>
         </div>
@@ -141,6 +172,8 @@ const brandLogo = ref('')
 const brandReady = ref(false)
 const captchaSvg = ref('')
 const countdown = ref(0)
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 let countdownTimer = null
 
 onMounted(async () => {
@@ -318,7 +351,7 @@ const handleRegister = async () => {
 
 .register-card { width: 100%; padding: var(--space-2xl); background: rgba(255,255,255,0.72); border-color: rgba(255,255,255,0.88); }
 .register-brand { display: flex; align-items: center; gap: 16px; margin-bottom: var(--space-xl); }
-.brand-logo { width: 68px; height: 68px; object-fit: contain; border-radius: var(--taotu-radius-md); }
+.brand-logo { width: 68px; height: 68px; border-radius: var(--taotu-radius-md); }
 .brand-logo.fallback { display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--taotu-pink), var(--taotu-purple)); color: white; font-size: 32px; font-weight: 900; box-shadow: 0 16px 34px rgba(248,95,154,0.2); }
 .title { color: var(--taotu-text-strong); font-size: 28px; font-weight: 900; margin-bottom: var(--space-xs); }
 .subtitle { color: var(--fluent-text-secondary); margin-bottom: var(--space-xl); }
@@ -326,6 +359,27 @@ const handleRegister = async () => {
 .form-label { display: block; color: var(--taotu-text); font-size: 13px; font-weight: 800; margin-bottom: var(--space-sm); }
 .fluent-input { width: 100%; padding: 10px 14px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 14px; box-sizing: border-box; }
 .fluent-input:focus { outline: none; border-color: var(--fluent-blue); }
+.password-field { position: relative; }
+.password-field .fluent-input { padding-right: 44px; }
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--taotu-text-muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.password-toggle:hover { background: rgba(255, 240, 246, 0.9); color: var(--taotu-pink); }
+.password-toggle .taotu-svg-icon { width: 16px; height: 16px; }
 .captcha-row, .code-row { display: flex; gap: var(--space-sm); align-items: center; }
 .captcha-row { margin-bottom: var(--space-sm); }
 .captcha-box { width: 160px; height: 52px; flex: 0 0 160px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); overflow: hidden; background: #fff; }
@@ -338,7 +392,7 @@ const handleRegister = async () => {
 .review-success-msg { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .review-success-msg h2 { color: var(--taotu-text-strong); font-size: 22px; font-weight: 950; }
 .review-success-msg p { max-width: 360px; margin-bottom: var(--space-sm); line-height: 1.8; }
-.review-success-icon { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 12px 22px rgba(54, 196, 143, 0.22)); }
+.review-success-icon { width: 64px; height: 64px; filter: drop-shadow(0 12px 22px rgba(54, 196, 143, 0.22)); }
 .footer-links { display: flex; justify-content: space-between; margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--fluent-border); font-size: 13px; }
 .footer-links a { color: var(--fluent-blue); text-decoration: none; }
 .register-side { display: flex; flex-direction: column; gap: var(--space-md); }

@@ -72,15 +72,23 @@
 43. **前台主导航保持简洁** — 默认布局主导航按钮只保留文字，不再显示栏目图标；登录、通知、用户胶囊等独立控件可以保留自己的图标。
 44. **图库首页透明导航只在顶部生效** — 仅 `/` 页面滚动到顶部时隐藏导航背景/模糊/分隔线并让主导航文字变白；离开顶部或进入其它页面必须恢复常规玻璃导航。默认布局导航使用自定义 `currentPath` 和精确 active，不依赖 Nuxt 默认 `router-link-active`，避免 `/` 路由影响相册/API/上传/仪表盘。
 45. **导航左右端跟随页面容器** — `brand-link` 和通知/用户区应通过默认布局内的 `nav-frame` 对齐图库、相册、API 文档、上传、仪表盘等页面主体左右边界，宽屏不要贴浏览器边缘。
-46. **人工标签 hover 预览可复用** — 管理员人工标签和仪表盘人工标签使用 `client/components/ManualImageHoverPreview.vue`；预览固定宽 320px，优先 `medium_url`，自动判断上/下方和左右边界。后续新增人工打标入口必须复用该组件，不要重复写浮层。
-47. **WebDAV 必须动态导入** — `webdav` 当前为 ESM 包，CommonJS 后端服务不能在顶层 `require('webdav')`；必须通过 `import('webdav')` 按需加载并缓存 Promise，否则 PM2 启动会直接失败。
-48. **数字胶囊必须自适应宽度** — 图片数量、浏览数、标签数量、分页/标签 tab 等胶囊或按钮出现数字时必须 `width:max-content` / `white-space:nowrap` / `font-variant-numeric:tabular-nums`，不能按两三位数字写死宽度导致四位数溢出。
-49. **相册详情网格分页按列数计算** — `/albums/:id` 网格模式每页数量必须根据实际容器列数计算，保证第一页尽量填满；不要恢复固定 24 张导致宽屏尾部空出多个图片位。
-50. **后端必须保持原生 ESM** — 根包启用 `"type":"module"`，`server/**/*.js`、迁移、seed、`knexfile.js` 必须使用 `import/export`；禁止新增 `require()` / `module.exports` / `exports.*`。相对导入必须写完整 `.js` 或 `/index.js`，目录导入不可依赖 CommonJS 解析。
-51. **启动顺序不能被静态导入破坏** — `server/index.js` 必须先 `await startupService.bootstrap()`，再动态 `import('./app.js')`；不要把 `app` 静态 import 到入口顶部，否则会绕过启动自检、迁移和首个管理员初始化顺序。
-52. **ESM 路径写法固定** — 需要 `__dirname` 的文件使用 `fileURLToPath(import.meta.url)` + `path.dirname()`；读取 `package.json` 优先用 `fs.readFileSync` + `JSON.parse`，兼容 Node 18/24，不使用 JSON import assertion/attribute。
-53. **Knex CLI 不加旧 --esm** — 当前 Knex 可原生读取 ESM `knexfile.js`，`npm run migrate` 保持 `knex migrate:latest`；不要加 `--esm`，旧 `esm` loader 在 Node 24 会报错。
-54. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
+46. **前端图标统一走 TaotuIcon** — 控制类图标必须使用 `client/components/TaotuIcon.vue` + `@boxicons/vue`，不要新增 PNG/SVG 文件路径、emoji、字符伪图标或 CSS 画圆点图标；旧 PNG 占位只允许作为真实图片/动图/品牌资产，不允许回到按钮图标。
+47. **图标状态必须线性/填充分层** — 普通状态默认 basic/regular 线性图标，选中、hover、active、fill 状态才显示 filled 图标；图标颜色必须继承当前按钮/文字颜色。侧边栏渐变选中态可白色，粉色文字选中态图标必须跟随粉色，不要一律强制白色。
+48. **插画图标不套按钮染色规则** — 管理后台概览、运维监控、仪表盘统计、帮助中心等大号插画图标可以保持自身色彩或使用对应卡片淡色主题；不要套用按钮 fill 白色规则。统计卡片图标通常为 32px/48px，快捷操作小图标通常为 20px。
+49. **下拉框统一使用 TaotuSelect** — 禁止新增原生 `<select>`；全站选择器必须使用 `client/components/TaotuSelect.vue`，支持副描述、选中勾、hover title、展开/收起动画、最多 4 项无滚动、超出后内部滚动，以及根据视口空间自动向上/向下弹出。
+50. **下拉样式不能回退粗糙版** — 下拉菜单宽度必须等于触发框，边框 `2px`、圆角 `8px`、内部上下留白一致；选项是小字号粗体精致胶囊，字号可自适应缩小，不能比触发框更粗更大，也不能出现菜单比触发框宽一截。
+51. **导航右上角弹窗对齐新版下拉语言** — 通知和用户胶囊 hover 菜单必须使用精致小卡片：`2px` 边框、`8px` 圆角、小字号粗体；用户菜单宽度跟随用户胶囊，通知菜单宽度约等于通知按钮 + 用户胶囊组合宽度；菜单内图标最大边等于当前字体高度。
+52. **toast 胶囊图标统一** — 登录、注册、后台保存、错误、警告、成功等 toast 使用 `AdminToast` 和 `TaotuIcon`，成功/警告/错误分别使用圆形勾、警告、叉/禁止类图标，图标颜色跟随 toast 主题色；不要新增散落行内 alert 或无图标 toast。
+53. **密码输入眼睛一致** — 登录页、注册页、忘记密码、用户中心、云同步等密码框必须使用内嵌右侧 eye/eye-off 图标按钮；不要使用独立圆形按钮或文字“显示密码”破坏排版。
+54. **人工标签 hover 预览可复用** — 管理员人工标签和仪表盘人工标签使用 `client/components/ManualImageHoverPreview.vue`；预览固定宽 320px，优先 `medium_url`，自动判断上/下方和左右边界。后续新增人工打标入口必须复用该组件，不要重复写浮层。
+55. **WebDAV 必须动态导入** — `webdav` 当前为 ESM 包，CommonJS 后端服务不能在顶层 `require('webdav')`；必须通过 `import('webdav')` 按需加载并缓存 Promise，否则 PM2 启动会直接失败。
+56. **数字胶囊必须自适应宽度** — 图片数量、浏览数、标签数量、分页/标签 tab 等胶囊或按钮出现数字时必须 `width:max-content` / `white-space:nowrap` / `font-variant-numeric:tabular-nums`，不能按两三位数字写死宽度导致四位数溢出。
+57. **相册详情网格分页按列数计算** — `/albums/:id` 网格模式每页数量必须根据实际容器列数计算，保证第一页尽量填满；不要恢复固定 24 张导致宽屏尾部空出多个图片位。
+58. **后端必须保持原生 ESM** — 根包启用 `"type":"module"`，`server/**/*.js`、迁移、seed、`knexfile.js` 必须使用 `import/export`；禁止新增 `require()` / `module.exports` / `exports.*`。相对导入必须写完整 `.js` 或 `/index.js`，目录导入不可依赖 CommonJS 解析。
+59. **启动顺序不能被静态导入破坏** — `server/index.js` 必须先 `await startupService.bootstrap()`，再动态 `import('./app.js')`；不要把 `app` 静态 import 到入口顶部，否则会绕过启动自检、迁移和首个管理员初始化顺序。
+60. **ESM 路径写法固定** — 需要 `__dirname` 的文件使用 `fileURLToPath(import.meta.url)` + `path.dirname()`；读取 `package.json` 优先用 `fs.readFileSync` + `JSON.parse`，兼容 Node 18/24，不使用 JSON import assertion/attribute。
+61. **Knex CLI 不加旧 --esm** — 当前 Knex 可原生读取 ESM `knexfile.js`，`npm run migrate` 保持 `knex migrate:latest`；不要加 `--esm`，旧 `esm` loader 在 Node 24 会报错。
+62. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
 
 ## 项目结构
 
@@ -159,12 +167,16 @@ pm2 logs                     # 查看日志
 
 Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开发计划.md`。
 
-## 当前实现状态（v0.3.1-pre-fix5）
+## 当前实现状态（v0.3.1）
 
-> v0.3.1-pre-fix5 是 0.3.1 正式版发布前的第五个本地预发布修复点：大框架和业务接口保持稳定，当前重点完成后端 CommonJS 到原生 ES Module 的等价迁移，并延续登录态连续性、权限隔离、私有媒体门禁、页面 Q 弹转场、人工标签预览、相册细节和 WebDAV 启动兼容；部分图标仍允许使用占位资源，等待最终图标替换。
+> v0.3.1 是当前正式版：大框架和业务接口保持稳定，已完成后端 CommonJS 到原生 ES Module 的等价迁移，并收口登录态连续性、权限隔离、私有媒体门禁、页面 Q 弹转场、人工标签预览、相册细节、WebDAV 启动兼容、Boxicons 图标体系与精致下拉/弹窗 UI 规范。
 
 - 访客端和普通用户端已统一新版视觉：默认布局、导航、页脚、首页图库、相册、图片详情、上传、API 文档、登录、注册和仪表盘均已重构。
 - 默认布局主导航已去掉栏目图标；图库首页顶部透明导航只在 `/` 且滚动位于顶端时启用，离开顶部或进入相册/API/上传/仪表盘后立即恢复玻璃导航。主导航 active 使用自定义精确匹配和点击即时同步，避免首次点击路由后按钮不亮或 `/` 默认匹配串路由。
+- 控制类图标统一通过 `TaotuIcon` 渲染 `@boxicons/vue`，默认线性、状态填充、颜色继承；按钮、侧边栏、toast、信息提示和下拉项不要再使用 PNG 占位或字符伪图标。
+- `TaotuSelect` 已替换全站原生下拉框，统一支持副描述、选中勾、自动上下弹出和小卡片动画；菜单宽度等于触发框，边框 `2px`，圆角 `8px`，选项最多 4 项无滚动，超出后内部滚动。
+- 右上角通知/用户胶囊弹窗已统一成精致下拉样式：用户菜单跟随用户胶囊宽度，通知菜单按通知按钮与用户胶囊组合宽度计算，图标最大边等于文字高度。
+- 登录、注册和忘记密码密码框已补齐内嵌 eye/eye-off 图标；后续新增密码框也必须沿用该排版。
 - 管理后台主要入口已重构：概览、图片管理、标签设置、条件标签、站点配置、综合配置、运维监控、用户管理、公告中心，侧边栏入口已按新信息架构合并。
 - 综合配置整合原路径配置、图库管理、数据库只读状态和 API Token；运维监控整合统计、备份恢复和 WebDAV 云同步。
 - 备份恢复已改为真实备份包：整库导出、本地图库真实图片目录打包、manifest 恢复项解析、恢复前弹窗选择恢复内容。
@@ -197,7 +209,7 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - `/api/tags` 必须返回 `mutually_exclusive_with`，图库/API 参数互斥校验统一走 `server/utils/tagConflict.js`。
 - 上传成功链接卡片在 `client/pages/upload.vue`，成功文件会从待上传队列移除，继续选择文件为追加。
 - 自定义路径读取/保存逻辑在 `configService.readPaths/writePaths` 与后台综合配置页，数据库表为 `custom_paths`；`make_public` 持久化路径扫描“批量公开”开关。删除自定义路径时只清理该路径扫描入库的图片记录、`image_tags` 关联和 `data/gallery/.derived` 下对应派生缩略图，不删除外部原始图片，不删除相册和标签定义。
-- 发布路线：当前为 `0.3.1-pre-fix5`；图标替换后发布 `0.3.1` 正式版；移动端重新适配、主副标题拆分和面板内容收纳进入后续 `0.4.0` / `0.4.x`，稳定后再进入 `1.0.0`。
+- 发布路线：当前为 `0.3.1` 正式版；移动端重新适配、主副标题拆分和面板内容收纳进入后续 `0.4.0` / `0.4.x`，稳定后再进入 `1.0.0`。
 
 ## 提交前检查
 

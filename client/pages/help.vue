@@ -7,7 +7,7 @@
         <p>这里整理了{{ siteName }}常用功能说明、账号与上传问题、公开分享注意事项、隐私安全和部署者管理建议。本站是图片托管与图库索引系统，用户和部署者都应自行确保上传与公开内容合法合规。</p>
       </div>
       <label class="help-search">
-        <img src="/icons/actions/search-64x64.png" alt="" />
+        <TaotuIcon name="search" />
         <input v-model.trim="keyword" placeholder="搜索上传、相册、标签、公开图片、API、隐私安全..." />
       </label>
     </section>
@@ -25,7 +25,7 @@
 
     <section class="help-grid">
       <article v-for="category in filteredCategories" :key="category.title" class="help-card glass-card">
-        <img :src="category.icon" alt="" />
+        <TaotuIcon :name="category.icon" filled />
         <h2>{{ category.title }}</h2>
         <ul>
           <li v-for="item in category.items.slice(0, category.expanded ? category.items.length : 4)" :key="item.title">
@@ -66,7 +66,7 @@ const siteNameHelpBody = computed(() => [
 const categories = reactive([
   {
     title: '开始使用',
-    icon: '/icons/nav/gallery-64x64.png',
+    icon: 'gallery',
     expanded: false,
     items: [
       { title: siteNameHelpTitle, body: siteNameHelpBody, tips: ['上传前请确认图片来源合法。', '公开图片可能被第三方缓存、引用或转发。'] },
@@ -78,7 +78,7 @@ const categories = reactive([
   },
   {
     title: '上传、导入和管理图片',
-    icon: '/icons/nav/upload-64x64.png',
+    icon: 'upload',
     expanded: false,
     items: [
       { title: '上传图片', body: ['用户可在上传页选择文件上传。上传成功后，系统会生成公开链接、缩略图、中等图和嵌入代码。', '上传者应确保图片不违反法律法规、不侵犯他人权利、不包含敏感隐私或违法内容。'] },
@@ -90,7 +90,7 @@ const categories = reactive([
   },
   {
     title: '相册、标签和搜索',
-    icon: '/icons/gallery/tag-add-64x64.png',
+    icon: 'tag-add',
     expanded: false,
     items: [
       { title: '创建和管理相册', body: ['相册可用于整理图片、设置封面、公开相册和管理相册内图片。', '相册公开不等于相册内所有图片都公开；如需统一公开，请使用“公开所有图片”。'] },
@@ -102,7 +102,7 @@ const categories = reactive([
   },
   {
     title: 'API、外链和分享',
-    icon: '/icons/nav/api-64x64.png',
+    icon: 'api',
     expanded: false,
     items: [
       { title: '生成和使用 API Token', body: ['登录用户可生成 API Token，用于接口认证访问自己的私有内容。管理员可管理 Token。', 'Token 等同访问凭据，请不要公开到网页、仓库、聊天记录或不可信工具。'] },
@@ -114,7 +114,7 @@ const categories = reactive([
   },
   {
     title: '隐私、安全和法律',
-    icon: '/icons/status/locked-64x64.png',
+    icon: 'locked',
     expanded: false,
     items: [
       { title: '公开图片的隐私风险', body: ['公开图片、相册、外链和嵌入代码可能被任何获得链接的人访问，也可能被浏览器、CDN、搜索引擎或第三方网站缓存。', '请勿公开包含身份证件、住址、联系方式、精确位置、未成年人隐私或商业秘密的图片。'] },
@@ -126,7 +126,7 @@ const categories = reactive([
   },
   {
     title: '部署者和管理员',
-    icon: '/icons/actions/settings-64x64.png',
+    icon: 'settings',
     expanded: false,
     items: [
       { title: '首次部署和管理员账号', body: ['服务启动会检查环境变量、数据库、迁移和首个管理员。空用户表会自动创建首个管理员。', '请尽快修改默认邮箱和密码，配置备案号、公开域名、SMTP、Redis、HTTPS 和备份策略。'] },
@@ -184,7 +184,7 @@ onMounted(async () => {
 h1 { margin: 0 0 12px; color: #2d3850; font-size: 34px; font-weight: 950; }
 .help-hero p { max-width: 880px; margin: 0; color: #68748b; font-size: 15px; font-weight: 800; line-height: 1.9; }
 .help-search { height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 15px; border: 1px solid rgba(226, 230, 241, 0.9); border-radius: 999px; background: rgba(255,255,255,0.86); }
-.help-search img { width: 18px; height: 18px; }
+.help-search .taotu-svg-icon { width: 18px; height: 18px; }
 .help-search input { width: 100%; border: 0; outline: none; background: transparent; color: #4f5b72; font-size: 14px; font-weight: 850; }
 .help-contact { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 22px; margin-bottom: 18px; }
 .help-contact strong { color: #2d3850; font-size: 17px; font-weight: 950; }
@@ -194,7 +194,7 @@ h1 { margin: 0 0 12px; color: #2d3850; font-size: 34px; font-weight: 950; }
 .contact-mail small { max-width: 420px; margin-top: 4px; color: #9aa4b8; font-size: 12px; font-weight: 800; text-align: right; }
 .help-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .help-card { padding: 26px 26px 22px; min-height: 360px; }
-.help-card > img { width: 44px; height: 44px; object-fit: contain; margin-bottom: 16px; }
+.help-card > .taotu-svg-icon { width: 48px; height: 48px; margin-bottom: 16px; color: var(--taotu-pink); }
 .help-card h2 { margin: 0 0 18px; color: #172033; font-size: 24px; font-weight: 950; line-height: 1.25; }
 .help-card ul { display: grid; gap: 14px; margin: 0 0 18px; padding: 0; list-style: none; }
 .help-card button:not(.more-btn) { padding: 0; border: 0; background: transparent; color: #172033; font-size: 15px; font-weight: 850; line-height: 1.55; text-align: left; cursor: pointer; }

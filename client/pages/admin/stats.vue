@@ -7,7 +7,7 @@
           <strong>{{ formatNumber(card.value) }}</strong>
           <small>较昨日 <b>{{ formatChange(card.change) }}</b></small>
         </div>
-        <div class="stat-icon"><img :src="card.icon" alt="" /></div>
+        <div class="stat-icon"><TaotuIcon :name="card.icon" filled /></div>
       </article>
     </section>
 
@@ -15,9 +15,7 @@
       <article class="ops-card chart-card">
         <div class="card-title-row">
           <h2>API 调用量（近 30 天）</h2>
-          <select v-model="chartRange" class="range-select" @change="loadOpsData">
-            <option value="30">近 30 天</option>
-          </select>
+          <TaotuSelect v-model="chartRange" class="range-select" :options="chartRangeOptions" @change="loadOpsData" />
         </div>
         <div class="line-chart">
           <div class="y-axis">
@@ -48,7 +46,7 @@
           <div v-for="img in topImages" :key="img.id" class="hot-row">
             <img :src="assetUrl(img.thumb_url || img.medium_url || img.url)" :alt="img.filename" />
             <span>{{ img.filename }}</span>
-            <em>◎ {{ formatCompact(img.view_count) }}</em>
+            <em class="views"><TaotuIcon name="views" filled /> {{ formatCompact(img.view_count) }}</em>
             <em class="likes">♡ {{ formatCompact(img.like_count) }}</em>
           </div>
           <div v-if="!topImages.length" class="mini-empty">暂无热门图片</div>
@@ -99,7 +97,7 @@
             <h3>备份结果</h3>
             <div v-if="backupResult" class="result-box" :class="backupResult.success ? 'success' : 'error'">
               <div class="result-title">
-                <img :src="backupResult.success ? '/icons/admin/status-ok-placeholder.svg' : '/icons/admin/status-error-placeholder.svg'" alt="" />
+                <TaotuIcon :name="backupResult.success ? 'status-ok-placeholder' : 'status-error-placeholder'" />
                 <b>{{ backupResult.success ? '备份创建成功' : '备份创建失败' }}</b>
               </div>
               <p>{{ backupResult.message }}</p>
@@ -150,7 +148,9 @@
             <label class="password-line">
               <span>密码</span>
               <input v-model="webdav.password" :type="showPassword ? 'text' : 'password'" placeholder="••••••••••••••" />
-              <button type="button" @click="showPassword = !showPassword">◎</button>
+              <button type="button" @click="showPassword = !showPassword">
+                <TaotuIcon :name="showPassword ? 'eye-off' : 'eye'" />
+              </button>
             </label>
             <label><span>远程路径</span><input v-model="webdav.remotePath" placeholder="/taotu-backup" /></label>
             <div class="webdav-actions">
@@ -175,7 +175,7 @@
         </div>
 
         <div class="sync-status" :class="syncStatus.success ? 'success' : 'error'">
-          <img :src="syncStatus.success ? '/icons/admin/status-ok-placeholder.svg' : '/icons/admin/status-error-placeholder.svg'" alt="" />
+          <TaotuIcon :name="syncStatus.success ? 'status-ok-placeholder' : 'status-error-placeholder'" />
           <div><b>{{ syncStatus.success ? '同步成功' : (syncStatus.message === '尚未同步' ? '尚未同步' : '同步失败') }}</b><span>{{ syncStatus.updatedAt ? `最新同步于 ${formatDateTime(syncStatus.updatedAt)}` : syncStatus.message }}</span></div>
           <button type="button" @click="openSyncLogs">查看日志 →</button>
         </div>
@@ -242,6 +242,9 @@ definePageMeta({ layout: 'admin' })
 const api = useApi()
 const config = useRuntimeConfig()
 const chartRange = ref('30')
+const chartRangeOptions = [
+  { label: '近 30 天', value: '30' }
+]
 const opsData = ref({ cards: {}, apiTrend: { labels: [], values: [] }, topImages: [] })
 const backups = ref([])
 const showAllBackups = ref(false)
@@ -268,11 +271,11 @@ const backupItems = [
 ]
 
 const statDefinitions = [
-  { key: 'totalImages', label: '总图片', icon: '/icons/admin/image-management-64x64.png', tone: 'pink' },
-  { key: 'totalAlbums', label: '总相册', icon: '/icons/admin/album-management-64x64.png', tone: 'blue' },
-  { key: 'totalUsers', label: '总用户', icon: '/icons/admin/users-64x64.png', tone: 'green' },
-  { key: 'todayApiCalls', label: '今日 API 调用', icon: '/icons/admin/api-settings-64x64.png', tone: 'purple' },
-  { key: 'todayUploads', label: '今日上传', icon: '/icons/admin/cloud-sync-64x64.png', tone: 'rose' }
+  { key: 'totalImages', label: '总图片', icon: 'image-management', tone: 'pink' },
+  { key: 'totalAlbums', label: '总相册', icon: 'album-management', tone: 'blue' },
+  { key: 'totalUsers', label: '总用户', icon: 'users', tone: 'green' },
+  { key: 'todayApiCalls', label: '今日 API 调用', icon: 'api-settings', tone: 'purple' },
+  { key: 'todayUploads', label: '今日上传', icon: 'cloud-sync', tone: 'rose' }
 ]
 
 const statCards = computed(() => statDefinitions.map((item) => ({ ...item, ...(opsData.value.cards?.[item.key] || { value: 0, change: 0 }) })))
@@ -478,9 +481,9 @@ onMounted(refreshAll)
 .ops-stat-card strong { display: block; color: #26324a; font-size: 27px; line-height: 1.05; font-weight: 900; }
 .ops-stat-card small { display: block; margin-top: 8px; color: #8792a9; font-size: 13px; font-weight: 800; }
 .ops-stat-card small b { color: #ff6f9d; font-weight: 900; }
-.stat-icon { width: 54px; height: 54px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: var(--soft); }
-.stat-icon img { width: 30px; height: 30px; object-fit: contain; }
-.ops-stat-card.pink { --soft: #f2e5ff; } .ops-stat-card.blue { --soft: #edf4ff; } .ops-stat-card.green { --soft: #e5f8f2; } .ops-stat-card.purple { --soft: #f3e9ff; } .ops-stat-card.rose { --soft: #ffe8f1; }
+.stat-icon { width: 58px; height: 58px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: var(--soft); color: color-mix(in srgb, var(--tone) 62%, #ffffff); }
+.stat-icon .taotu-svg-icon { width: 34px; height: 34px; }
+.ops-stat-card.pink { --soft: #ffe8f1; --tone: #ff74a5; } .ops-stat-card.blue { --soft: #edf4ff; --tone: #6fa0ff; } .ops-stat-card.green { --soft: #e5f8f2; --tone: #3dc49c; } .ops-stat-card.purple { --soft: #f3e9ff; --tone: #9b7cf4; } .ops-stat-card.rose { --soft: #ffe8f1; --tone: #ff74a5; }
 .monitor-grid { display: grid; grid-template-columns: 2fr 1fr 2.1fr; gap: 18px; }
 .ops-card { border-radius: 13px; padding: 18px; }
 .card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
@@ -496,7 +499,7 @@ h2 { margin: 0; color: #3d4860; font-size: 18px; line-height: 1.2; font-weight: 
 .hot-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px 42px; align-items: center; gap: 8px; min-height: 30px; }
 .hot-row img { width: 42px; height: 28px; border-radius: 5px; object-fit: cover; background: #f4f6fb; }
 .hot-row span { overflow: hidden; color: #5d6880; font-size: 12px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
-.hot-row em { color: #8d98ad; font-size: 11px; font-style: normal; font-weight: 800; text-align: right; white-space: nowrap; } .hot-row .likes { color: #ff77a5; }
+.hot-row em { display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; color: #8d98ad; font-size: 11px; font-style: normal; font-weight: 800; text-align: right; white-space: nowrap; } .hot-row .views .taotu-svg-icon { width: 14px; height: 14px; color: #8d98ad; } .hot-row .likes { color: #ff77a5; }
 .rank-link, .all-link { min-height: 36px; display: flex; align-items: center; justify-content: center; width: 100%; margin-top: 12px; border: 1px solid rgba(224, 229, 240, 0.78); border-radius: 8px; background: rgba(255,255,255,0.48); color: #9b7cf4; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; }
 .empty-card { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .empty-illustration { position: relative; width: 118px; height: 86px; margin-bottom: 14px; opacity: 0.82; }
@@ -519,7 +522,7 @@ h2 { margin: 0; color: #3d4860; font-size: 18px; line-height: 1.2; font-weight: 
 .progress-track { height: 5px; margin: 9px 0; border-radius: 999px; background: #efeefb; overflow: hidden; } .progress-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff78a8, #7d86f2); }
 .progress-block small { color: #a3acbd; font-weight: 800; }
 .result-box { padding: 12px; border-radius: 8px; border: 1px solid; } .result-box.success { background: rgba(229, 255, 247, 0.72); border-color: rgba(65, 196, 156, 0.32); color: #34b88c; } .result-box.error { background: rgba(255, 239, 244, 0.72); border-color: rgba(240, 95, 120, 0.32); color: #df5f78; }
-.result-title { display: flex; align-items: center; gap: 8px; font-weight: 900; } .result-title img { width: 18px; height: 18px; } .result-box p { margin: 5px 0 0 26px; color: #99a4b7; font-size: 12px; font-weight: 800; }
+.result-title { display: flex; align-items: center; gap: 8px; font-weight: 900; } .result-title .taotu-svg-icon { width: 18px; height: 18px; } .result-box p { margin: 5px 0 0 26px; color: #99a4b7; font-size: 12px; font-weight: 800; }
 .result-warnings { display: grid; gap: 6px; margin: 10px 0 0; padding: 10px 12px 10px 28px; border: 1px solid rgba(245, 177, 77, 0.32); border-radius: 8px; background: rgba(255, 249, 232, 0.76); color: #b47a20; font-size: 12px; font-weight: 900; line-height: 1.55; }
 .result-meta { display: grid; grid-template-columns: 56px 1fr; gap: 8px; margin: 14px 0 0; color: #8792a7; font-size: 13px; font-weight: 800; } .result-meta dd { margin: 0; color: #6b768e; }
 .backup-table-panel { margin-top: 14px; padding: 14px; border-radius: 8px; }
@@ -538,7 +541,8 @@ h2 { margin: 0; color: #3d4860; font-size: 18px; line-height: 1.2; font-weight: 
 .webdav-main { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 18px; padding: 18px 0 14px; }
 .connection-panel label { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 10px; margin-bottom: 10px; color: #6d7890; font-size: 13px; font-weight: 900; }
 .connection-panel input { min-height: 34px; padding: 0 12px; border: 1px solid rgba(220, 226, 238, 0.86); border-radius: 8px; background: rgba(255,255,255,0.58); color: #6d7890; outline: none; }
-.password-line { position: relative; } .password-line button { position: absolute; right: 8px; width: 26px; height: 26px; border: none; background: transparent; color: #9ca6b8; cursor: pointer; }
+.password-line { position: relative; } .password-line button { position: absolute; right: 8px; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: none; background: transparent; color: #9ca6b8; cursor: pointer; }
+.password-line button .taotu-svg-icon { width: 17px; height: 17px; opacity: 0.62; }
 .webdav-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 13px; }
 .spinner { width: 14px; height: 14px; display: inline-block; margin-right: 8px; border: 2px solid #d9dcff; border-top-color: #8c7cf3; border-radius: 50%; vertical-align: -2px; }
 .sync-note-panel { padding: 18px; border: 1px solid rgba(230, 220, 248, 0.88); border-radius: 8px; background: rgba(250, 247, 255, 0.72); }
@@ -547,7 +551,7 @@ h2 { margin: 0; color: #3d4860; font-size: 18px; line-height: 1.2; font-weight: 
 .sync-note-panel li::before { content: '✓'; display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 8px; border-radius: 50%; background: #ffe1ec; color: #ff6f9d; font-size: 11px; }
 .sync-status { min-height: 58px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 112px; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid; border-radius: 8px; }
 .sync-status.success { border-color: rgba(61, 196, 156, 0.3); background: rgba(229, 255, 247, 0.72); color: #34b88c; } .sync-status.error { border-color: rgba(240, 95, 120, 0.28); background: rgba(255, 242, 246, 0.72); color: #df5f78; }
-.sync-status img { width: 18px; height: 18px; } .sync-status b { display: block; font-size: 14px; font-weight: 900; } .sync-status span { color: #8190a8; font-size: 12px; font-weight: 800; } .sync-status button { border: none; background: transparent; color: #8c72df; font-size: 13px; font-weight: 900; text-decoration: none; text-align: right; cursor: pointer; }
+.sync-status .taotu-svg-icon { width: 18px; height: 18px; } .sync-status b { display: block; font-size: 14px; font-weight: 900; } .sync-status span { color: #8190a8; font-size: 12px; font-weight: 800; } .sync-status button { border: none; background: transparent; color: #8c72df; font-size: 13px; font-weight: 900; text-decoration: none; text-align: right; cursor: pointer; }
 .modal-mask { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 24px; background: rgba(52, 60, 78, 0.24); backdrop-filter: blur(10px); }
 .restore-modal { width: min(620px, 100%); padding: 22px; border-radius: 14px; } .restore-modal h2 { margin-bottom: 10px; }
 .modal-desc { color: #7b879d; font-size: 13px; font-weight: 800; line-height: 1.7; }

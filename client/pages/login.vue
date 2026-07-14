@@ -16,7 +16,23 @@
 
       <div class="form-group">
         <label class="form-label">密码</label>
-        <input v-model="form.password" type="password" class="fluent-input" placeholder="请输入密码" @keyup.enter="handleLogin" />
+        <div class="password-field">
+          <input
+            v-model="form.password"
+            :type="showLoginPassword ? 'text' : 'password'"
+            class="fluent-input"
+            placeholder="请输入密码"
+            @keyup.enter="handleLogin"
+          />
+          <button
+            type="button"
+            class="password-toggle"
+            :title="showLoginPassword ? '隐藏密码' : '显示密码'"
+            @click="showLoginPassword = !showLoginPassword"
+          >
+            <TaotuIcon :name="showLoginPassword ? 'eye-off' : 'eye'" />
+          </button>
+        </div>
       </div>
 
       <button class="fluent-btn fluent-btn-primary login-btn" @click="handleLogin" :disabled="loading">
@@ -38,7 +54,7 @@
             <h2>忘记密码</h2>
           </div>
           <button class="close-btn" type="button" @click="closeForgotModal">
-            <img src="/icons/actions/close-64x64.png" class="taotu-icon taotu-icon-20" alt="" />
+            <TaotuIcon name="close" class="taotu-icon taotu-icon-20" />
           </button>
         </div>
 
@@ -75,11 +91,42 @@
           </div>
           <div class="form-group">
             <label class="form-label">新密码</label>
-            <input v-model="forgot.newPassword" type="password" class="fluent-input" placeholder="请输入新密码" />
+            <div class="password-field">
+              <input
+                v-model="forgot.newPassword"
+                :type="showForgotNewPassword ? 'text' : 'password'"
+                class="fluent-input"
+                placeholder="请输入新密码"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :title="showForgotNewPassword ? '隐藏密码' : '显示密码'"
+                @click="showForgotNewPassword = !showForgotNewPassword"
+              >
+                <TaotuIcon :name="showForgotNewPassword ? 'eye-off' : 'eye'" />
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">重复新密码</label>
-            <input v-model="forgot.confirmPassword" type="password" class="fluent-input" placeholder="再次输入新密码" @keyup.enter="resetForgotPassword" />
+            <div class="password-field">
+              <input
+                v-model="forgot.confirmPassword"
+                :type="showForgotConfirmPassword ? 'text' : 'password'"
+                class="fluent-input"
+                placeholder="再次输入新密码"
+                @keyup.enter="resetForgotPassword"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :title="showForgotConfirmPassword ? '隐藏密码' : '显示密码'"
+                @click="showForgotConfirmPassword = !showForgotConfirmPassword"
+              >
+                <TaotuIcon :name="showForgotConfirmPassword ? 'eye-off' : 'eye'" />
+              </button>
+            </div>
           </div>
           <div class="modal-actions split-actions">
             <button class="fluent-btn" type="button" @click="resendForgotCode" :disabled="forgotSending || forgotCountdown > 0">
@@ -120,6 +167,9 @@ const forgotCaptchaLoading = ref(false)
 const forgotCountdown = ref(0)
 const forgotError = ref('')
 const forgotSuccess = ref('')
+const showLoginPassword = ref(false)
+const showForgotNewPassword = ref(false)
+const showForgotConfirmPassword = ref(false)
 let forgotTimer = null
 
 const forgot = reactive({
@@ -353,7 +403,7 @@ const resetForgotPassword = async () => {
 .brand-logo {
   width: 62px;
   height: 62px;
-  object-fit: contain;
+
 }
 
 .brand-logo.fallback {
@@ -392,6 +442,27 @@ const resetForgotPassword = async () => {
 .form-label { display: block; color: var(--taotu-text); font-size: 13px; font-weight: 800; margin-bottom: var(--space-sm); }
 .fluent-input { width: 100%; padding: 10px 14px; border: 1px solid var(--fluent-border); border-radius: var(--radius-sm); font-size: 14px; transition: border-color var(--transition-fast); box-sizing: border-box; }
 .fluent-input:focus { outline: none; border-color: var(--fluent-blue); }
+.password-field { position: relative; }
+.password-field .fluent-input { padding-right: 44px; }
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--taotu-text-muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.password-toggle:hover { background: rgba(255, 240, 246, 0.9); color: var(--taotu-pink); }
+.password-toggle .taotu-svg-icon { width: 16px; height: 16px; }
 .error-msg { color: var(--taotu-danger); font-size: 13px; margin-bottom: var(--space-md); text-align: left; }
 .success-msg { color: var(--taotu-success); font-size: 13px; margin-bottom: var(--space-md); text-align: left; }
 .login-btn { width: 100%; padding: 10px; font-size: 15px; }

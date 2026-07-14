@@ -11,19 +11,19 @@
       @keydown.space.prevent="toggle"
     >
       <span class="taotu-select-value" :class="{ placeholder: !selectedOption }">{{ selectedLabel }}</span>
-      <img
-        src="/icons/nav/chevron-down-64x64.png"
-        class="taotu-select-caret"
-        :class="{ open }"
-        alt=""
-      />
+      <TaotuIcon name="chevron-down" class="taotu-select-caret" :class="{ open }" />
     </button>
 
     <Teleport to="body">
+      <Transition name="taotu-select-pop">
       <div
         v-if="open"
         ref="menuRef"
         class="taotu-select-menu"
+        :class="[
+          `placement-${menuPlacement}`,
+          { scrollable: normalizedOptions.length > maxVisibleOptions, 'has-description': hasDescriptions }
+        ]"
         :style="menuStyle"
       >
         <button
@@ -33,15 +33,20 @@
           class="taotu-select-option"
           :class="{ selected: isSelected(option.value), disabled: option.disabled }"
           :disabled="option.disabled"
+          :title="option.title"
           @click="selectOption(option)"
         >
-          <span class="option-label">{{ option.label }}</span>
+          <span class="option-copy">
+            <span class="option-label">{{ option.label }}</span>
+            <span v-if="option.description" class="option-description">{{ option.description }}</span>
+          </span>
           <span v-if="option.count !== undefined && option.count !== null" class="option-count">{{ option.count }}</span>
           <span v-if="isSelected(option.value)" class="option-check">
-            <img src="/icons/status/success-64x64.png" alt="" />
+            <TaotuIcon name="success" />
           </span>
         </button>
       </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -52,7 +57,8 @@ const props = defineProps({
   options: { type: Array, default: () => [] },
   placeholder: { type: String, default: '请选择' },
   disabled: { type: Boolean, default: false },
-  minWidth: { type: Number, default: 0 }
+  minWidth: { type: Number, default: 0 },
+  maxVisibleOptions: { type: Number, default: 4 }
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -62,6 +68,7 @@ const triggerRef = ref(null)
 const menuRef = ref(null)
 const open = ref(false)
 const menuStyle = ref({})
+const menuPlacement = ref('bottom')
 
 const normalizedOptions = computed(() => props.options.map((option, index) => {
   if (typeof option === 'string' || typeof option === 'number') {
@@ -69,13 +76,18 @@ const normalizedOptions = computed(() => props.options.map((option, index) => {
       key: `${option}-${index}`,
       label: String(option),
       value: option,
+      title: String(option),
       disabled: false
     }
   }
+  const label = option.label ?? String(option.value ?? '')
+  const description = option.description || option.subtitle || ''
   return {
     key: option.key ?? `${option.value}-${index}`,
-    label: option.label ?? String(option.value ?? ''),
+    label,
     value: option.value,
+    description,
+    title: [label, description].filter(Boolean).join(String.fromCharCode(10)),
     count: option.count,
     disabled: !!option.disabled
   }
@@ -83,6 +95,7 @@ const normalizedOptions = computed(() => props.options.map((option, index) => {
 
 const selectedOption = computed(() => normalizedOptions.value.find(option => isSameValue(option.value, props.modelValue)))
 const selectedLabel = computed(() => selectedOption.value?.label || props.placeholder)
+const hasDescriptions = computed(() => normalizedOptions.value.some(option => option.description))
 
 function isSameValue(a, b) {
   if (a === b) return true
@@ -98,12 +111,30 @@ function updatePosition() {
   if (!import.meta.client || !triggerRef.value) return
   const rect = triggerRef.value.getBoundingClientRect()
   const gap = 8
-  const width = Math.max(rect.width, props.minWidth || 0)
+  const rawWidth = Math.max(rect.width, props.minWidth || 0)
+  const width = Math.min(rawWidth, window.innerWidth - 32)
+  const visibleCount = Math.max(1, props.maxVisibleOptions || 4)
+  const shownCount = Math.min(normalizedOptions.value.length, visibleCount)
+  const optionHeight = hasDescriptions.value ? 48 : 34
+  const optionGap = 5
+  const menuPadding = 14
+  const preferredHeight = Math.max(52, shownCount * optionHeight + Math.max(0, shownCount - 1) * optionGap + menuPadding)
+  const availableBelow = window.innerHeight - rect.bottom - 24
+  const availableAbove = rect.top - 24
+  const shouldOpenAbove = preferredHeight > availableBelow && availableAbove > availableBelow
+  const availableSpace = Math.max(80, shouldOpenAbove ? availableAbove : availableBelow)
+  const maxHeight = Math.min(preferredHeight, availableSpace)
+  const left = Math.min(Math.max(16, rect.left), window.innerWidth - width - 16)
+  const top = shouldOpenAbove
+    ? Math.max(16, rect.top - gap - maxHeight)
+    : Math.round(rect.bottom + gap)
+  menuPlacement.value = shouldOpenAbove ? 'top' : 'bottom'
   menuStyle.value = {
-    left: `${Math.round(rect.left)}px`,
-    top: `${Math.round(rect.bottom + gap)}px`,
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
     width: `${Math.round(width)}px`,
-    maxHeight: `${Math.max(180, Math.min(360, window.innerHeight - rect.bottom - 24))}px`
+    maxHeight: `${Math.round(maxHeight)}px`,
+    '--taotu-select-menu-height': `${Math.round(maxHeight)}px`
   }
 }
 
@@ -166,6 +197,40 @@ watch(open, (value) => {
   min-width: 0;
 }
 
+.taotu-select.soft-select,
+.taotu-select.soft-input,
+.taotu-select.page-size-select,
+.taotu-select.range-select,
+.taotu-select.user-filter,
+.taotu-select.album-filter {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.taotu-select.page-size-select {
+  width: 118px;
+  flex: 0 0 auto;
+}
+
+.taotu-select.range-select {
+  width: 132px;
+  flex: 0 0 auto;
+}
+
+.taotu-select.user-filter {
+  width: 132px;
+  flex: 0 0 auto;
+}
+
+.taotu-select.album-filter {
+  width: 150px;
+  flex: 0 0 auto;
+}
+
 .taotu-select-trigger {
   width: 100%;
   min-height: 36px;
@@ -220,7 +285,6 @@ watch(open, (value) => {
   height: 14px;
   flex: 0 0 14px;
   margin-right: 3px;
-  object-fit: contain;
   transition: transform var(--taotu-transition);
 }
 
@@ -231,13 +295,26 @@ watch(open, (value) => {
 .taotu-select-menu {
   position: fixed;
   z-index: 3000;
-  padding: 10px;
-  overflow-y: auto;
-  border: 1px solid rgba(242, 222, 236, 0.82);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.88);
+  padding: 7px;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(202, 204, 210, 0.88);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(22px);
   box-shadow: 0 18px 44px rgba(93, 75, 125, 0.14);
+  transform-origin: top center;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(248, 95, 154, 0.5) rgba(255, 240, 246, 0.7);
+}
+
+.taotu-select-menu.scrollable {
+  overflow-y: auto;
+  padding-right: 9px;
+}
+
+.taotu-select-menu.placement-top {
+  transform-origin: bottom center;
 }
 
 .taotu-select-menu::-webkit-scrollbar {
@@ -246,7 +323,12 @@ watch(open, (value) => {
 
 .taotu-select-menu::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(188, 169, 210, 0.42);
+  background: rgba(248, 95, 154, 0.5);
+}
+
+.taotu-select-menu::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 240, 246, 0.72);
 }
 
 .taotu-select-option {
@@ -255,23 +337,41 @@ watch(open, (value) => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--taotu-text);
+  gap: 5px;
+  margin-bottom: 5px;
+  padding: 5px 7px 5px 9px;
+  border: 2px solid rgba(226, 226, 226, 0.9);
+  border-radius: 8px;
+  background: rgba(246, 246, 246, 0.76);
+  color: rgba(122, 127, 140, 0.56);
   cursor: pointer;
-  transition: background var(--taotu-transition), color var(--taotu-transition), transform var(--taotu-transition);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: border-color var(--taotu-transition), background var(--taotu-transition), color var(--taotu-transition), transform var(--taotu-transition), box-shadow var(--taotu-transition);
+}
+
+.taotu-select-menu.has-description .taotu-select-option {
+  min-height: 48px;
+  align-items: center;
+  padding: 6px 9px;
+}
+
+.taotu-select-option:last-child {
+  margin-bottom: 0;
 }
 
 .taotu-select-option:hover {
-  background: rgba(255, 242, 248, 0.82);
+  border-color: rgba(248, 95, 154, 0.82);
+  background: rgba(255, 247, 251, 0.94);
+  color: var(--taotu-pink);
+  transform: translateY(-0.5px);
+  box-shadow: 0 6px 14px rgba(248, 95, 154, 0.08);
 }
 
 .taotu-select-option.selected {
-  background: rgba(255, 215, 233, 0.86);
+  border-color: rgba(248, 95, 154, 0.95);
+  background: rgba(255, 246, 250, 0.98);
   color: #f05b96;
+  box-shadow: 0 6px 14px rgba(248, 95, 154, 0.08);
 }
 
 .taotu-select-option.disabled {
@@ -279,35 +379,82 @@ watch(open, (value) => {
   opacity: 0.48;
 }
 
+.option-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
 .option-label {
   min-width: 0;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 15px;
+  font-weight: 900;
   text-align: left;
 }
 
+.option-description {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  color: color-mix(in srgb, currentColor 48%, #c8c8c8);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .option-count {
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--taotu-text-muted);
+  font-size: 11px;
+  line-height: 15px;
+  color: color-mix(in srgb, currentColor 66%, #c8c8c8);
+  font-weight: 900;
 }
 
 .option-check {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  background: rgba(248, 95, 154, 0.78);
+  border-radius: 50%;
+  color: #f05b96;
 }
 
-.option-check img {
-  width: 12px;
-  height: 12px;
-  object-fit: contain;
+.option-check .taotu-svg-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.taotu-select-pop-enter-active,
+.taotu-select-pop-leave-active {
+  overflow: hidden;
+  transition: opacity 170ms ease, transform 190ms cubic-bezier(0.18, 0.92, 0.22, 1), clip-path 190ms ease;
+}
+
+.taotu-select-pop-enter-from,
+.taotu-select-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scaleY(0.86);
+  clip-path: inset(0 0 100% 0 round 8px);
+}
+
+.taotu-select-menu.placement-top.taotu-select-pop-enter-from,
+.taotu-select-menu.placement-top.taotu-select-pop-leave-to {
+  transform: translateY(8px) scaleY(0.86);
+  clip-path: inset(100% 0 0 0 round 8px);
+}
+
+.taotu-select-pop-enter-to,
+.taotu-select-pop-leave-from {
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  clip-path: inset(0 0 0 0 round 8px);
 }
 </style>

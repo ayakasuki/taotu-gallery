@@ -20,7 +20,7 @@
       />
       <div v-if="!loadedSrc" class="image-loading-shimmer"></div>
       <div v-if="mode === 'grid'" class="view-badge">
-        <img src="/icons/gallery/views-64x64.png" class="view-icon" alt="" />
+        <TaotuIcon name="views" class="view-icon" />
         {{ formatViews(image.view_count || 0) }}
       </div>
       <div v-if="shouldRenderInfo" class="image-gradient"></div>
@@ -281,7 +281,7 @@ const formatViews = (count) => {
 .view-badge .view-icon {
   width: 14px;
   height: 14px;
-  object-fit: contain;
+
   opacity: 0.92;
 }
 

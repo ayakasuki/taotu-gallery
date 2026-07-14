@@ -8,7 +8,7 @@
         role="status"
         aria-live="polite"
       >
-        <span class="toast-icon" aria-hidden="true">{{ iconText }}</span>
+        <TaotuIcon class="toast-icon" :name="iconName" filled :stateful="false" />
         <span class="toast-message">{{ toast.message }}</span>
       </div>
     </Transition>
@@ -18,16 +18,19 @@
 <script setup>
 const { toast } = useAdminToast()
 
-const iconText = computed(() => {
-  if (toast.value.type === 'success') return '✓'
-  if (toast.value.type === 'error' || toast.value.type === 'danger') return '!'
-  if (toast.value.type === 'warning') return '!'
-  return 'i'
+const iconName = computed(() => {
+  if (toast.value.type === 'success') return 'toast-success'
+  if (toast.value.type === 'error' || toast.value.type === 'danger') return 'toast-error'
+  if (toast.value.type === 'warning') return 'toast-warning'
+  return 'toast-info'
 })
 </script>
 
 <style scoped>
 .admin-toast-pill {
+  --toast-bg: rgba(239, 246, 255, 0.92);
+  --toast-border: rgba(166, 178, 210, 0.32);
+  --toast-color: #4d75c8;
   position: fixed;
   top: 84px;
   left: 50%;
@@ -38,10 +41,10 @@ const iconText = computed(() => {
   max-width: min(720px, calc(100vw - 32px));
   min-height: 38px;
   padding: 8px 18px 8px 12px;
-  border: 1px solid rgba(166, 178, 210, 0.32);
+  border: 1px solid var(--toast-border);
   border-radius: 999px;
-  background: rgba(239, 246, 255, 0.92);
-  color: #4d75c8;
+  background: var(--toast-bg);
+  color: var(--toast-color);
   box-shadow: 0 18px 42px rgba(84, 74, 118, 0.16);
   backdrop-filter: blur(18px);
   transform: translateX(-50%);
@@ -49,36 +52,29 @@ const iconText = computed(() => {
 }
 
 .admin-toast-pill.success {
-  border-color: rgba(77, 203, 155, 0.34);
-  background: rgba(236, 255, 248, 0.94);
-  color: #28a977;
+  --toast-bg: rgba(236, 255, 248, 0.94);
+  --toast-border: rgba(77, 203, 155, 0.34);
+  --toast-color: #28a977;
 }
 
 .admin-toast-pill.error,
 .admin-toast-pill.danger {
-  border-color: rgba(248, 95, 132, 0.34);
-  background: rgba(255, 241, 246, 0.95);
-  color: #df5472;
+  --toast-bg: rgba(255, 241, 246, 0.95);
+  --toast-border: rgba(248, 95, 132, 0.34);
+  --toast-color: #df5472;
 }
 
 .admin-toast-pill.warning {
-  border-color: rgba(245, 180, 93, 0.38);
-  background: rgba(255, 250, 238, 0.95);
-  color: #c9892d;
+  --toast-bg: color-mix(in srgb, var(--taotu-warning-soft) 88%, white);
+  --toast-border: rgba(245, 180, 93, 0.38);
+  --toast-color: #d69a35;
 }
 
 .toast-icon {
   width: 22px;
   height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: currentColor;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1;
+  color: var(--toast-color);
+  flex: 0 0 auto;
 }
 
 .toast-message {

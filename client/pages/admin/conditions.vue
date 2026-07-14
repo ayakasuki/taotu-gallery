@@ -10,10 +10,10 @@
         </div>
         <div class="header-actions">
           <button type="button" class="scan-all-btn" :disabled="running" @click="runConditionTag">
-            <img src="/icons/actions/refresh-64x64.png" alt="" />{{ running ? '扫描中...' : '立即扫描所有图片' }}
+            <TaotuIcon name="refresh" />{{ running ? '扫描中...' : '立即扫描所有图片' }}
           </button>
           <button type="button" class="add-condition-btn" @click="openAdd">
-            <img src="/icons/actions/add-64x64.png" alt="" />添加条件标签
+            <TaotuIcon name="add" />添加条件标签
           </button>
         </div>
       </header>
@@ -53,13 +53,13 @@
           </div>
           <div class="row-actions">
             <button type="button" class="icon-btn edit" title="编辑" @click="openEdit(cond)">
-              <img src="/icons/actions/edit-64x64.png" alt="" />
+              <TaotuIcon name="edit" />
             </button>
             <button type="button" class="icon-btn enable" :title="isEnabled(cond) ? '禁用' : '启用'" @click="toggleCondition(cond)">
-              <img src="/icons/status/enabled-64x64.png" alt="" />
+              <TaotuIcon name="enabled" />
             </button>
             <button type="button" class="icon-btn delete" title="删除" @click="deleteCondition(cond)">
-              <img src="/icons/actions/trash-64x64.png" alt="" />
+              <TaotuIcon name="trash" />
             </button>
           </div>
         </div>
@@ -69,11 +69,11 @@
         <span>共 {{ total }} 条条件</span>
         <div class="pager-buttons">
           <button type="button" :disabled="page <= 1" @click="goPage(page - 1)">
-            <img src="/icons/gallery/pagination-prev-64x64.png" alt="" />
+            <TaotuIcon name="pagination-prev" />
           </button>
           <button type="button" class="current">{{ page }}</button>
           <button type="button" :disabled="page >= totalPages" @click="goPage(page + 1)">
-            <img src="/icons/gallery/pagination-next-64x64.png" alt="" />
+            <TaotuIcon name="pagination-next" />
           </button>
         </div>
       </footer>
@@ -118,7 +118,7 @@
         </label>
 
         <button type="button" class="config-save-btn" @click="saveTagConfig">
-          <img src="/icons/actions/save-64x64.png" alt="" />保存通用配置
+          <TaotuIcon name="save" />保存通用配置
         </button>
       </aside>
     </div>
@@ -138,11 +138,7 @@
 
           <label class="form-line">
             <span>条件类型</span>
-            <select v-model="form.type" @change="resetConfigForType">
-              <option v-for="option in conditionTypeOptions" :key="option.value" :value="option.value" :disabled="option.disabled">
-                {{ option.label }}
-              </option>
-            </select>
+            <TaotuSelect v-model="form.type" :options="conditionTypeOptions" @change="resetConfigForType" />
           </label>
 
           <label v-if="form.type === 'path_regex'" class="form-line">
@@ -159,11 +155,7 @@
 
           <label v-if="form.type === 'resolution'" class="form-line">
             <span>分辨率档位</span>
-            <select v-model.number="form.config.minPixels">
-              <option v-for="option in resolutionOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
+            <TaotuSelect v-model="form.config.minPixels" :options="resolutionOptions" />
           </label>
 
           <div v-if="form.type === 'orientation' || form.type === 'aspect_ratio'" class="check-group">
@@ -231,17 +223,17 @@ const typeLabels = {
 }
 
 const conditionTypeOptions = [
-  { label: '分辨率', value: 'resolution' },
-  { label: '路径包含', value: 'path_regex' },
-  { label: '路径排除', value: 'path_exclude' },
-  { label: '宽高比', value: 'orientation' }
+  { label: '分辨率', value: 'resolution', description: '按图片像素档位自动打标签' },
+  { label: '路径包含', value: 'path_regex', description: '路径命中特定关键词时打标签' },
+  { label: '路径排除', value: 'path_exclude', description: '排除命中特定路径的图片' },
+  { label: '宽高比', value: 'orientation', description: '横图、竖图、正方图自动识别' }
 ]
 
 const resolutionOptions = [
-  { label: '1080p以下（短边 <1080，最长边 ≤2560）', value: 720 },
-  { label: '1080p（短边 ≥1080，最长边 ≤2560）', value: 1080 },
-  { label: '2K（最长边 >2560 且 ≤3840）', value: 1440 },
-  { label: '4K+（最长边 >3840）', value: 2160 }
+  { label: '1080p以下', value: 720, description: '短边 <1080，最长边 ≤2560' },
+  { label: '1080p', value: 1080, description: '短边 ≥1080，最长边 ≤2560' },
+  { label: '2K', value: 1440, description: '最长边 >2560 且 ≤3840' },
+  { label: '4K+', value: 2160, description: '最长边 >3840' }
 ]
 
 const defaultConfig = (type = 'resolution') => {
@@ -707,7 +699,7 @@ watch(orientationSelections, (value) => {
   box-shadow: 0 12px 26px rgba(255, 108, 158, 0.2);
 }
 
-.config-save-btn img {
+.config-save-btn .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -785,8 +777,8 @@ watch(orientationSelections, (value) => {
   color: #8d74eb;
 }
 
-.scan-all-btn img,
-.add-condition-btn img {
+.scan-all-btn .taotu-svg-icon,
+.add-condition-btn .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -980,10 +972,9 @@ watch(orientationSelections, (value) => {
   cursor: pointer;
 }
 
-.icon-btn img {
+.icon-btn .taotu-svg-icon {
   width: 15px;
   height: 15px;
-  object-fit: contain;
 }
 
 .icon-btn.edit {
@@ -1052,7 +1043,7 @@ watch(orientationSelections, (value) => {
   cursor: default;
 }
 
-.pager-buttons img {
+.pager-buttons .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -1137,10 +1128,12 @@ watch(orientationSelections, (value) => {
 .form-line select {
   appearance: none;
   padding-right: 36px;
-  background-image: url('/icons/nav/chevron-down-64x64.png');
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
   background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 14px 14px;
+  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+  background-size: 6px 6px, 6px 6px;
 }
 
 .form-line small {
