@@ -5,7 +5,7 @@
       <h1>服务条款</h1>
       <p>本服务条款适用于使用本站图片托管、图库索引、标签管理、相册展示、API 调用和嵌入代码等功能的访问者、注册用户、上传者以及自行部署本开源项目的部署者。</p>
       <div class="meta-row">
-        <span>版本：0.3.1-pre-fix3</span>
+        <span>版本：{{ legalVersion }}</span>
         <span>适用地区：中华人民共和国境内及部署者实际服务地区</span>
         <span>最后更新：2026-06-30</span>
       </div>
@@ -104,6 +104,26 @@
 </template>
 
 <script setup>
+const api = useApi()
+const { readSiteConfigCache, writeSiteConfigCache } = useUiCache()
+const legalVersion = ref('0.3.1-pre-fix4')
+
+const applyLegalVersion = (config = {}) => {
+  legalVersion.value = config.legalVersion || config.appVersion || legalVersion.value
+}
+
+if (import.meta.client) {
+  applyLegalVersion(readSiteConfigCache() || {})
+}
+
+onMounted(async () => {
+  try {
+    const config = await api.get('/api/admin/site-config/public')
+    applyLegalVersion(config)
+    writeSiteConfigCache(config)
+  } catch {}
+})
+
 const toc = [
   { id: 'acceptance', title: '条款接受' },
   { id: 'service', title: '服务内容' },

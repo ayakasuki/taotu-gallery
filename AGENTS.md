@@ -41,7 +41,7 @@
 12. **网格也是贴合式图片墙** — 网格模式不是 CSS Grid 行布局，必须使用最短列定位；横图按 1:1，竖图同宽按比例增高，避免行高空洞。
 13. **瀑布流 hover 只影响当前卡片** — CSS 选择器必须限定 `.image-card.mode-waterfall:hover`，不要让父级 hover 触发所有图片信息层。
 14. **首页默认展示走公开配置** — 首页读取 `/api/gallery/config` 的 `display.mode`；后台保存瀑布流后，未登录访客也应默认瀑布流。
-15. **首页图片必须渐进加载** — 网格和瀑布流都先显示按原比例计算好的平均色块占位，首页卡片优先请求 `thumb_url`，图片请求由前端队列逐张执行，不要恢复一次性并发加载中等图。
+15. **首页图片必须渐进加载** — 网格和瀑布流都先显示按原比例计算好的平均色块占位，首页卡片定稿为优先请求 `medium_url` 保证清晰度，图片请求由前端队列逐张执行，不要恢复一次性并发加载或改回过糊的缩略图。
 16. **首页卡片禁止位移动画** — 新增图片只能在已计算好的画框位置原地淡入，不允许通过 `transform` 过渡从页面上方或中间移动到目标位置。
 17. **网格滚动要保持轻量** — 网格模式的标题、上传者、标签等额外信息层按需渲染；避免在大量图片常态滚动时使用 `backdrop-filter`、重滤镜和全量常驻浮层。
 18. **启动必须先自检再加载 app** — `server/index.js` 必须先执行 `startupService.bootstrap()`，完成 env 校验、数据库检查、迁移和首个管理员初始化后再 `require('./app')`。
@@ -56,22 +56,27 @@
 27. **横竖图条件互斥** — 横图、竖图、正方图自动判定三选一；宽高比接近 `0.9-1.1` 或 `1:1` 归为正方图。
 28. **自定义路径只以数据库为准** — `custom_paths` 表是持久化来源，不回退写 JSON；刷新页面后必须从数据库恢复条目。
 29. **用户私有标签互斥权限隔离** — `user_tags` 有 `combinable` 和 `mutually_exclusive_with` 字段；普通用户只能配置自己拥有的私有标签互斥，API 禁止绑定管理员或其他用户标签。
-30. **验证码依赖 Redis** — 图片验证码、注册邮箱验证码、忘记密码验证码均写 Redis，TTL 120 秒；邮箱验证码必须是 2 个数字 + 3 个英文乱序。
-31. **SMTP 配置在数据库** — `site_config.smtp` 存 SMTP，测试邮件/注册邮件/忘记密码邮件统一走 `mailService.js`。
-32. **前台不能自定义后端地址** — 已删除 `/settings` 和 connection-check 插件；前后端连接由部署与后台维护，不再允许用户在前台写 backend_url。
-33. **备案号在 site_config** — `recordNumber` 由网站配置保存，公开配置接口返回，默认布局页脚展示。
-34. **条件标签定时扫描必须增量** — 定时任务、上传后、路径扫描后只处理尚未拥有对应条件标签的候选图片；只有后台“立即扫描所有图片”允许 force 全量重扫。
-35. **分辨率条件档位互斥** — `below1080p` / `1080p` / `2k` / `4k` 四档覆盖全部图片；4K 档包含 4K 以上，不再细分 8K。
-36. **默认网站背景** — 新部署无背景配置时公开配置返回 `/site_bg.png`；已有自定义背景刷新时不能先闪默认图再切自定义图。
-37. **背景模糊与遮罩** — 首页背景模糊通过 `.taotu-shell` 的 `backdrop-filter` 实现，`.taotu-shell` 不再叠加额外背景色；背景明暗由 `site_config.background.overlayTop/overlayBottom` 控制。
-38. **页面转场必须分层** — 子页面 Q 弹动画只能作用在内容层，不能直接动画带背景图、`::before` 粉蓝底图、`backdrop-filter` 或固定模糊背景的页面根；图片详情需等 `.detail-bg img` 完成或缓存确认后立即触发 `.detail-shell` 动画，后台子页由 `admin-main` 监听路由切换后只动画页面根下一级内容；新增面板遇到背景模糊延迟时优先拆“背景静态层 + 内容 motion 层”。
-39. **公告通知必须数据库驱动** — 公告存 `announcements`，已读状态存 `announcement_reads`；后台删除公告后用户通知同步消失。
-40. **备份恢复必须真实可用** — 数据库备份导出整库，本地图库备份包含真实图片文件；恢复前必须读取 manifest 并让用户选择实际支持的恢复项。
-41. **全局提示统一 toast** — 登录、后台配置、图片/标签/条件等普通成功失败提示统一复用导航下方胶囊 toast；不要再新增散落的行内 alert。
-42. **前台主导航保持简洁** — 默认布局主导航按钮只保留文字，不再显示栏目图标；登录、通知、用户胶囊等独立控件可以保留自己的图标。
-43. **图库首页透明导航只在顶部生效** — 仅 `/` 页面滚动到顶部时隐藏导航背景/模糊/分隔线并让主导航文字变白；离开顶部或进入其它页面必须恢复常规玻璃导航。默认布局导航使用自定义 `currentPath` 和精确 active，不依赖 Nuxt 默认 `router-link-active`，避免 `/` 路由影响相册/API/上传/仪表盘。
-44. **导航左右端跟随页面容器** — `brand-link` 和通知/用户区应通过默认布局内的 `nav-frame` 对齐图库、相册、API 文档、上传、仪表盘等页面主体左右边界，宽屏不要贴浏览器边缘。
-45. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
+30. **普通用户绝不能越权后台和私有媒体** — `/admin` 页面、后台导航、后台数据和所有站点级编辑能力只允许 `role=admin`；普通用户即使用 curl、手改 URL、复用 JWT/session，也不能访问或看到综合配置、条件标签、数据库、备份、云同步、用户管理、站点配置、平台标签等任何后台页面/API/数据。普通用户功能只能放在仪表盘或普通用户专属 API，后端必须同时做角色鉴权和资源所有权校验，不能只靠前端隐藏按钮；`/image/*` 与 `/thumb/*` 这类 hash 媒体直链也必须校验公开状态、公共相册、所有者或管理员，不能把 hash 当成权限。
+31. **验证码依赖 Redis** — 图片验证码、注册邮箱验证码、忘记密码验证码均写 Redis，TTL 120 秒；邮箱验证码必须是 2 个数字 + 3 个英文乱序。
+32. **SMTP 配置在数据库** — `site_config.smtp` 存 SMTP，测试邮件/注册邮件/忘记密码邮件统一走 `mailService.js`。
+33. **前台不能自定义后端地址** — 已删除 `/settings` 和 connection-check 插件；前后端连接由部署与后台维护，不再允许用户在前台写 backend_url。
+34. **备案号在 site_config** — `recordNumber` 由网站配置保存，公开配置接口返回，默认布局页脚展示。
+35. **条件标签定时扫描必须增量** — 定时任务、上传后、路径扫描后只处理尚未拥有对应条件标签的候选图片；只有后台“立即扫描所有图片”允许 force 全量重扫。
+36. **分辨率条件档位互斥** — `below1080p` / `1080p` / `2k` / `4k` 四档覆盖全部图片；4K 档包含 4K 以上，不再细分 8K。
+37. **默认网站背景** — 新部署无背景配置时公开配置返回 `/site_bg.png`；已有自定义背景刷新时不能先闪默认图再切自定义图。
+38. **背景模糊与遮罩** — 首页背景模糊通过 `.taotu-shell` 的 `backdrop-filter` 实现，`.taotu-shell` 不再叠加额外背景色；背景明暗由 `site_config.background.overlayTop/overlayBottom` 控制。
+39. **页面转场必须分层** — 子页面 Q 弹动画只能作用在内容层，不能直接动画带背景图、`::before` 粉蓝底图、`backdrop-filter` 或固定模糊背景的页面根；图片详情需等 `.detail-bg img` 完成或缓存确认后立即触发 `.detail-shell` 动画，后台子页由 `admin-main` 监听路由切换后只动画页面根下一级内容；新增面板遇到背景模糊延迟时优先拆“背景静态层 + 内容 motion 层”。
+40. **公告通知必须数据库驱动** — 公告存 `announcements`，已读状态存 `announcement_reads`；后台删除公告后用户通知同步消失。
+41. **备份恢复必须真实可用** — 数据库备份导出整库，本地图库备份包含真实图片文件；恢复前必须读取 manifest 并让用户选择实际支持的恢复项。
+42. **全局提示统一 toast** — 登录、后台配置、图片/标签/条件等普通成功失败提示统一复用导航下方胶囊 toast；不要再新增散落的行内 alert。
+43. **前台主导航保持简洁** — 默认布局主导航按钮只保留文字，不再显示栏目图标；登录、通知、用户胶囊等独立控件可以保留自己的图标。
+44. **图库首页透明导航只在顶部生效** — 仅 `/` 页面滚动到顶部时隐藏导航背景/模糊/分隔线并让主导航文字变白；离开顶部或进入其它页面必须恢复常规玻璃导航。默认布局导航使用自定义 `currentPath` 和精确 active，不依赖 Nuxt 默认 `router-link-active`，避免 `/` 路由影响相册/API/上传/仪表盘。
+45. **导航左右端跟随页面容器** — `brand-link` 和通知/用户区应通过默认布局内的 `nav-frame` 对齐图库、相册、API 文档、上传、仪表盘等页面主体左右边界，宽屏不要贴浏览器边缘。
+46. **人工标签 hover 预览可复用** — 管理员人工标签和仪表盘人工标签使用 `client/components/ManualImageHoverPreview.vue`；预览固定宽 320px，优先 `medium_url`，自动判断上/下方和左右边界。后续新增人工打标入口必须复用该组件，不要重复写浮层。
+47. **WebDAV 必须动态导入** — `webdav` 当前为 ESM 包，CommonJS 后端服务不能在顶层 `require('webdav')`；必须通过 `import('webdav')` 按需加载并缓存 Promise，否则 PM2 启动会直接失败。
+48. **数字胶囊必须自适应宽度** — 图片数量、浏览数、标签数量、分页/标签 tab 等胶囊或按钮出现数字时必须 `width:max-content` / `white-space:nowrap` / `font-variant-numeric:tabular-nums`，不能按两三位数字写死宽度导致四位数溢出。
+49. **相册详情网格分页按列数计算** — `/albums/:id` 网格模式每页数量必须根据实际容器列数计算，保证第一页尽量填满；不要恢复固定 24 张导致宽屏尾部空出多个图片位。
+50. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
 
 ## 项目结构
 
@@ -81,7 +86,7 @@
 │   ├── index.js         # 启动（先自检/迁移，再支持 HTTP/HTTPS）
 │   ├── config/          # 配置
 │   ├── db/migrations/   # Knex 迁移
-│   ├── middleware/       # auth / errorHandler / apiToken / apiLogger
+│   ├── middleware/       # auth / requireAdmin / errorHandler / apiToken / apiLogger
 │   ├── routes/api/      # 对外 API（images/albums/tags/embed/upload）
 │   ├── routes/internal/ # 前端内部 API（images/albums）
 │   ├── routes/admin/    # 管理 API（18+ 端点）
@@ -152,7 +157,7 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 
 ## 当前实现状态（v0.3.1-pre-fix4）
 
-> v0.3.1-pre-fix4 是 0.3.1 正式版发布前的第四个本地预发布修复点：大框架保持稳定，当前重点收口登录态连续性、导航透明/玻璃状态一致性、页面 Q 弹转场分层和图片详情加载占位；部分图标仍允许使用占位资源，等待最终图标替换。
+> v0.3.1-pre-fix4 是 0.3.1 正式版发布前的第四个本地预发布修复点：大框架保持稳定，当前重点收口登录态连续性、权限隔离、私有媒体门禁、导航透明/玻璃状态一致性、页面 Q 弹转场分层、人工标签预览、相册细节和 WebDAV 启动兼容；部分图标仍允许使用占位资源，等待最终图标替换。
 
 - 访客端和普通用户端已统一新版视觉：默认布局、导航、页脚、首页图库、相册、图片详情、上传、API 文档、登录、注册和仪表盘均已重构。
 - 默认布局主导航已去掉栏目图标；图库首页顶部透明导航只在 `/` 且滚动位于顶端时启用，离开顶部或进入相册/API/上传/仪表盘后立即恢复玻璃导航。主导航 active 使用自定义精确匹配和点击即时同步，避免首次点击路由后按钮不亮或 `/` 默认匹配串路由。
@@ -164,11 +169,14 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - 站点配置背景模糊使用 `.taotu-shell` 的 `backdrop-filter`，遮罩颜色保存在 `site_config.background.overlayTop/overlayBottom`；不要给 `.taotu-shell` 再叠额外背景色。
 - 页面切换 Q 弹转场已分层并增强力度：图片详情固定模糊背景先渲染，背景图完成或缓存确认后立即弹出内容层；后台子页保留页面根的粉蓝背景和伪元素静态，只对页面根下一级内容做 Q 弹动画；详情加载态使用 `/icons/image/detail-loading-placeholder.gif` 占位，后续可替换为动图资源。
 - 登录态刷新校验只在明确 `401/403` 时清理会话，网络或普通接口失败不再误退出；`clearAuthSession()` 统一清理 Token、用户缓存并广播 `taotu:auth-invalid`。
+- 权限隔离必须前后端同时执行：`client/layouts/admin.vue` 默认不渲染后台 slot，必须通过 `/api/admin/auth/me` 确认为管理员后才显示后台；后端用 `server/middleware/requireAdmin.js` 统一保护站点级后台 API，普通用户只能访问自己的仪表盘、相册、图片、Token 和私有标签等自有资源；私有图片的 `/image` 与 `/thumb` hash 直链也必须经过媒体门禁，前端通过同站 `taotu_token` Cookie 让 `<img>` 请求继承登录态。
 - 首页图库只保留 `grid` / `waterfall`，公开接口 `/api/gallery/config` 决定访客默认模式；网格和瀑布流都使用最短列贴合布局，并采用平均色块占位、中等图优先、前端逐张队列请求和原地淡入，避免一次性加载大量图片造成卡顿。
 - 首页新图片必须在已计算好的画框位置显示，不允许恢复从页面上方或中间移动到目标位置的位移动画；首次硬刷新后触底加载由布局完成后的可视检查兜底触发。
 - 网格模式已做多图滚动优化：屏外卡片允许浏览器跳过绘制，已加载图片释放可见性监听，卡片额外信息层按需渲染，避免大量标签/模糊滤镜常驻影响滚动。
 - 普通用户仪表盘概览的最近上传最多显示 25 张（5 列 5 行）；右侧存储使用与账号摘要组合高度需和最近上传面板对齐。
 - 普通用户仪表盘保留统计、图片管理、标签设置、账户与安全；相册管理统一回到相册页完成。
+- 管理员人工标签和普通用户仪表盘人工标签的小图 hover 会通过 `ManualImageHoverPreview` 显示 320px 宽中等图预览；提示文案在选择行右侧，浮层自动避免上方/左右出屏。
+- 相册详情网格模式每页数量按实际容器列数动态计算，避免宽屏第一页未填满但第二页仍有图片；图片数量、浏览数、标签数量等胶囊宽度必须随数字自动撑开。
 - 自定义路径扫描导入必须生成派生缩略图：外部原图目录不写 `.thumbs` 时，缩略图/中等图落在 `data/gallery/.derived/<源图路径hash>/`；`/thumb` 先找原图同目录 `.thumbs`，再找 `.derived`，缺失时按需补生成，最后才回退原图。
 - 图片详情嵌入代码必须按当前尺寸切换 12 种组合，缩略图和中等图需要带对应 `s=thumb` / `s=medium` 参数，不能始终返回完整图地址。
 - 相册“公开所有图片”使用 `albums.all_picture_public` 持久化按钮状态；开启和关闭都要覆盖相册内所有图片的 `is_public`，不要仅按当前图片是否全公开临时推断。
@@ -178,6 +186,8 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - 条件标签使用 `conditions.tag_id` 稳定关联 `tags.id`；定时扫描、上传后、路径扫描后都必须增量跳过已标记图片，手动立即扫描才全量 force。
 - 分辨率条件档位为 `below1080p`、`1080p`、`2k`、`4k`；横图、竖图、正方图按 `0.9-1.1` 正方容差互斥判定。
 - SMTP、公开域名、备案号、注册开关、背景、WebDAV、默认展示、配额等全部写入 `site_config`。
+- 隐私政策、服务条款和帮助中心应读取公开配置返回的站点名与 `appVersion` / `legalVersion`，不要写死协议版本或固定“桃图智库”。
+- WebDAV 云同步在 `server/services/cloudSyncService.js` 中按需动态 `import('webdav')`，不要恢复顶层 `require('webdav')`。
 - 服务启动会自动校验 `.env`、检查/创建数据库、执行 Knex 迁移；空用户表时创建首个管理员，密码来自 `DEFAULT_ADMIN_PASSWORD` 或启动日志随机值。
 - `/api/tags` 必须返回 `mutually_exclusive_with`，图库/API 参数互斥校验统一走 `server/utils/tagConflict.js`。
 - 上传成功链接卡片在 `client/pages/upload.vue`，成功文件会从待上传队列移除，继续选择文件为追加。
@@ -192,6 +202,8 @@ node --check server/index.js
 node --check server/services/configService.js
 node --check server/services/mailService.js
 node --check server/services/redisService.js
+node --check server/services/cloudSyncService.js
+node --check server/middleware/requireAdmin.js
 node --check server/routes/admin/auth.js
 node --check server/routes/admin/tagConvert.js
 node --check server/routes/admin/announcements.js

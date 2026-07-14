@@ -163,8 +163,9 @@ function createConflictError(message) {
   return err;
 }
 
-async function resolveNewTagIds(newTags = []) {
+async function resolveNewTagIds(newTags = [], options = {}) {
   if (!newTags.length) return [];
+  const reuseExisting = options.reuseExisting === true;
 
   const publicTags = await configService.readTags();
   if (!publicTags.nextId) publicTags.nextId = 20;
@@ -183,6 +184,10 @@ async function resolveNewTagIds(newTags = []) {
 
     const existing = existingAll.find(t => String(t.name).toLowerCase() === key);
     if (existing) {
+      if (reuseExisting) {
+        tagIds.push(existing.id);
+        continue;
+      }
       throw createConflictError(`公共标签名「${tagName}」已存在，请从已有标签中选择`);
     }
 
@@ -194,7 +199,7 @@ async function resolveNewTagIds(newTags = []) {
   }
 
   await configService.writeTags(publicTags);
-  return tagIds;
+  return [...new Set(tagIds.map(id => Number(id)).filter(Number.isInteger))];
 }
 
 async function resolveAlbumId({ albumId, albumName, userId }) {
@@ -229,6 +234,15 @@ async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = 
     });
     if (makePublic && !existing.is_public) {
       await db('images').where({ id: existing.id }).update({ is_public: 1, updated_at: db.fn.now() });
+    }
+    for (const tagId of tagIds) {
+      try {
+        await db('image_tags').insert({
+          image_id: existing.id,
+          tag_id: tagId,
+          source: 'manual'
+        }).onConflict(['image_id', 'tag_id']).ignore();
+      } catch {}
     }
     return false;
   }
@@ -344,12 +358,12 @@ async function scanAndIndexAll(options = {}) {
         albumName: entry.albumName || null,
         userId: options.userId
       });
-      const newTagIds = await resolveNewTagIds(entry.newTagNames || []);
+      const newTagIds = await resolveNewTagIds(entry.newTagNames || [], { reuseExisting: true });
       const result = await scanPathEntry({
         scanPath: entry.path,
         recursive: entry.recursive !== false,
         albumId: finalAlbumId,
-        tagIds: [...(entry.tagIds || []), ...newTagIds],
+        tagIds: [...new Set([...(entry.tagIds || []), ...newTagIds].map(id => Number(id)).filter(Number.isInteger))],
         userId: options.userId || null,
         makePublic: !!entry.makePublic
       });
@@ -388,7 +402,10 @@ async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags,
   }
 
   const finalAlbumId = await resolveAlbumId({ albumId, userId });
-  const allTagIds = [...(tagIds || []), ...(await resolveNewTagIds(newTags || []))];
+  const allTagIds = [...new Set([
+    ...(tagIds || []),
+    ...(await resolveNewTagIds(newTags || [], { reuseExisting: true }))
+  ].map(id => Number(id)).filter(Number.isInteger))];
   const result = await scanPathEntry({
     scanPath: targetPath,
     recursive,
@@ -399,7 +416,7 @@ async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags,
   });
 
   logger.info(`路径扫描完成: ${targetPath}, 新增 ${result.added}, 跳过 ${result.skipped}`);
-  return { ...result, albumId: finalAlbumId, tagIds: allTagIds };
+  return { ...result, albumId: finalAlbumId, tagIds: allTagIds, newTagNames: [] };
 }
 
 // 递归扫描目录

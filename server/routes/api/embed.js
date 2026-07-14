@@ -14,14 +14,21 @@ const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConfl
 
 const router = express.Router();
 
-async function resolveUserId(req) {
+async function resolveUser(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    try { return jwt.verify(authHeader.substring(7), process.env.JWT_SECRET).id; } catch {}
+    try {
+      const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
+      const user = await db('users').where({ id: decoded.id }).select('id', 'role', 'is_disabled', 'review_status').first();
+      if (user && !user.is_disabled && user.review_status !== 'pending') return user;
+    } catch {}
   }
   if (req.query.tk) {
     const tokenRecord = await db('api_tokens').where({ token: req.query.tk }).first();
-    if (tokenRecord) return tokenRecord.user_id || null;
+    if (tokenRecord?.user_id) {
+      const user = await db('users').where({ id: tokenRecord.user_id }).select('id', 'role', 'is_disabled', 'review_status').first();
+      if (user && !user.is_disabled && user.review_status !== 'pending') return user;
+    }
   }
   return null;
 }
@@ -30,18 +37,24 @@ async function resolveUserId(req) {
 router.get('/image', async (req, res, next) => {
   try {
     const { id, format = 'source', size = 'full', random, tags } = req.query;
-    const userId = await resolveUserId(req);
+    const user = await resolveUser(req);
+    const userId = user?.id || null;
+    const isAdmin = user?.role === 'admin';
     let image;
 
     if (random !== undefined) {
       const tagIds = parseTagIds(tags);
       await assertNoTagFilterConflict(tagIds);
-      const images = await imageService.getRandomImages({ count: 1, tagIds, userId, publicOnly: !userId });
+      const images = await imageService.getRandomImages({ count: 1, tagIds, userId, isAdmin, publicOnly: !userId });
       image = images[0];
     } else if (id) {
       image = await imageService.getImageById(parseInt(id));
-      // 权限检查：非公共图片需要验证
-      if (image && !image.is_public && !userId) {
+      let isPublicAlbum = false;
+      if (image?.album_id) {
+        const album = await db('albums').where({ id: image.album_id }).select('is_public').first();
+        isPublicAlbum = album?.is_public === true || album?.is_public === 1;
+      }
+      if (image && !isAdmin && image.uploader_id !== userId && !isPublicAlbum && !image.is_public && image.uploader_id !== null) {
         return res.status(403).json({ error: '无权访问此图片' });
       }
     }
@@ -64,7 +77,9 @@ router.get('/image', async (req, res, next) => {
 router.get('/album', async (req, res, next) => {
   try {
     const { id, format = 'source', mode = 'fixed', random, tags } = req.query;
-    const userId = await resolveUserId(req);
+    const user = await resolveUser(req);
+    const userId = user?.id || null;
+    const isAdmin = user?.role === 'admin';
     let album;
 
     if (random !== undefined) {
@@ -76,7 +91,7 @@ router.get('/album', async (req, res, next) => {
       album = await albumService.getAlbumById(parseInt(id));
       // 权限检查
       if (album && !album.is_public) {
-        if (!userId || (album.user_id !== userId && album.user_id !== null)) {
+        if (!isAdmin && (!userId || (album.user_id !== userId && album.user_id !== null))) {
           return res.status(403).json({ error: '无权访问此相册' });
         }
       }

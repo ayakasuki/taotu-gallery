@@ -1,5 +1,6 @@
 <template>
   <div class="dashboard-page page-container">
+    <ManualImageHoverPreview ref="manualPreviewRef" />
     <div class="dashboard-shell">
       <aside class="dashboard-sidebar">
         <div class="profile-block">
@@ -386,9 +387,26 @@
                     <TaotuSelect v-model="manualAlbumId" class="manual-filter-select" :options="myAlbumOptions" @change="loadManualImages(1)" />
                   </div>
                 </div>
-                <div class="manual-select-line">请选择需要打标签的图片（已选择 {{ manualSelected.length }} 张）</div>
+                <div class="manual-select-line">
+                  <span>请选择需要打标签的图片（已选择 {{ manualSelected.length }} 张）</span>
+                  <span class="manual-hover-tip">
+                    <img src="/icons/albums/visibility-info-80x80.png" alt="" />
+                    鼠标停留图片出现该图预览
+                  </span>
+                </div>
                 <div class="manual-image-grid">
-                  <button v-for="img in manualImages" :key="img.id" type="button" class="manual-image-card" :class="{ selected: manualSelected.includes(img.id) }" @click="toggleManualSelect(img.id)">
+                  <button
+                    v-for="img in manualImages"
+                    :key="img.id"
+                    type="button"
+                    class="manual-image-card"
+                    :class="{ selected: manualSelected.includes(img.id) }"
+                    @mouseenter="showManualPreview(img, $event.currentTarget)"
+                    @mouseleave="hideManualPreview"
+                    @focus="showManualPreview(img, $event.currentTarget)"
+                    @blur="hideManualPreview"
+                    @click="toggleManualSelect(img.id)"
+                  >
                     <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
                     <span v-if="manualSelected.includes(img.id)" class="manual-check-mark">
                       <img src="/icons/选中.png" alt="" />
@@ -814,6 +832,7 @@ const manualTagDraft = ref('')
 const manualOverwrite = ref(false)
 const manualLoading = ref(false)
 const manualResult = ref('')
+const manualPreviewRef = ref(null)
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const passwordChanging = ref(false)
 const showNewPassword = ref(false)
@@ -1192,6 +1211,8 @@ const batchDeleteMyImagesNow = async (ids) => {
 }
 
 const toggleManualSelect = (id) => { const idx = manualSelected.value.indexOf(id); if (idx >= 0) manualSelected.value.splice(idx, 1); else manualSelected.value.push(id) }
+const showManualPreview = (img, targetEl) => manualPreviewRef.value?.show(img, targetEl)
+const hideManualPreview = () => manualPreviewRef.value?.hide()
 const addManualTagFromInput = async () => {
   const label = manualTagDraft.value.trim()
   if (!label) return
@@ -3067,9 +3088,29 @@ const buildPageItems = (current, total) => {
 }
 .manual-select-line {
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   color: #7f879a;
   font-size: 12px;
   font-weight: 900;
+}
+.manual-hover-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: #a27791;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.manual-hover-tip img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
 }
 .manual-image-grid {
   display: grid;

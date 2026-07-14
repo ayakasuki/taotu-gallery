@@ -16,10 +16,14 @@ function tagIdVariants(id) {
   return variants;
 }
 
-function resolveUser(req) {
+async function resolveUser(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    try { return jwt.verify(authHeader.substring(7), process.env.JWT_SECRET); } catch {}
+    try {
+      const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
+      const user = await db('users').where({ id: decoded.id }).select('id', 'role', 'is_disabled', 'review_status').first();
+      if (user && !user.is_disabled && user.review_status !== 'pending') return user;
+    } catch {}
   }
   return null;
 }
@@ -27,7 +31,7 @@ function resolveUser(req) {
 // 获取分组（过滤私有标签）
 router.get('/', async (req, res, next) => {
   try {
-    const user = resolveUser(req);
+    const user = await resolveUser(req);
     const userId = user?.id || null;
     const isAdmin = user?.role === 'admin';
     const groupData = await configService.readTagGroups();

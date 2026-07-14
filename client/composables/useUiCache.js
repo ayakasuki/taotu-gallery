@@ -1,5 +1,7 @@
 const SITE_CONFIG_CACHE_KEY = 'taotu_site_public_config'
 const CURRENT_USER_CACHE_KEY = 'taotu_current_user'
+const AUTH_TOKEN_KEY = 'jwt_token'
+const AUTH_COOKIE_NAME = 'taotu_token'
 
 function isAuthFailure(err) {
   const status = Number(err?.status || err?.statusCode || err?.response?.status || err?.data?.statusCode || 0)
@@ -8,6 +10,49 @@ function isAuthFailure(err) {
 
 export function useUiCache() {
   const config = useRuntimeConfig()
+
+  const writeAuthCookie = (token) => {
+    if (!import.meta.client || !token) return
+    try {
+      const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+      document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; Max-Age=604800; Path=/; SameSite=Lax${secure}`
+    } catch {}
+  }
+
+  const clearAuthCookie = () => {
+    if (!import.meta.client) return
+    try {
+      document.cookie = `${AUTH_COOKIE_NAME}=; Max-Age=0; Path=/; SameSite=Lax`
+      document.cookie = `${AUTH_COOKIE_NAME}=; Max-Age=0; Path=/; SameSite=Lax; Secure`
+    } catch {}
+  }
+
+  const writeAuthToken = (token) => {
+    if (!import.meta.client || !token) return
+    try { localStorage.setItem(AUTH_TOKEN_KEY, token) } catch {}
+    writeAuthCookie(token)
+  }
+
+  const syncAuthCookie = () => {
+    if (!import.meta.client) return ''
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY) || ''
+      if (!token) {
+        clearAuthCookie()
+        return ''
+      }
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      if (payload.exp && payload.exp * 1000 <= Date.now()) {
+        clearAuthCookie()
+        return ''
+      }
+      writeAuthCookie(token)
+      return token
+    } catch {
+      clearAuthCookie()
+      return ''
+    }
+  }
 
   const normalizeAssetUrl = (url) => {
     if (!url) return ''
@@ -46,9 +91,12 @@ export function useUiCache() {
     readCurrentUserCache: () => readJsonCache(CURRENT_USER_CACHE_KEY),
     writeCurrentUserCache: (value) => writeJsonCache(CURRENT_USER_CACHE_KEY, value, 'taotu:current-user-updated'),
     clearCurrentUserCache: () => removeJsonCache(CURRENT_USER_CACHE_KEY, 'taotu:current-user-updated'),
+    writeAuthToken,
+    syncAuthCookie,
     clearAuthSession: () => {
       if (!import.meta.client) return
-      try { localStorage.removeItem('jwt_token') } catch {}
+      try { localStorage.removeItem(AUTH_TOKEN_KEY) } catch {}
+      clearAuthCookie()
       removeJsonCache(CURRENT_USER_CACHE_KEY, 'taotu:current-user-updated')
       try { window.dispatchEvent(new CustomEvent('taotu:auth-invalid')) } catch {}
     },

@@ -19,9 +19,9 @@ async function optionalAuth(req, res, next) {
       const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
       const user = await db('users')
         .where({ id: decoded.id })
-        .select('id', 'username', 'role', 'is_disabled')
+        .select('id', 'username', 'role', 'is_disabled', 'review_status')
         .first();
-      if (user && !user.is_disabled) {
+      if (user && !user.is_disabled && user.review_status !== 'pending') {
         req.user = { ...decoded, id: user.id, username: user.username, role: user.role };
       }
     } catch {}
@@ -48,8 +48,8 @@ router.get('/', optionalAuth, async (req, res, next) => {
       publicOnly: publicOnly === 'true',
       ownOnly: mine === 'true' && userId,
       isAdmin,
-      filterUserId: targetUserId ? parseInt(targetUserId) : null,
-      userGalleryOnly: userGallery === 'true',
+      filterUserId: isAdmin && targetUserId ? parseInt(targetUserId) : null,
+      userGalleryOnly: isAdmin && userGallery === 'true',
       internal: true
     });
     res.json(result);
@@ -66,7 +66,7 @@ router.get('/random', optionalAuth, async (req, res, next) => {
     const images = await imageService.getRandomImages({
       count: parseInt(count) || 1, tagIds,
       albumId: album ? parseInt(album) : null,
-      orientation, userId,
+      orientation, userId, isAdmin: req.user?.role === 'admin',
       publicOnly: !userId,
       internal: true
     });
@@ -79,6 +79,16 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
   try {
     const image = await imageService.getImageById(parseInt(req.params.id), true);
     if (!image) return res.status(404).json({ error: '图片不存在' });
+    const isAdmin = req.user?.role === 'admin';
+    const isOwner = req.user?.id && image.uploader_id === req.user.id;
+    let isPublicAlbum = false;
+    if (image.album_id) {
+      const album = await db('albums').where({ id: image.album_id }).select('is_public').first();
+      isPublicAlbum = album?.is_public === true || album?.is_public === 1;
+    }
+    if (!isAdmin && !isOwner && !isPublicAlbum && !image.is_public && image.uploader_id !== null) {
+      return res.status(403).json({ error: '无权访问此图片' });
+    }
     res.json(image);
   } catch (err) { next(err); }
 });

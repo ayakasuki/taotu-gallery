@@ -75,6 +75,7 @@ const {
   writeCurrentUserCache,
   clearCurrentUserCache,
   clearAuthSession,
+  syncAuthCookie,
   isAuthFailure,
   normalizeAssetUrl
 } = useUiCache()
@@ -256,6 +257,7 @@ const checkAuth = () => {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]))
     if (payload.exp * 1000 > Date.now()) {
+      syncAuthCookie()
       isLoggedIn.value = true
       isAdmin.value = payload.role === 'admin'
       const cachedUser = readCurrentUserCache()

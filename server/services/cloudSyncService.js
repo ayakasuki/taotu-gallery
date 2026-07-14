@@ -2,9 +2,17 @@
  * 云同步服务（WebDAV）
  * 当前范围：同步数据库中的标签、路径、条件与站点配置快照
  */
-const { createClient } = require('webdav');
 const configService = require('./configService');
 const logger = require('../config/logger');
+
+let webdavModulePromise = null;
+
+async function getWebDAVModule() {
+  if (!webdavModulePromise) {
+    webdavModulePromise = import('webdav');
+  }
+  return webdavModulePromise;
+}
 
 // 获取 WebDAV 配置
 async function getWebDAVConfig() {
@@ -79,6 +87,7 @@ async function createWebDAVClient() {
     throw { statusCode: 400, message: 'WebDAV 未配置' };
   }
 
+  const { createClient } = await getWebDAVModule();
   return createClient(webdavConfig.url, {
     username: webdavConfig.username,
     password: webdavConfig.password

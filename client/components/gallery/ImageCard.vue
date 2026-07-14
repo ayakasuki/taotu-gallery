@@ -262,13 +262,18 @@ const formatViews = (count) => {
   z-index: 4;
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 4px;
+  width: max-content;
+  max-width: calc(100% - 16px);
   color: #fff;
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
   padding: 5px 8px;
   border-radius: 999px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   background: rgba(22, 26, 38, 0.5);
   text-shadow: 0 1px 2px rgba(0,0,0,0.75);
 }

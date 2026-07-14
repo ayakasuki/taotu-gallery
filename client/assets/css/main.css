@@ -393,10 +393,13 @@ select.fluent-select {
 
 .taotu-chip,
 .tag-badge {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
+  width: max-content;
+  max-width: 100%;
   min-height: 24px;
   padding: 3px 10px;
   border: 1px solid rgba(248, 95, 154, 0.16);
@@ -406,6 +409,7 @@ select.fluent-select {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
+  white-space: nowrap;
   transition: all var(--taotu-transition);
 }
 
@@ -426,13 +430,17 @@ select.fluent-select {
 }
 
 .taotu-badge {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  width: max-content;
+  max-width: 100%;
   padding: 3px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .taotu-badge.success { background: var(--taotu-mint-soft); color: var(--taotu-success); }

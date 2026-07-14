@@ -716,8 +716,10 @@ const confirmDeleteDialog = async () => {
 }
 
 .album-tab {
+  flex: 0 0 auto;
   height: 40px;
   min-width: 116px;
+  width: max-content;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -746,8 +748,11 @@ const confirmDeleteDialog = async () => {
 }
 
 .album-tab b {
+  flex: 0 0 auto;
   color: inherit;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .album-search {
@@ -935,12 +940,15 @@ const confirmDeleteDialog = async () => {
 
 .visibility-pill {
   flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
   padding: 2px 8px;
   border-radius: 6px;
   background: rgba(239, 226, 255, 0.84);
   color: #ad65ff;
   font-size: 12px;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .visibility-pill.public {
@@ -949,10 +957,16 @@ const confirmDeleteDialog = async () => {
 }
 
 .image-count {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
   margin-top: 6px;
   color: #8b93a7;
   font-size: 13px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .owner-line {

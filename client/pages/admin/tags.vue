@@ -1,5 +1,6 @@
 <template>
   <div class="admin-tags-page">
+    <ManualImageHoverPreview ref="manualPreviewRef" />
     <section class="tags-frame">
       <nav class="tags-tabs" aria-label="标签设置">
         <button
@@ -215,7 +216,13 @@
             </label>
           </div>
 
-          <p class="manual-select-line">请选择需要打标签的图片（已选择 {{ manualSelected.length }} 张）</p>
+          <div class="manual-select-line">
+            <span>请选择需要打标签的图片（已选择 {{ manualSelected.length }} 张）</span>
+            <span class="manual-hover-tip">
+              <img src="/icons/albums/visibility-info-80x80.png" alt="" />
+              鼠标停留图片出现该图预览
+            </span>
+          </div>
           <div class="manual-image-grid pretty-scroll">
             <button
               v-for="img in manualImages"
@@ -223,6 +230,10 @@
               type="button"
               class="manual-image"
               :class="{ selected: manualSelected.includes(img.id) }"
+              @mouseenter="showManualPreview(img, $event.currentTarget)"
+              @mouseleave="hideManualPreview"
+              @focus="showManualPreview(img, $event.currentTarget)"
+              @blur="hideManualPreview"
               @click="toggleManualSelect(img.id)"
             >
               <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
@@ -495,6 +506,7 @@ const manualNewTagNames = ref([])
 const manualTagDraft = ref('')
 const manualOverwrite = ref(false)
 const manualLoading = ref(false)
+const manualPreviewRef = ref(null)
 const albums = ref([])
 const manualExpandedGroups = ref(['ungrouped'])
 
@@ -1162,6 +1174,14 @@ function toggleManualSelect(id) {
   const index = manualSelected.value.indexOf(id)
   if (index >= 0) manualSelected.value.splice(index, 1)
   else manualSelected.value.push(id)
+}
+
+function showManualPreview(img, targetEl) {
+  manualPreviewRef.value?.show(img, targetEl)
+}
+
+function hideManualPreview() {
+  manualPreviewRef.value?.hide()
 }
 
 function getThumbUrl(img) {
@@ -1902,9 +1922,31 @@ h3 {
 
 .manual-select-line {
   margin: 18px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   color: #6a758d;
   font-size: 13px;
   font-weight: 900;
+}
+
+.manual-hover-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: #a27791;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.manual-hover-tip img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
 }
 
 .manual-image-grid {

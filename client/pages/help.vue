@@ -130,7 +130,7 @@ const categories = reactive([
     expanded: false,
     items: [
       { title: '首次部署和管理员账号', body: ['服务启动会检查环境变量、数据库、迁移和首个管理员。空用户表会自动创建首个管理员。', '请尽快修改默认邮箱和密码，配置备案号、公开域名、SMTP、Redis、HTTPS 和备份策略。'] },
-      { title: '数据库迁移和升级', body: ['启动时会自动执行 Knex 迁移。0.3.1-pre-fix3 新增 custom_paths.make_public 和 albums.all_picture_public 字段。', '旧 0.3.1 系列数据库升级后会自动补齐字段，默认值为 false。'] },
+      { title: '数据库迁移和升级', body: ['启动时会自动执行 Knex 迁移。0.3.1 系列会自动补齐 custom_paths.make_public、albums.all_picture_public 等新增字段。', '旧 0.3.1 系列数据库升级后会自动补齐字段，默认值为 false。'] },
       { title: '备份恢复和 WebDAV', body: ['运维监控中可创建数据库和图库备份，恢复前会读取 manifest 并让管理员选择恢复项。', 'WebDAV 用于同步配置索引数据，不等于完整图片文件同步。'] },
       { title: '内容审核建议', body: ['部署者应根据所在地法律、服务器所在地和用户规模设置内容审核、投诉处理、日志留存、未成年人保护和数据安全流程。'] },
       { title: '联系信息显示规则', body: ['帮助中心展示当前部署站点 ID 最靠前管理员的邮箱。如果仍是默认邮箱，会提示用户改用其它方式联系管理员。'] }

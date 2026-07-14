@@ -5,7 +5,7 @@
       <h1>隐私政策</h1>
       <p>本隐私政策说明本站在提供图片托管、图库索引、用户账号、API Token、公开展示、相册管理和运维配置等功能时，可能如何收集、使用、保存、保护和处理个人信息及相关数据。</p>
       <div class="meta-row">
-        <span>版本：0.3.1-pre-fix3</span>
+        <span>版本：{{ legalVersion }}</span>
         <span>适用对象：访问者、注册用户、上传者、部署者</span>
         <span>最后更新：2026-06-30</span>
       </div>
@@ -124,6 +124,26 @@
 </template>
 
 <script setup>
+const api = useApi()
+const { readSiteConfigCache, writeSiteConfigCache } = useUiCache()
+const legalVersion = ref('0.3.1-pre-fix4')
+
+const applyLegalVersion = (config = {}) => {
+  legalVersion.value = config.legalVersion || config.appVersion || legalVersion.value
+}
+
+if (import.meta.client) {
+  applyLegalVersion(readSiteConfigCache() || {})
+}
+
+onMounted(async () => {
+  try {
+    const config = await api.get('/api/admin/site-config/public')
+    applyLegalVersion(config)
+    writeSiteConfigCache(config)
+  } catch {}
+})
+
 const toc = [
   { id: 'scope', title: '适用范围' },
   { id: 'collection', title: '收集信息' },

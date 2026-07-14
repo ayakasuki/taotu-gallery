@@ -15,17 +15,21 @@ const SYSTEM_TAGS = [
   { id: '__tagged', name: 'system_tagged', display_name: '已标签', combinable: true, isSystemTag: true }
 ];
 
-function resolveUserId(req) {
+async function resolveUser(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    try { return jwt.verify(authHeader.substring(7), process.env.JWT_SECRET); } catch {}
+    try {
+      const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
+      const user = await db('users').where({ id: decoded.id }).select('id', 'role', 'is_disabled', 'review_status').first();
+      if (user && !user.is_disabled && user.review_status !== 'pending') return user;
+    } catch {}
   }
   return null;
 }
 
 router.get('/', async (req, res, next) => {
   try {
-    const user = resolveUserId(req);
+    const user = await resolveUser(req);
     const userId = user?.id || null;
     const isAdmin = user?.role === 'admin';
 

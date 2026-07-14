@@ -39,6 +39,24 @@ useHead({
     document.documentElement.style.setProperty('--site-bg-filter', blurPx > 0 ? 'blur(' + blurPx + 'px)' : 'none');
   } catch (e) {}
 })();`
+    },
+    {
+      id: 'taotu-auth-cookie-sync',
+      innerHTML: `
+(function(){
+  try {
+    var token = localStorage.getItem('jwt_token') || '';
+    var clear = function(){
+      document.cookie = 'taotu_token=; Max-Age=0; Path=/; SameSite=Lax';
+      document.cookie = 'taotu_token=; Max-Age=0; Path=/; SameSite=Lax; Secure';
+    };
+    if (!token) { clear(); return; }
+    var payload = JSON.parse(atob(token.split('.')[1] || ''));
+    if (payload.exp && payload.exp * 1000 <= Date.now()) { clear(); return; }
+    var secure = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = 'taotu_token=' + encodeURIComponent(token) + '; Max-Age=604800; Path=/; SameSite=Lax' + secure;
+  } catch (e) {}
+})();`
     }
   ]
 })

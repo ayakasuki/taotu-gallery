@@ -300,7 +300,7 @@ async function getImageById(imageId, internal = false) {
 
 // 随机获取图片
 async function getRandomImages(options = {}) {
-  const { count = 1, tagIds, albumId, orientation, userId, publicOnly = false } = options;
+  const { count = 1, tagIds, albumId, orientation, userId, publicOnly = false, isAdmin = false } = options;
 
   let query = db('images');
 
@@ -309,7 +309,7 @@ async function getRandomImages(options = {}) {
     const album = await db('albums').where({ id: albumId }).first();
     if (album && album.is_public) {
       query = query.where({ album_id: albumId });
-    } else if (album && userId) {
+    } else if (album && userId && (album.user_id === userId || isAdmin)) {
       query = query.where({ album_id: albumId });
     } else if (album) {
       query = query.where({ album_id: albumId, is_public: true });

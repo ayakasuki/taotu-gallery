@@ -104,7 +104,7 @@ definePageMeta({ layout: false })
 const api = useApi()
 const router = useRouter()
 const { showAdminToast } = useAdminToast()
-const { readSiteConfigCache, writeSiteConfigCache, writeCurrentUserCache, normalizeAssetUrl } = useUiCache()
+const { readSiteConfigCache, writeSiteConfigCache, writeCurrentUserCache, writeAuthToken, normalizeAssetUrl } = useUiCache()
 
 const form = reactive({ username: '', password: '' })
 const siteName = ref('桃图智库')
@@ -179,7 +179,7 @@ const handleLogin = async () => {
     })
 
     if (data.token) {
-      localStorage.setItem('jwt_token', data.token)
+      writeAuthToken(data.token)
       writeCurrentUserCache(data.user)
       if (data.user.role === 'admin') router.push('/admin')
       else router.push('/')

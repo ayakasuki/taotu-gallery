@@ -1,12 +1,13 @@
 const express = require('express');
 const authMiddleware = require('../../middleware/auth');
+const requireAdmin = require('../../middleware/requireAdmin');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../../db');
 
 const router = express.Router();
 
 // API 设置
-router.get('/config', authMiddleware, async (req, res) => {
+router.get('/config', authMiddleware, requireAdmin, async (req, res) => {
   res.json({
     dynamicLinkBox: true,
     tagSelector: true,
@@ -16,7 +17,7 @@ router.get('/config', authMiddleware, async (req, res) => {
 });
 
 // 更新 API 设置（占位）
-router.put('/config', authMiddleware, async (req, res) => {
+router.put('/config', authMiddleware, requireAdmin, async (req, res) => {
   res.json({ message: 'API 配置已更新' });
 });
 

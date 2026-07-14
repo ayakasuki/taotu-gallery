@@ -202,7 +202,13 @@ const imagesPerRow = computed(() => {
   }
   return width >= 1500 ? 6 : width >= 1200 ? 5 : width >= 880 ? 3 : width >= 520 ? 2 : 1
 })
-const pageSize = computed(() => viewMode.value === 'list' ? imagesPerRow.value * 4 : 24)
+const gridColumns = computed(() => {
+  const width = Math.max(174, Math.floor(wallWidth.value || 1420))
+  const gap = 12
+  const min = 174
+  return Math.max(1, Math.floor((width + gap) / (min + gap)))
+})
+const pageSize = computed(() => (viewMode.value === 'list' ? imagesPerRow.value : gridColumns.value) * 4)
 const totalPages = computed(() => Math.max(1, Math.ceil(sortedImages.value.length / pageSize.value)))
 const pagedImages = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -312,6 +318,11 @@ const loadPage = (targetPage) => {
   if (targetPage < 1 || targetPage > totalPages.value || targetPage === page.value) return
   page.value = targetPage
 }
+
+watch([totalPages, pageSize], () => {
+  if (page.value > totalPages.value) page.value = totalPages.value
+  if (page.value < 1) page.value = 1
+})
 
 const updateWallWidth = () => {
   if (!import.meta.client || !wallRef.value) return
@@ -459,12 +470,15 @@ watch(pageSize, () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: max-content;
+  max-width: 100%;
   padding: 4px 10px;
   border-radius: 8px;
   background: rgba(239, 226, 255, 0.86);
   color: #9f64ec;
   font-size: 13px;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .visibility-badge.public {
@@ -503,9 +517,13 @@ watch(pageSize, () => {
 }
 
 .album-stats span {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  width: max-content;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -548,15 +566,22 @@ watch(pageSize, () => {
 }
 
 .wall-title b {
+  flex: 0 0 auto;
+  width: max-content;
   min-width: 32px;
   height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
+  padding: 0 10px;
+  box-sizing: border-box;
   background: rgba(239, 242, 249, 0.88);
   color: #8b93a7;
   font-size: 13px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .wall-actions {
@@ -655,16 +680,23 @@ watch(pageSize, () => {
   position: absolute;
   left: 9px;
   bottom: 8px;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  width: max-content;
+  min-width: 30px;
+  max-width: calc(100% - 18px);
   height: 22px;
   padding: 0 8px;
+  box-sizing: border-box;
   border-radius: 999px;
   background: rgba(31, 36, 50, 0.48);
   color: #fff;
   font-size: 12px;
   font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   backdrop-filter: blur(10px);
 }
 

@@ -165,8 +165,8 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
       albumId: finalAlbumId,
       albumName: albumName || null,
       makePublic: !!makePublic,
-      tagIds: tagIds || [],
-      newTagNames: newTags || []
+      tagIds: result.tagIds || tagIds || [],
+      newTagNames: result.newTagNames || []
     };
     if (existingIndex >= 0) existingPaths[existingIndex] = { ...existingPaths[existingIndex], ...savedPath };
     else existingPaths.push(savedPath);

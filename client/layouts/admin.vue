@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-page">
+  <div v-if="adminAccessReady && adminAccessAllowed" class="admin-page">
     <header class="admin-topbar">
       <NuxtLink to="/admin" class="admin-brand">
         <img v-if="logoUrl" :src="logoUrl" class="taotu-icon brand-icon" alt="" />
@@ -60,6 +60,12 @@
       </main>
     </div>
   </div>
+  <div v-else class="admin-access-gate">
+    <div class="admin-access-card">
+      <strong>{{ adminAccessReady ? '无权访问管理后台' : '正在验证管理员权限' }}</strong>
+      <p>{{ adminAccessReady ? '普通用户不能访问后台页面或后台数据，正在返回你的仪表盘。' : '请稍候，系统正在确认当前会话是否拥有管理员权限。' }}</p>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -72,6 +78,7 @@ const {
   writeCurrentUserCache,
   clearCurrentUserCache,
   clearAuthSession,
+  syncAuthCookie,
   isAuthFailure,
   normalizeAssetUrl
 } = useUiCache()
@@ -83,6 +90,8 @@ const currentUserInfo = ref({ username: '管理员' })
 const siteConfigReady = ref(false)
 const currentUserReady = ref(false)
 const adminMainPop = ref(false)
+const adminAccessReady = ref(false)
+const adminAccessAllowed = ref(false)
 
 const topNavItems = [
   { to: '/', label: '图库' },
@@ -165,6 +174,12 @@ const resetAdminUserState = () => {
   currentUserReady.value = true
 }
 
+const denyAdminAccess = (target = '/dashboard') => {
+  adminAccessAllowed.value = false
+  adminAccessReady.value = true
+  navigateTo(target, { replace: true })
+}
+
 const triggerAdminMainPop = async () => {
   if (!import.meta.client) return
   adminMainPop.value = false
@@ -179,7 +194,6 @@ const triggerAdminMainPop = async () => {
 watch(() => route.path, triggerAdminMainPop, { flush: 'post' })
 
 onMounted(async () => {
-  triggerAdminMainPop()
   const cachedSiteConfig = readSiteConfigCache()
   if (cachedSiteConfig) applySiteConfig(cachedSiteConfig)
   const cachedUser = readCurrentUserCache()
@@ -191,10 +205,18 @@ onMounted(async () => {
   if (!token) {
     clearAuthSession()
     resetAdminUserState()
+    adminAccessReady.value = true
+    navigateTo('/login', { replace: true })
     return
   }
   try {
     const payload = JSON.parse(atob(token.split('.')[1]))
+    syncAuthCookie()
+    if (payload.role !== 'admin') {
+      currentUserReady.value = true
+      denyAdminAccess('/dashboard')
+      return
+    }
     if (!cachedUser || cachedUser.id !== payload.id) {
       username.value = payload.username || payload.name || '管理员'
       currentUserInfo.value = { ...payload, username: username.value }
@@ -206,17 +228,28 @@ onMounted(async () => {
       api.get('/api/admin/site-config/public'),
       api.get('/api/admin/auth/me')
     ])
+    if (me?.role !== 'admin') {
+      applySiteConfig(siteConfig)
+      writeSiteConfigCache(siteConfig)
+      denyAdminAccess('/dashboard')
+      return
+    }
     applySiteConfig(siteConfig)
     applyCurrentUser(me)
     writeSiteConfigCache(siteConfig)
     writeCurrentUserCache(me)
+    adminAccessAllowed.value = true
+    adminAccessReady.value = true
+    triggerAdminMainPop()
   } catch (err) {
     if (isAuthFailure(err)) {
       clearAuthSession()
       resetAdminUserState()
+      adminAccessReady.value = true
       navigateTo('/login')
     }
     currentUserReady.value = true
+    adminAccessReady.value = true
   }
 })
 
@@ -236,6 +269,40 @@ const handleLogout = () => {
 .admin-page {
   min-height: 100vh;
   background: var(--taotu-bg-gradient);
+}
+
+.admin-access-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--taotu-bg-gradient);
+}
+
+.admin-access-card {
+  width: min(420px, calc(100vw - 32px));
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: var(--taotu-radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--taotu-shadow);
+  backdrop-filter: blur(var(--taotu-blur));
+  text-align: center;
+}
+
+.admin-access-card strong {
+  display: block;
+  color: var(--taotu-text-strong);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.admin-access-card p {
+  margin: 10px 0 0;
+  color: var(--taotu-text-muted);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.7;
 }
 
 .admin-topbar {

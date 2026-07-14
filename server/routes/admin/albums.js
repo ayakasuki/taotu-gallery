@@ -24,8 +24,8 @@ router.get('/', authMiddleware, async (req, res, next) => {
       publicOnly: publicOnly === 'true',
       ownOnly: mine === 'true' || !isAdmin,
       isAdmin,
-      filterUserId: targetUserId ? parseInt(targetUserId) : null,
-      userGalleryOnly: userGallery === 'true',
+      filterUserId: isAdmin && targetUserId ? parseInt(targetUserId) : null,
+      userGalleryOnly: isAdmin && userGallery === 'true',
       search: search || ''
     });
     res.json(result);

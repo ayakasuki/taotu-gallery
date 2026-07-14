@@ -115,7 +115,7 @@ definePageMeta({ layout: false })
 const api = useApi()
 const router = useRouter()
 const { showAdminToast } = useAdminToast()
-const { readSiteConfigCache, writeSiteConfigCache, writeCurrentUserCache, normalizeAssetUrl } = useUiCache()
+const { readSiteConfigCache, writeSiteConfigCache, writeCurrentUserCache, writeAuthToken, normalizeAssetUrl } = useUiCache()
 
 const form = reactive({
   username: '',
@@ -266,7 +266,7 @@ const handleRegister = async () => {
       return
     }
     if (data.token) {
-      localStorage.setItem('jwt_token', data.token)
+      writeAuthToken(data.token)
       writeCurrentUserCache(data.user)
       router.push('/')
     }

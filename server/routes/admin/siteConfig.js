@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const authMiddleware = require('../../middleware/auth');
 const configService = require('../../services/configService');
+const packageInfo = require('../../../package.json');
 
 const router = express.Router();
 
@@ -41,6 +42,8 @@ router.get('/public', async (req, res, next) => {
     const siteConfig = await configService.readSiteConfig();
     res.json({
       siteName: siteConfig.siteName || '桃图智库',
+      appVersion: packageInfo.version || '0.0.0',
+      legalVersion: siteConfig.legalVersion || packageInfo.version || '0.0.0',
       publicDomain: siteConfig.publicDomain || '',
       recordNumber: siteConfig.recordNumber || '',
       registration: siteConfig.registration || { enabled: false, emailVerification: false, requireReview: false, maxUsers: 0 },
