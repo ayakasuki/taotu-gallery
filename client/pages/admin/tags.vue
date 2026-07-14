@@ -676,7 +676,7 @@ function normalizeTagId(id) {
 }
 
 function isTagPublic(tag) {
-  return !!tag.is_public
+  return tag.is_public === true || tag.is_public === 1
 }
 
 function goTagPage(nextPage) {
@@ -765,7 +765,7 @@ function openEditTag(tag) {
   tagForm.name = tag.name || ''
   tagForm.display_name = tag.display_name || ''
   tagForm.combinable = tag.combinable !== false
-  tagForm.is_public = tag.is_public !== false
+  tagForm.is_public = isTagPublic(tag)
   tagForm.mutually_exclusive_with = tag.mutually_exclusive_with || ''
   showTagModal.value = true
 }
@@ -886,8 +886,12 @@ async function saveTag() {
         name: tagForm.name.trim(),
         display_name: tagForm.display_name.trim(),
         combinable: tagForm.combinable,
-        is_public: tagForm.is_public,
         mutually_exclusive_with: tagForm.mutually_exclusive_with
+      })
+      await api.post('/api/admin/tag-convert/toggle', {
+        tagId: userTagId,
+        isUserTag: true,
+        is_public: tagForm.is_public
       })
     } else {
       const all = [...currentTags.combinable, ...currentTags.nonCombinable]

@@ -236,10 +236,10 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
     if (req.body.is_public !== undefined) {
       const user = await db('users').where({ id: req.user.id }).select('role').first();
       if (user?.role !== 'admin') return res.status(403).json({ error: '只有管理员可以设置用户标签是否公共' });
-      updates.is_public = !!req.body.is_public;
+      updates.is_public = req.body.is_public ? 1 : 0;
     }
 
-    await db('user_tags').where({ id: req.params.id }).update(updates);
+    await db('user_tags').where({ id: req.params.id, user_id: req.user.id }).update(updates);
     await syncOwnedMutualGroup(req.user.id, tagId, parseMutualIds(req.body.mutually_exclusive_with, { requireUserPrefix: true }), req.body.combinable !== undefined ? req.body.combinable : tag.combinable);
     res.json({ message: '已更新' });
   } catch (err) { next(err); }
