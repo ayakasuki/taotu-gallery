@@ -2,8 +2,10 @@
  * 相册服务
  * 管理相册的增删改查、封面、统计
  */
-const db = require('../db');
-const logger = require('../config/logger');
+import db from '../db/index.js';
+
+import logger from '../config/logger.js';
+import imageService from './imageService.js';
 
 function normalizeAlbumName(name) {
   return String(name || '').trim();
@@ -108,7 +110,6 @@ async function getAlbums(options = {}) {
   const [{ count }] = await countQuery;
 
   for (const album of albums) {
-    const imageService = require('./imageService');
     const owner = album.user_id
       ? await db('users').where({ id: album.user_id }).select('username', 'avatar').first()
       : null;
@@ -142,7 +143,6 @@ async function getAlbumById(albumId) {
   const album = await db('albums').where({ id: albumId }).first();
   if (!album) return null;
 
-  const imageService = require('./imageService');
   const owner = album.user_id
     ? await db('users').where({ id: album.user_id }).select('username', 'avatar').first()
     : null;
@@ -251,7 +251,6 @@ async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOn
 
   const albums = await query.orderByRaw('RAND()').limit(count);
 
-  const imageService = require('./imageService');
   for (const album of albums) {
     album.cover_image = album.cover_image_id
       ? await db('images').where({ id: album.cover_image_id }).first()
@@ -272,7 +271,7 @@ async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOn
   return albums;
 }
 
-module.exports = {
+export default {
   getAlbums,
   getAlbumById,
   createAlbum,

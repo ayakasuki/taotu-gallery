@@ -2,11 +2,13 @@
  * 内部 API - 图片（前端专用，JWT 认证）
  * 返回完整数据，不对外暴露
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const db = require('../../db');
-const imageService = require('../../services/imageService');
-const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConflict');
+import express from 'express';
+
+import jwt from 'jsonwebtoken';
+import authMiddleware from '../../middleware/auth.js';
+import db from '../../db/index.js';
+import imageService from '../../services/imageService.js';
+import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js';
 
 const router = express.Router();
 
@@ -14,7 +16,6 @@ const router = express.Router();
 async function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const jwt = require('jsonwebtoken');
     try {
       const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
       const user = await db('users')
@@ -93,4 +94,4 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

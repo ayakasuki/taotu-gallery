@@ -2,14 +2,18 @@
  * 图库路径监听服务
  * 使用 chokidar 监听本地图库和自定义路径变化
  */
-const chokidar = require('chokidar');
-const path = require('path');
-const fs = require('fs');
-const config = require('../config');
-const configService = require('./configService');
-const imageService = require('./imageService');
-const logger = require('../config/logger');
-const imageProcessor = require('../utils/imageProcessor');
+import chokidar from 'chokidar';
+
+import path from 'path';
+import fs from 'fs';
+import config from '../config/index.js';
+import configService from './configService.js';
+import imageService from './imageService.js';
+import logger from '../config/logger.js';
+import imageProcessor from '../utils/imageProcessor.js';
+import db from '../db/index.js';
+import pathUtils from '../utils/pathUtils.js';
+import conditionTagService from './conditionTagService.js';
 
 let watcher = null;
 const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
@@ -72,8 +76,6 @@ async function startWatching() {
 
 // 处理新图片
 async function handleNewImage(filePath) {
-  const db = require('../db');
-  const pathUtils = require('../utils/pathUtils');
 
   try {
     const relativePath = pathUtils.toRelativePath(filePath);
@@ -107,7 +109,6 @@ async function handleNewImage(filePath) {
 
     // 对新图片执行条件标签
     try {
-      const conditionTagService = require('./conditionTagService');
       const newImage = await db('images').where({ path: relativePath }).first();
       if (newImage) {
         const matched = await conditionTagService.tagImageByConditions(newImage.id);
@@ -128,8 +129,6 @@ async function handleNewImage(filePath) {
 
 // 处理删除的图片
 async function handleDeletedImage(filePath) {
-  const db = require('../db');
-  const pathUtils = require('../utils/pathUtils');
 
   try {
     const relativePath = pathUtils.toRelativePath(filePath);
@@ -203,7 +202,6 @@ async function resolveNewTagIds(newTags = [], options = {}) {
 }
 
 async function resolveAlbumId({ albumId, albumName, userId }) {
-  const db = require('../db');
   if (albumId) return albumId;
   const normalizedAlbumName = normalizeName(albumName);
   if (!normalizedAlbumName) return null;
@@ -223,8 +221,6 @@ async function resolveAlbumId({ albumId, albumName, userId }) {
 }
 
 async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = null, makePublic = false }) {
-  const db = require('../db');
-  const pathUtils = require('../utils/pathUtils');
 
   const relativePath = pathUtils.toRelativePath(filePath);
   const existing = await db('images').where({ path: relativePath }).first();
@@ -282,7 +278,6 @@ async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = 
 }
 
 async function scanPathEntry({ scanPath, recursive = true, albumId = null, tagIds = [], userId = null, makePublic = false }) {
-  const db = require('../db');
   let added = 0;
   let skipped = 0;
 
@@ -321,7 +316,6 @@ async function scanPathEntry({ scanPath, recursive = true, albumId = null, tagId
 
 // 扫描并索引所有图片
 async function scanAndIndexAll(options = {}) {
-  const db = require('../db');
 
   const pathsConfig = await configService.readPaths();
   const scanEntries = [{
@@ -380,7 +374,6 @@ async function scanAndIndexAll(options = {}) {
   // 扫描完成后对所有图片执行条件标签
   if (added > 0) {
     try {
-      const conditionTagService = require('./conditionTagService');
       logger.info('扫描完成，开始执行条件标签...');
       const tagResult = await conditionTagService.tagImagesByConditions(null, null, false);
       logger.info(`条件标签完成: ${tagResult.message || `标记 ${tagResult.tagged} 张图片`}`);
@@ -437,7 +430,7 @@ async function scanDirectory(dirPath, callback) {
   }
 }
 
-module.exports = {
+export default {
   startWatching,
   stopWatching,
   scanAndIndexAll,

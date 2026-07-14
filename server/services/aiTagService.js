@@ -2,7 +2,8 @@
  * AI 标签服务（桩实现）
  * 暂不启用，预留接口供未来接入远程多模态视觉大模型（如硅基流动）
  */
-const logger = require('../config/logger');
+import logger from '../config/logger.js';
+import db from '../db/index.js';
 
 const AI_NOT_ENABLED = { success: false, reason: 'AI_NOT_ENABLED', message: 'AI 标签功能暂未启用，计划接入远程视觉大模型' };
 
@@ -26,7 +27,6 @@ async function retagAll(modelId, overwrite = false) {
 
 // 删除所有 AI 标签
 async function deleteAllAiTags() {
-  const db = require('../db');
   const count = await db('image_tags').where({ source: 'ai' }).del();
   logger.info(`已删除 ${count} 条 AI 标签`);
   return count;
@@ -41,7 +41,7 @@ async function getModelStatus(modelId) {
   };
 }
 
-module.exports = {
+export default {
   tagImage,
   tagBatch,
   retagAll,

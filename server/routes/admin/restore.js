@@ -1,10 +1,11 @@
 /**
  * 管理后台 - 恢复 API
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const restoreService = require('../../services/restoreService');
-const backupService = require('../../services/backupService');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import restoreService from '../../services/restoreService.js';
+import backupService from '../../services/backupService.js';
 
 const router = express.Router();
 
@@ -54,4 +55,4 @@ router.post('/normalize-paths', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

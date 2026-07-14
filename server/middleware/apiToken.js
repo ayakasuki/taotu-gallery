@@ -1,4 +1,4 @@
-const db = require('../db');
+import db from '../db/index.js';
 
 // API Token 认证中间件（对外 API 用）
 // 支持两种方式：Authorization: Bearer <token> 或 ?tk=<token>
@@ -41,4 +41,4 @@ async function apiTokenMiddleware(req, res, next) {
   }
 }
 
-module.exports = apiTokenMiddleware;
+export default apiTokenMiddleware;

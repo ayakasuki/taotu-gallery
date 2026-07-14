@@ -1,11 +1,13 @@
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const db = require('../../db');
-const fs = require('fs').promises;
-const path = require('path');
-const config = require('../../config');
-const logger = require('../../config/logger');
-const imageProcessor = require('../../utils/imageProcessor');
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import authMiddleware from '../../middleware/auth.js';
+import db from '../../db/index.js';
+import {promises as fs} from 'fs';
+import path from 'path';
+import config from '../../config/index.js';
+import logger from '../../config/logger.js';
+import imageProcessor from '../../utils/imageProcessor.js';
+import mailService from '../../services/mailService.js';
 
 const router = express.Router();
 
@@ -252,7 +254,6 @@ router.post('/:id/tags', authMiddleware, async (req, res, next) => {
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     await requireAdminUser(req);
-    const bcrypt = require('bcryptjs');
     const { username, password, email, role, storage_limit, max_file_size } = req.body;
     const normalizedUsername = String(username || '').trim();
     const normalizedEmail = String(email || '').trim() || null;
@@ -334,7 +335,6 @@ router.patch('/:id/review/approve', authMiddleware, async (req, res, next) => {
 
     await db('users').where({ id: userId }).update({ review_status: 'approved', is_disabled: false });
     if (target.email) {
-      const mailService = require('../../services/mailService');
       await mailService.sendAccountReviewApproved(target.email, target.username).catch((err) => {
         logger.warn(`审核通过邮件发送失败: ${target.email} - ${err.message}`);
       });
@@ -357,7 +357,6 @@ router.patch('/:id/review/reject', authMiddleware, async (req, res, next) => {
 
     await db('users').where({ id: userId }).update({ review_status: 'rejected', is_disabled: true });
     if (target.email) {
-      const mailService = require('../../services/mailService');
       await mailService.sendAccountReviewRejected(target.email, target.username).catch((err) => {
         logger.warn(`审核拒绝邮件发送失败: ${target.email} - ${err.message}`);
       });
@@ -402,4 +401,4 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

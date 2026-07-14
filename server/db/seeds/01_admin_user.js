@@ -2,9 +2,9 @@
  * 种子数据：创建默认管理员账号
  * 密码: admin123（请在生产环境修改）
  */
-const bcrypt = require('bcryptjs');
+import bcrypt from 'bcryptjs';
 
-exports.seed = async function(knex) {
+export async function seed(knex) {
   // 清空用户表
   await knex('users').del();
 
@@ -16,4 +16,4 @@ exports.seed = async function(knex) {
     email: 'admin@example.com',
     role: 'admin'
   });
-};
+}

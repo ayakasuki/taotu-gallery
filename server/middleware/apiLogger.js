@@ -2,7 +2,7 @@
  * API 调用日志中间件
  * 记录每次 API 调用到 api_logs 表
  */
-const db = require('../db');
+import db from '../db/index.js';
 
 function apiLogger(req, res, next) {
   const startTime = Date.now();
@@ -25,4 +25,4 @@ function apiLogger(req, res, next) {
   next();
 }
 
-module.exports = apiLogger;
+export default apiLogger;

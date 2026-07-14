@@ -1,5 +1,5 @@
-const jwt = require('jsonwebtoken');
-const db = require('../db');
+import jwt from 'jsonwebtoken';
+import db from '../db/index.js';
 
 // JWT 认证中间件（管理后台用）
 async function authMiddleware(req, res, next) {
@@ -31,4 +31,4 @@ async function authMiddleware(req, res, next) {
   }
 }
 
-module.exports = authMiddleware;
+export default authMiddleware;

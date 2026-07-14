@@ -2,12 +2,13 @@
  * 图片查询服务
  * 使用哈希路径对外展示，不暴露本地真实路径
  */
-const db = require('../db');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const logger = require('../config/logger');
-const configService = require('./configService');
+import db from '../db/index.js';
+
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+import logger from '../config/logger.js';
+import configService from './configService.js';
 
 const SYSTEM_TAG_IDS = {
   untagged: '__untagged',
@@ -390,7 +391,7 @@ async function backfillHashPaths() {
   return count;
 }
 
-module.exports = {
+export default {
   getImages,
   getImageById,
   getRandomImages,

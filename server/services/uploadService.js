@@ -2,16 +2,20 @@
  * 上传服务
  * 处理单上传、批量上传、接口上传
  */
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs').promises;
-const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
-const config = require('../config');
-const imageProcessor = require('../utils/imageProcessor');
-const pathUtils = require('../utils/pathUtils');
-const imageService = require('./imageService');
-const logger = require('../config/logger');
+import multer from 'multer';
+
+import path from 'path';
+import {promises as fs} from 'fs';
+import {v4 as uuidv4} from 'uuid';
+import db from '../db/index.js';
+import config from '../config/index.js';
+import imageProcessor from '../utils/imageProcessor.js';
+import pathUtils from '../utils/pathUtils.js';
+import imageService from './imageService.js';
+import logger from '../config/logger.js';
+import configService from './configService.js';
+import tagService from './tagService.js';
+import conditionTagService from './conditionTagService.js';
 
 // Multer 存储配置
 const storage = multer.diskStorage({
@@ -37,7 +41,6 @@ async function checkUserQuota(userId, fileSize) {
   const user = await db('users').where({ id: userId }).first();
   if (!user || user.role === 'admin') return { ok: true }; // 管理员不受限
 
-  const configService = require('./configService');
   const siteConfig = await configService.readSiteConfig();
   const defaultQuota = siteConfig.defaultQuota || {};
 
@@ -77,8 +80,7 @@ function mimetypeToFormat(mimetype) {
 // 文件过滤器
 const fileFilter = async (req, file, cb) => {
   try {
-    const configService = require('./configService');
-    const siteConfig = await configService.readSiteConfig();
+      const siteConfig = await configService.readSiteConfig();
     const allowedFormats = normalizeAllowedFormats(siteConfig.imageProcessing?.formats);
     const currentFormat = mimetypeToFormat(file.mimetype);
     if (allowedFormats.has(currentFormat)) {
@@ -107,8 +109,7 @@ const upload = buildUpload();
 
 async function uploadFiles(req, res, next) {
   try {
-    const configService = require('./configService');
-    const siteConfig = await configService.readSiteConfig();
+      const siteConfig = await configService.readSiteConfig();
     const user = req.user?.id ? await db('users').where({ id: req.user.id }).first() : null;
     const userLimit = Number(user?.max_file_size || 0);
     const defaultLimit = Number(siteConfig.defaultQuota?.maxFileSize || 0) * 1024 * 1024;
@@ -127,7 +128,6 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
   const meta = await imageProcessor.getImageMeta(file.path);
 
   // 生成缩略图
-  const configService = require('./configService');
   const siteConfig = await configService.readSiteConfig();
   const mediumOpts = siteConfig.mediumSize || {};
   const processingOpts = siteConfig.imageProcessing || {};
@@ -160,7 +160,6 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
 
   // 写入公共标签
   if (tags && tags.length > 0) {
-    const tagService = require('./tagService');
     await tagService.setImageTags(imageId, tags, 'manual');
   }
 
@@ -183,7 +182,6 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
 
   // 立即对新图片执行条件标签
   try {
-    const conditionTagService = require('./conditionTagService');
     const matchedConditions = await conditionTagService.tagImageByConditions(imageId);
     if (matchedConditions.length > 0) {
       for (const cond of matchedConditions) {
@@ -276,7 +274,7 @@ async function getUploadLogs(page = 1, limit = 20) {
   return { logs, total: count, page, limit };
 }
 
-module.exports = {
+export default {
   upload,
   uploadFiles,
   processUploadedFile,

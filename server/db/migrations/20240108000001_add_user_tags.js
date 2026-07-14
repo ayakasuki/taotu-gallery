@@ -1,7 +1,7 @@
 /**
  * 用户私有标签表
  */
-exports.up = async function(knex) {
+export async function up(knex) {
   await knex.schema.createTable('user_tags', (table) => {
     table.increments('id').primary();
     table.integer('user_id').notNullable();
@@ -17,11 +17,11 @@ exports.up = async function(knex) {
   await knex.schema.alterTable('conditions', (table) => {
     table.boolean('is_public').defaultTo(false).comment('是否公共条件标签');
   });
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   await knex.schema.dropTableIfExists('user_tags');
   await knex.schema.alterTable('conditions', (table) => {
     table.dropColumn('is_public');
   });
-};
+}

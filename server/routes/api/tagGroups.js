@@ -1,10 +1,11 @@
 /**
  * 对外 API - 标签分组（公开，带权限过滤）
  */
-const express = require('express');
-const configService = require('../../services/configService');
-const db = require('../../db');
-const jwt = require('jsonwebtoken');
+import express from 'express';
+
+import configService from '../../services/configService.js';
+import db from '../../db/index.js';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
@@ -93,4 +94,4 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

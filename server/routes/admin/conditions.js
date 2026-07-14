@@ -1,11 +1,12 @@
 /**
  * 管理后台 - 条件标签 CRUD（数据库模式）
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const configService = require('../../services/configService');
-const db = require('../../db');
-const logger = require('../../config/logger');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import configService from '../../services/configService.js';
+import db from '../../db/index.js';
+import logger from '../../config/logger.js';
 
 const router = express.Router();
 
@@ -151,4 +152,4 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

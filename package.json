@@ -1,6 +1,6 @@
 {
   "name": "taotu-gallery",
-  "version": "0.3.1-pre-fix4",
+  "version": "0.3.1-pre-fix5",
   "description": "图库与智能索引集成系统",
   "main": "server/index.js",
   "scripts": {
@@ -31,5 +31,6 @@
     "uuid": "^9.0.0",
     "nodemailer": "^6.9.16",
     "redis": "^4.7.0"
-  }
+  },
+  "type": "module"
 }

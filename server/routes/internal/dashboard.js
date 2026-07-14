@@ -1,12 +1,13 @@
 /**
  * 内部 API - 当前用户仪表盘摘要
  */
-const express = require('express');
-const os = require('os');
-const db = require('../../db');
-const authMiddleware = require('../../middleware/auth');
-const imageService = require('../../services/imageService');
-const configService = require('../../services/configService');
+import express from 'express';
+
+import os from 'os';
+import db from '../../db/index.js';
+import authMiddleware from '../../middleware/auth.js';
+import imageService from '../../services/imageService.js';
+import configService from '../../services/configService.js';
 
 const router = express.Router();
 
@@ -69,4 +70,4 @@ router.get('/overview', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

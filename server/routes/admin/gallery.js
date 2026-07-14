@@ -1,12 +1,13 @@
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const configService = require('../../services/configService');
-const galleryWatcher = require('../../services/galleryWatcher');
-const db = require('../../db');
-const config = require('../../config');
-const pathUtils = require('../../utils/pathUtils');
-const albumService = require('../../services/albumService');
-const imageProcessor = require('../../utils/imageProcessor');
+import express from 'express';
+import fs from 'fs';
+import authMiddleware from '../../middleware/auth.js';
+import configService from '../../services/configService.js';
+import galleryWatcher from '../../services/galleryWatcher.js';
+import db from '../../db/index.js';
+import config from '../../config/index.js';
+import pathUtils from '../../utils/pathUtils.js';
+import albumService from '../../services/albumService.js';
+import imageProcessor from '../../utils/imageProcessor.js';
 
 const router = express.Router();
 
@@ -51,7 +52,7 @@ function pathExists(filePath, isDefault = false) {
   if (/^(smb|s3|ftp):\/\//i.test(filePath)) return true;
   const absolute = isDefault ? filePath : pathUtils.toAbsolutePath(filePath);
   try {
-    return require('fs').existsSync(absolute);
+    return fs.existsSync(absolute);
   } catch {
     return false;
   }
@@ -213,4 +214,4 @@ router.post('/delete-path', authMiddleware, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

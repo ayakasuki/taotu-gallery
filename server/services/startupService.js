@@ -1,8 +1,8 @@
-const mysql = require('mysql2/promise');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const db = require('../db');
-const logger = require('../config/logger');
+import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import db from '../db/index.js';
+import logger from '../config/logger.js';
 
 const REQUIRED_ENV = ['DB_HOST', 'DB_USER', 'DB_NAME', 'JWT_SECRET'];
 const DEFAULT_JWT_SECRET = 'change_this_to_a_random_string';
@@ -118,4 +118,6 @@ async function bootstrap() {
   await ensureDefaultAdmin();
 }
 
-module.exports = { bootstrap, validateRequiredEnv };
+export { bootstrap, validateRequiredEnv };
+
+export default { bootstrap, validateRequiredEnv };

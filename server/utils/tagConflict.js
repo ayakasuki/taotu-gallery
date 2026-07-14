@@ -1,4 +1,4 @@
-const db = require('../db');
+import db from '../db/index.js';
 
 function parseTagIds(tags) {
   if (!tags) return null;
@@ -85,7 +85,15 @@ async function assertNoTagFilterConflict(tagIds) {
   }
 }
 
-module.exports = {
+export {
+  parseTagIds,
+  parseMutualIds,
+  tagIdKey,
+  validateTagFilterConflict,
+  assertNoTagFilterConflict
+};
+
+export default {
   parseTagIds,
   parseMutualIds,
   tagIdKey,

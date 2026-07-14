@@ -3,10 +3,11 @@
  * 无 token → tags 表 is_public=true + user_tags 表 is_public=true
  * 有 token → 上面 + 自己的 user_tags is_public=false
  */
-const express = require('express');
-const configService = require('../../services/configService');
-const db = require('../../db');
-const jwt = require('jsonwebtoken');
+import express from 'express';
+
+import configService from '../../services/configService.js';
+import db from '../../db/index.js';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
@@ -111,4 +112,4 @@ router.post('/validate', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

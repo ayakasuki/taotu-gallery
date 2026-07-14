@@ -1,5 +1,5 @@
-const nodemailer = require('nodemailer');
-const configService = require('./configService');
+import nodemailer from 'nodemailer';
+import configService from './configService.js';
 
 function buildTransport(smtp = {}) {
   if (!smtp.host || !smtp.port) {
@@ -85,4 +85,4 @@ async function testSmtp(to) {
   });
 }
 
-module.exports = { sendMail, sendVerificationCode, sendPasswordResetCode, sendAccountReviewApproved, sendAccountReviewRejected, testSmtp };
+export default { sendMail, sendVerificationCode, sendPasswordResetCode, sendAccountReviewApproved, sendAccountReviewRejected, testSmtp };

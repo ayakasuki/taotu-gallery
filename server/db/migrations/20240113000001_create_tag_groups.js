@@ -1,7 +1,7 @@
 /**
  * 标签分组表
  */
-exports.up = async function(knex) {
+export async function up(knex) {
   const hasTable = await knex.schema.hasTable('tag_groups');
   if (!hasTable) {
     await knex.schema.createTable('tag_groups', (table) => {
@@ -12,8 +12,8 @@ exports.up = async function(knex) {
       table.timestamp('created_at').defaultTo(knex.fn.now());
     });
   }
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   await knex.schema.dropTableIfExists('tag_groups');
-};
+}

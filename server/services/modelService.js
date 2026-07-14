@@ -2,8 +2,9 @@
  * 模型管理服务
  * 当前为桩实现，models 表 is_enabled 默认 FALSE
  */
-const db = require('../db');
-const logger = require('../config/logger');
+import db from '../db/index.js';
+
+import logger from '../config/logger.js';
 
 // 获取所有模型
 async function getAllModels() {
@@ -40,7 +41,7 @@ async function deleteModel(id) {
   return db('models').where({ id }).del();
 }
 
-module.exports = {
+export default {
   getAllModels,
   getModelById,
   createModel,

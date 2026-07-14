@@ -2,12 +2,18 @@
  * 统计服务
  * 提供 API 调用量、上传活跃、用户活跃、总收录图片等统计数据
  */
-const db = require('../db');
-const os = require('os');
-const path = require('path');
-const { execFileSync } = require('child_process');
-const packageInfo = require('../../package.json');
-const imageService = require('./imageService');
+import db from '../db/index.js';
+
+import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
+import {execFileSync} from 'child_process';
+import imageService from './imageService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const packageInfo = JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'));
 
 const projectRoot = path.resolve(__dirname, '../..');
 
@@ -627,7 +633,7 @@ async function getMetric(key) {
   return record ? JSON.parse(record.metric_value) : null;
 }
 
-module.exports = {
+export default {
   getOverallStats,
   getTodayStats,
   getApiStats,

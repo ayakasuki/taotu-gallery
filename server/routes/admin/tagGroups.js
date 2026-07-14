@@ -1,9 +1,10 @@
 /**
  * 管理后台 - 标签分组 CRUD（支持 sid 子分组 ID）
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const configService = require('../../services/configService');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import configService from '../../services/configService.js';
 
 const router = express.Router();
 
@@ -131,4 +132,4 @@ router.delete('/:id/subgroup/:sid', authMiddleware, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

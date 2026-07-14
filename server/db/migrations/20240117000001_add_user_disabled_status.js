@@ -1,7 +1,7 @@
 /**
  * 增加用户启用/禁用状态与最后登录 IP。
  */
-exports.up = async function(knex) {
+export async function up(knex) {
   const hasDisabled = await knex.schema.hasColumn('users', 'is_disabled');
   if (!hasDisabled) {
     await knex.schema.alterTable('users', (table) => {
@@ -15,9 +15,9 @@ exports.up = async function(knex) {
       table.string('last_login_ip', 80).nullable().comment('最后登录 IP');
     });
   }
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   const hasLastLoginIp = await knex.schema.hasColumn('users', 'last_login_ip');
   if (hasLastLoginIp) {
     await knex.schema.alterTable('users', (table) => {
@@ -31,4 +31,4 @@ exports.down = async function(knex) {
       table.dropColumn('is_disabled');
     });
   }
-};
+}

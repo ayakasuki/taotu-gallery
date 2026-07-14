@@ -1,3 +1,5 @@
-module.exports = {
-  ...require('./default')
+import defaultConfig from './default.js';
+
+export default {
+  ...defaultConfig
 };

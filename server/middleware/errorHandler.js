@@ -1,4 +1,4 @@
-const logger = require('../config/logger');
+import logger from '../config/logger.js';
 
 // 全局错误处理中间件
 function errorHandler(err, req, res, _next) {
@@ -34,4 +34,4 @@ function errorHandler(err, req, res, _next) {
   res.status(500).json({ error: '服务器内部错误' });
 }
 
-module.exports = errorHandler;
+export default errorHandler;

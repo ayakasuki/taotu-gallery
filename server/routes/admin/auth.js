@@ -1,18 +1,23 @@
 /**
  * 认证 API — 支持管理员和普通用户
  */
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const db = require('../../db');
-const authMiddleware = require('../../middleware/auth');
-const configService = require('../../services/configService');
-const redisService = require('../../services/redisService');
-const mailService = require('../../services/mailService');
+import express from 'express';
+
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import db from '../../db/index.js';
+import authMiddleware from '../../middleware/auth.js';
+import configService from '../../services/configService.js';
+import redisService from '../../services/redisService.js';
+import mailService from '../../services/mailService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 const uploadsDir = path.resolve(__dirname, '../../../data/uploads');
@@ -460,4 +465,4 @@ router.get('/me', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

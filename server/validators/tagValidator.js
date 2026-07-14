@@ -23,4 +23,4 @@ function validateTagConflict(tag, allTags) {
   return { valid: true };
 }
 
-module.exports = { validateTagCreate, validateTagConflict };
+export default { validateTagCreate, validateTagConflict };

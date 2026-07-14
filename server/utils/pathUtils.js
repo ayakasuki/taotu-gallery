@@ -1,5 +1,5 @@
-const path = require('path');
-const config = require('../config');
+import path from 'path';
+import config from '../config/index.js';
 
 // 将绝对路径转为相对路径（基准：项目根目录）
 function toRelativePath(absolutePath) {
@@ -33,7 +33,7 @@ function normalizePath(filePath) {
   return filePath.replace(/\\/g, '/');
 }
 
-module.exports = {
+export default {
   toRelativePath,
   toAbsolutePath,
   isPathSafe,

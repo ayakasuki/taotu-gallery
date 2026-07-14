@@ -2,12 +2,13 @@
  * 图片处理工具
  * 使用 sharp 生成缩略图、中等图，分析颜色和分辨率
  */
-const sharp = require('sharp');
-const path = require('path');
-const crypto = require('crypto');
-const fs = require('fs').promises;
-const config = require('../config');
-const logger = require('../config/logger');
+import sharp from 'sharp';
+
+import path from 'path';
+import crypto from 'crypto';
+import {promises as fs} from 'fs';
+import config from '../config/index.js';
+import logger from '../config/logger.js';
 
 function getThumbnailBasename(imagePath) {
   const ext = path.extname(imagePath);
@@ -172,7 +173,21 @@ function hexToRgb(hex) {
   } : null;
 }
 
-module.exports = {
+export {
+  generateThumbnails,
+  generateDerivedThumbnails,
+  getDerivedThumbnailDir,
+  getExistingThumbnailPath,
+  removeDerivedThumbnailsForImage,
+  getImageMeta,
+  calculateOrientation,
+  getResolutionBucket,
+  normalizeResolutionLevel,
+  checkResolution,
+  checkColorPresence
+};
+
+export default {
   generateThumbnails,
   generateDerivedThumbnails,
   getDerivedThumbnailDir,

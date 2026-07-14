@@ -4,10 +4,11 @@
  * 有 token → 返回自己的 + 公共的
  * 不能看到别人的私有相册
  */
-const express = require('express');
-const albumService = require('../../services/albumService');
-const db = require('../../db');
-const jwt = require('jsonwebtoken');
+import express from 'express';
+
+import albumService from '../../services/albumService.js';
+import db from '../../db/index.js';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
@@ -85,4 +86,4 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

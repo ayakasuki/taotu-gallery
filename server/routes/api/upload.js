@@ -1,10 +1,11 @@
 /**
  * 对外 API - 图片上传（需登录）
  */
-const express = require('express');
-const uploadService = require('../../services/uploadService');
-const authMiddleware = require('../../middleware/auth');
-const db = require('../../db');
+import express from 'express';
+
+import uploadService from '../../services/uploadService.js';
+import authMiddleware from '../../middleware/auth.js';
+import db from '../../db/index.js';
 
 const router = express.Router();
 
@@ -126,4 +127,4 @@ router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, nex
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,5 +1,5 @@
-const { createClient } = require('redis');
-const logger = require('../config/logger');
+import {createClient} from 'redis';
+import logger from '../config/logger.js';
 
 let client = null;
 let connecting = null;
@@ -46,4 +46,4 @@ async function del(key) {
   return redis.del(key);
 }
 
-module.exports = { getClient, setEx, get, del };
+export default { getClient, setEx, get, del };

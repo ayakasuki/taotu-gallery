@@ -1,9 +1,10 @@
 /**
  * 管理后台 - 统计 API
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const statsService = require('../../services/statsService');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import statsService from '../../services/statsService.js';
 
 const router = express.Router();
 
@@ -93,4 +94,4 @@ router.get('/top-endpoints', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

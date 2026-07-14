@@ -1,4 +1,4 @@
-exports.up = async function(knex) {
+export async function up(knex) {
   const hasUsers = await knex.schema.hasTable('users');
   if (!hasUsers) return;
 
@@ -13,9 +13,9 @@ exports.up = async function(knex) {
     .whereNull('review_status')
     .orWhere('review_status', '')
     .update({ review_status: 'approved' });
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   const hasUsers = await knex.schema.hasTable('users');
   if (!hasUsers) return;
   const hasReviewStatus = await knex.schema.hasColumn('users', 'review_status');
@@ -24,4 +24,4 @@ exports.down = async function(knex) {
       table.dropColumn('review_status');
     });
   }
-};
+}

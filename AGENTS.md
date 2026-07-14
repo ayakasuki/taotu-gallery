@@ -15,7 +15,7 @@
 
 | 层 | 选型 |
 |---|---|
-| 后端 | Node.js 18+ / ES6 纯 JS（不用 TS）/ Express / Knex.js / MySQL |
+| 后端 | Node.js 18+ / 原生 ES Module 纯 JS（不用 TS）/ Express / Knex.js / MySQL |
 | 前端 | Nuxt 3 / Vue 3 Composition API / PrimeVue 风格 Fluent Design |
 | 文件监听 | chokidar |
 | 图片处理 | sharp（缩略图/颜色/分辨率） |
@@ -76,7 +76,11 @@
 47. **WebDAV 必须动态导入** — `webdav` 当前为 ESM 包，CommonJS 后端服务不能在顶层 `require('webdav')`；必须通过 `import('webdav')` 按需加载并缓存 Promise，否则 PM2 启动会直接失败。
 48. **数字胶囊必须自适应宽度** — 图片数量、浏览数、标签数量、分页/标签 tab 等胶囊或按钮出现数字时必须 `width:max-content` / `white-space:nowrap` / `font-variant-numeric:tabular-nums`，不能按两三位数字写死宽度导致四位数溢出。
 49. **相册详情网格分页按列数计算** — `/albums/:id` 网格模式每页数量必须根据实际容器列数计算，保证第一页尽量填满；不要恢复固定 24 张导致宽屏尾部空出多个图片位。
-50. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
+50. **后端必须保持原生 ESM** — 根包启用 `"type":"module"`，`server/**/*.js`、迁移、seed、`knexfile.js` 必须使用 `import/export`；禁止新增 `require()` / `module.exports` / `exports.*`。相对导入必须写完整 `.js` 或 `/index.js`，目录导入不可依赖 CommonJS 解析。
+51. **启动顺序不能被静态导入破坏** — `server/index.js` 必须先 `await startupService.bootstrap()`，再动态 `import('./app.js')`；不要把 `app` 静态 import 到入口顶部，否则会绕过启动自检、迁移和首个管理员初始化顺序。
+52. **ESM 路径写法固定** — 需要 `__dirname` 的文件使用 `fileURLToPath(import.meta.url)` + `path.dirname()`；读取 `package.json` 优先用 `fs.readFileSync` + `JSON.parse`，兼容 Node 18/24，不使用 JSON import assertion/attribute。
+53. **Knex CLI 不加旧 --esm** — 当前 Knex 可原生读取 ESM `knexfile.js`，`npm run migrate` 保持 `knex migrate:latest`；不要加 `--esm`，旧 `esm` loader 在 Node 24 会报错。
+54. **移动端重适配后置** — 当前 `0.3.1` 系列以桌面端主要流程稳定为准；移动端主副标题拆分、面板收纳和窄屏重排属于后续 `0.4.x` 迭代，再稳定进入 `1.0.0`。
 
 ## 项目结构
 
@@ -155,9 +159,9 @@ pm2 logs                     # 查看日志
 
 Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开发计划.md`。
 
-## 当前实现状态（v0.3.1-pre-fix4）
+## 当前实现状态（v0.3.1-pre-fix5）
 
-> v0.3.1-pre-fix4 是 0.3.1 正式版发布前的第四个本地预发布修复点：大框架保持稳定，当前重点收口登录态连续性、权限隔离、私有媒体门禁、导航透明/玻璃状态一致性、页面 Q 弹转场分层、人工标签预览、相册细节和 WebDAV 启动兼容；部分图标仍允许使用占位资源，等待最终图标替换。
+> v0.3.1-pre-fix5 是 0.3.1 正式版发布前的第五个本地预发布修复点：大框架和业务接口保持稳定，当前重点完成后端 CommonJS 到原生 ES Module 的等价迁移，并延续登录态连续性、权限隔离、私有媒体门禁、页面 Q 弹转场、人工标签预览、相册细节和 WebDAV 启动兼容；部分图标仍允许使用占位资源，等待最终图标替换。
 
 - 访客端和普通用户端已统一新版视觉：默认布局、导航、页脚、首页图库、相册、图片详情、上传、API 文档、登录、注册和仪表盘均已重构。
 - 默认布局主导航已去掉栏目图标；图库首页顶部透明导航只在 `/` 且滚动位于顶端时启用，离开顶部或进入相册/API/上传/仪表盘后立即恢复玻璃导航。主导航 active 使用自定义精确匹配和点击即时同步，避免首次点击路由后按钮不亮或 `/` 默认匹配串路由。
@@ -169,6 +173,7 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - 站点配置背景模糊使用 `.taotu-shell` 的 `backdrop-filter`，遮罩颜色保存在 `site_config.background.overlayTop/overlayBottom`；不要给 `.taotu-shell` 再叠额外背景色。
 - 页面切换 Q 弹转场已分层并增强力度：图片详情固定模糊背景先渲染，背景图完成或缓存确认后立即弹出内容层；后台子页保留页面根的粉蓝背景和伪元素静态，只对页面根下一级内容做 Q 弹动画；详情加载态使用 `/icons/image/detail-loading-placeholder.gif` 占位，后续可替换为动图资源。
 - 登录态刷新校验只在明确 `401/403` 时清理会话，网络或普通接口失败不再误退出；`clearAuthSession()` 统一清理 Token、用户缓存并广播 `taotu:auth-invalid`。
+- 后端已完成原生 ES Module 等价迁移：根包使用 `"type":"module"`，入口在 `bootstrap()` 后动态导入 app，所有后端 JS 不再使用 CommonJS；Knex 迁移、PM2 Node 18.19 启动和主要接口 smoke test 已验证。
 - 权限隔离必须前后端同时执行：`client/layouts/admin.vue` 默认不渲染后台 slot，必须通过 `/api/admin/auth/me` 确认为管理员后才显示后台；后端用 `server/middleware/requireAdmin.js` 统一保护站点级后台 API，普通用户只能访问自己的仪表盘、相册、图片、Token 和私有标签等自有资源；私有图片的 `/image` 与 `/thumb` hash 直链也必须经过媒体门禁，前端通过同站 `taotu_token` Cookie 让 `<img>` 请求继承登录态。
 - 首页图库只保留 `grid` / `waterfall`，公开接口 `/api/gallery/config` 决定访客默认模式；网格和瀑布流都使用最短列贴合布局，并采用平均色块占位、中等图优先、前端逐张队列请求和原地淡入，避免一次性加载大量图片造成卡顿。
 - 首页新图片必须在已计算好的画框位置显示，不允许恢复从页面上方或中间移动到目标位置的位移动画；首次硬刷新后触底加载由布局完成后的可视检查兜底触发。
@@ -192,7 +197,7 @@ Phase 1-5 后端 → Phase 6-8 前端 → Phase 9 集成测试。详见 `tmp/开
 - `/api/tags` 必须返回 `mutually_exclusive_with`，图库/API 参数互斥校验统一走 `server/utils/tagConflict.js`。
 - 上传成功链接卡片在 `client/pages/upload.vue`，成功文件会从待上传队列移除，继续选择文件为追加。
 - 自定义路径读取/保存逻辑在 `configService.readPaths/writePaths` 与后台综合配置页，数据库表为 `custom_paths`；`make_public` 持久化路径扫描“批量公开”开关。删除自定义路径时只清理该路径扫描入库的图片记录、`image_tags` 关联和 `data/gallery/.derived` 下对应派生缩略图，不删除外部原始图片，不删除相册和标签定义。
-- 发布路线：当前为 `0.3.1-pre-fix4`；图标替换后发布 `0.3.1` 正式版；移动端重新适配、主副标题拆分和面板内容收纳进入后续 `0.4.0` / `0.4.x`，稳定后再进入 `1.0.0`。
+- 发布路线：当前为 `0.3.1-pre-fix5`；图标替换后发布 `0.3.1` 正式版；移动端重新适配、主副标题拆分和面板内容收纳进入后续 `0.4.0` / `0.4.x`，稳定后再进入 `1.0.0`。
 
 ## 提交前检查
 

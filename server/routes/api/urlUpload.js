@@ -1,19 +1,21 @@
 /**
  * URL 上传 API — 通过图片URL下载并索引
  */
-const express = require('express');
-const https = require('https');
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-const authMiddleware = require('../../middleware/auth');
-const config = require('../../config');
-const imageProcessor = require('../../utils/imageProcessor');
-const pathUtils = require('../../utils/pathUtils');
-const imageService = require('../../services/imageService');
-const db = require('../../db');
-const logger = require('../../config/logger');
+import express from 'express';
+
+import https from 'https';
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import {v4 as uuidv4} from 'uuid';
+import authMiddleware from '../../middleware/auth.js';
+import config from '../../config/index.js';
+import imageProcessor from '../../utils/imageProcessor.js';
+import pathUtils from '../../utils/pathUtils.js';
+import imageService from '../../services/imageService.js';
+import db from '../../db/index.js';
+import logger from '../../config/logger.js';
+import conditionTagService from '../../services/conditionTagService.js';
 
 const router = express.Router();
 
@@ -81,7 +83,6 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
     // 立即对新图片执行条件标签
     try {
-      const conditionTagService = require('../../services/conditionTagService');
       const matchedConditions = await conditionTagService.tagImageByConditions(imageId);
       if (matchedConditions.length > 0) {
         for (const cond of matchedConditions) {
@@ -113,4 +114,4 @@ router.post('/', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

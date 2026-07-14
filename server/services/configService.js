@@ -5,8 +5,9 @@
  * - tags 表：标签定义
  * - conditions 表：条件标签
  */
-const db = require('../db');
-const logger = require('../config/logger');
+import db from '../db/index.js';
+
+import logger from '../config/logger.js';
 
 const DEFAULT_SITE_BACKGROUND = {
   type: 'default',
@@ -378,7 +379,7 @@ async function writeTagGroups(data) {
   logger.info('标签分组已更新');
 }
 
-module.exports = {
+export default {
   readSiteConfig,
   writeSiteConfig,
   readTags,

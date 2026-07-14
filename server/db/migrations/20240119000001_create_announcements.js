@@ -1,7 +1,7 @@
 /**
  * 公告中心与用户通知已读状态。
  */
-exports.up = async function(knex) {
+export async function up(knex) {
   const hasAnnouncements = await knex.schema.hasTable('announcements');
   if (!hasAnnouncements) {
     await knex.schema.createTable('announcements', (table) => {
@@ -34,9 +34,9 @@ exports.up = async function(knex) {
       table.index(['user_id', 'read_at'], 'idx_announcement_reads_user');
     });
   }
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   await knex.schema.dropTableIfExists('announcement_reads');
   await knex.schema.dropTableIfExists('announcements');
-};
+}

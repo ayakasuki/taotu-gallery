@@ -3,10 +3,11 @@
  * 根据路径、分辨率、横竖比等条件自动打标签
  * 条件标签本质：自动将符合条件的图片归类到对应标签
  */
-const db = require('../db');
-const configService = require('./configService');
-const logger = require('../config/logger');
-const { calculateOrientation, checkResolution, normalizeResolutionLevel } = require('../utils/imageProcessor');
+import db from '../db/index.js';
+
+import configService from './configService.js';
+import logger from '../config/logger.js';
+import {calculateOrientation, checkResolution, normalizeResolutionLevel} from '../utils/imageProcessor.js';
 
 function parseConditionConfig(condition) {
   if (!condition.config) return {};
@@ -56,7 +57,7 @@ async function getConditionTag(condition) {
 }
 
 async function insertConditionTag(imageId, condition, resolvedTag = null) {
-  const tag = resolvedTag || await getConditionTag(condition);
+  const tag = resolvedTag || (await getConditionTag(condition));
   if (!tag) return false;
   await db('image_tags').insert({
     image_id: imageId,
@@ -289,7 +290,7 @@ async function deleteAllConditionTags() {
   return count;
 }
 
-module.exports = {
+export default {
   tagImageByConditions,
   tagImagesByConditions,
   deleteAllConditionTags,

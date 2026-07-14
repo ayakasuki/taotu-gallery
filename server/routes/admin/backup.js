@@ -1,9 +1,10 @@
 /**
  * 管理后台 - 备份 API
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const backupService = require('../../services/backupService');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import backupService from '../../services/backupService.js';
 
 const router = express.Router();
 
@@ -38,4 +39,4 @@ router.delete('/:filename', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

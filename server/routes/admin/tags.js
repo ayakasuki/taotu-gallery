@@ -1,15 +1,17 @@
 /**
  * 管理后台 - 标签管理 API
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const configService = require('../../services/configService');
-const tagService = require('../../services/tagService');
-const manualTagService = require('../../services/manualTagService');
-const conditionTagService = require('../../services/conditionTagService');
-const aiTagService = require('../../services/aiTagService');
-const tagFileWatcher = require('../../services/tagFileWatcher');
-const logger = require('../../config/logger');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import configService from '../../services/configService.js';
+import tagService from '../../services/tagService.js';
+import manualTagService from '../../services/manualTagService.js';
+import conditionTagService from '../../services/conditionTagService.js';
+import aiTagService from '../../services/aiTagService.js';
+import tagFileWatcher from '../../services/tagFileWatcher.js';
+import logger from '../../config/logger.js';
+import db from '../../db/index.js';
 
 const router = express.Router();
 
@@ -19,7 +21,6 @@ const SYSTEM_TAGS = [
 ];
 
 async function requireAdmin(req, res) {
-  const db = require('../../db');
   const user = await db('users').where({ id: req.user.id }).first();
   if (user?.role !== 'admin') {
     res.status(403).json({ error: '仅管理员可操作' });
@@ -116,8 +117,7 @@ function normalizePlatformTagIds(ids = []) {
 // 获取标签配置（管理员：公共标签 + 自己的私有标签）
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
-    const db = require('../../db');
-    const adminUser = await requireAdmin(req, res);
+      const adminUser = await requireAdmin(req, res);
     if (!adminUser) return;
 
     // 从数据库读取所有标签（管理员看全部，含私有）
@@ -162,8 +162,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
 // 创建单个公共平台标签（图片编辑弹窗回车创建使用）
 router.post('/create', authMiddleware, async (req, res, next) => {
   try {
-    const db = require('../../db');
-    const adminUser = await requireAdmin(req, res);
+      const adminUser = await requireAdmin(req, res);
     if (!adminUser) return;
 
     const name = normalizeTagName(req.body.name);
@@ -225,7 +224,6 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
       return res.status(400).json({ error: '系统标签不可删除' });
     }
     const tagId = parseInt(req.params.id);
-    const db = require('../../db');
 
     // 删除关联的 image_tags
     await db('image_tags').where({ tag_id: tagId }).del();
@@ -242,8 +240,7 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
 router.post('/run/manual', authMiddleware, async (req, res, next) => {
   try {
     const { imageIds, albumIds, tagIds = [], newTagNames = [], overwrite } = req.body;
-    const db = require('../../db');
-    const rawTagIds = Array.isArray(tagIds) ? tagIds : [];
+      const rawTagIds = Array.isArray(tagIds) ? tagIds : [];
     const targetImageIds = [...(imageIds || [])];
     if (albumIds && albumIds.length > 0) {
       const albumImages = await db('images').whereIn('album_id', albumIds).select('id');
@@ -326,8 +323,7 @@ router.post('/run/manual', authMiddleware, async (req, res, next) => {
 router.post('/run/user-private', authMiddleware, async (req, res, next) => {
   try {
     const { imageIds = [], userId, tagIds = [], newTagNames = [], overwrite = true } = req.body;
-    const db = require('../../db');
-    const user = await db('users').where({ id: req.user.id }).first();
+      const user = await db('users').where({ id: req.user.id }).first();
     if (user?.role !== 'admin') return res.status(403).json({ error: '仅管理员可操作' });
 
     const targetUserId = parseInt(userId);
@@ -448,4 +444,4 @@ router.post('/sync-now', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

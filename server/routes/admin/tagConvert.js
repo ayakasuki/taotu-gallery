@@ -2,9 +2,10 @@
  * 标签公共/私有转换 API
  * 直接操作数据库，不涉及 JSON 文件
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const db = require('../../db');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import db from '../../db/index.js';
 
 const router = express.Router();
 
@@ -40,4 +41,4 @@ router.post('/toggle', authMiddleware, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

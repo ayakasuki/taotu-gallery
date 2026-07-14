@@ -16,4 +16,4 @@ function validateUpload(req, res, next) {
   next();
 }
 
-module.exports = { validateUpload };
+export default { validateUpload };

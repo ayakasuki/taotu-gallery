@@ -1,4 +1,4 @@
-exports.up = async function(knex) {
+export async function up(knex) {
   const hasTable = await knex.schema.hasTable('albums');
   if (!hasTable) return;
   const hasColumn = await knex.schema.hasColumn('albums', 'all_picture_public');
@@ -7,9 +7,9 @@ exports.up = async function(knex) {
       table.boolean('all_picture_public').defaultTo(false).comment('相册图片批量公开开关状态');
     });
   }
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   const hasTable = await knex.schema.hasTable('albums');
   if (!hasTable) return;
   const hasColumn = await knex.schema.hasColumn('albums', 'all_picture_public');
@@ -18,4 +18,4 @@ exports.down = async function(knex) {
       table.dropColumn('all_picture_public');
     });
   }
-};
+}

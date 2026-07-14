@@ -1,7 +1,7 @@
 /**
  * 初始数据库迁移 — 创建全部 12 张核心表
  */
-exports.up = async function(knex) {
+export async function up(knex) {
   // images: 图片基础信息
   await knex.schema.createTable('images', (table) => {
     table.increments('id').primary();
@@ -161,9 +161,9 @@ exports.up = async function(knex) {
     table.json('metric_value').notNullable();
     table.timestamp('updated_at').defaultTo(knex.fn.now());
   });
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   const tables = [
     'site_metrics', 'api_logs', 'upload_logs', 'users', 'api_tokens',
     'conditions', 'models', 'album_tags', 'image_tags', 'tags',
@@ -172,4 +172,4 @@ exports.down = async function(knex) {
   for (const table of tables) {
     await knex.schema.dropTableIfExists(table);
   }
-};
+}

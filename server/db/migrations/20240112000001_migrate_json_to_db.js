@@ -4,7 +4,14 @@
  * 2. 创建 custom_paths 表（存储 paths.json）
  * 3. 从 JSON 文件导入数据到数据库
  */
-exports.up = async function(knex) {
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export async function up(knex) {
   // 1. 创建 site_config 表
   const hasSiteConfig = await knex.schema.hasTable('site_config');
   if (!hasSiteConfig) {
@@ -32,8 +39,6 @@ exports.up = async function(knex) {
   }
 
   // 3. 从 JSON 文件导入数据
-  const fs = require('fs');
-  const path = require('path');
   const configDir = path.resolve(__dirname, '../../data/config');
 
   // 导入 site.json
@@ -85,9 +90,9 @@ exports.up = async function(knex) {
       table.boolean('is_public').defaultTo(false);
     });
   }
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   await knex.schema.dropTableIfExists('custom_paths');
   await knex.schema.dropTableIfExists('site_config');
-};
+}

@@ -1,10 +1,11 @@
 /**
  * 管理后台 - 相册管理（权限隔离）
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const albumService = require('../../services/albumService');
-const db = require('../../db');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import albumService from '../../services/albumService.js';
+import db from '../../db/index.js';
 
 const router = express.Router();
 
@@ -111,4 +112,4 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

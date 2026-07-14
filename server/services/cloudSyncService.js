@@ -2,8 +2,9 @@
  * 云同步服务（WebDAV）
  * 当前范围：同步数据库中的标签、路径、条件与站点配置快照
  */
-const configService = require('./configService');
-const logger = require('../config/logger');
+import configService from './configService.js';
+
+import logger from '../config/logger.js';
 
 let webdavModulePromise = null;
 
@@ -197,7 +198,7 @@ async function sync() {
   return result;
 }
 
-module.exports = {
+export default {
   getWebDAVConfig,
   saveWebDAVConfig,
   getSyncStatus,

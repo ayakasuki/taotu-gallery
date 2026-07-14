@@ -1,8 +1,8 @@
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const requireAdmin = require('../../middleware/requireAdmin');
-const { v4: uuidv4 } = require('uuid');
-const db = require('../../db');
+import express from 'express';
+import authMiddleware from '../../middleware/auth.js';
+import requireAdmin from '../../middleware/requireAdmin.js';
+import {v4 as uuidv4} from 'uuid';
+import db from '../../db/index.js';
 
 const router = express.Router();
 
@@ -51,4 +51,4 @@ router.delete('/tokens/:id', authMiddleware, async (req, res) => {
   res.json({ message: 'Token 已删除' });
 });
 
-module.exports = router;
+export default router;

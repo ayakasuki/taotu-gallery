@@ -3,14 +3,15 @@
  * 无 token → 只能嵌入公共图片/相册
  * 有 token → 可嵌入自己的 + 公共的
  */
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const imageService = require('../../services/imageService');
-const albumService = require('../../services/albumService');
-const db = require('../../db');
-const jwt = require('jsonwebtoken');
-const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConflict');
+import express from 'express';
+
+import path from 'path';
+import fs from 'fs';
+import imageService from '../../services/imageService.js';
+import albumService from '../../services/albumService.js';
+import db from '../../db/index.js';
+import jwt from 'jsonwebtoken';
+import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js';
 
 const router = express.Router();
 
@@ -123,4 +124,4 @@ router.get('/album', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

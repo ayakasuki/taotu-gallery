@@ -24,7 +24,7 @@ function normalizeBool(value) {
   return value === true || value === 1 || value === '1';
 }
 
-exports.up = async function(knex) {
+export async function up(knex) {
   const hasTagId = await knex.schema.hasColumn('conditions', 'tag_id');
   if (!hasTagId) {
     await knex.schema.alterTable('conditions', (table) => {
@@ -68,9 +68,9 @@ exports.up = async function(knex) {
       await knex('conditions').where({ id: condition.id }).update({ tag_id: tag.id });
     }
   }
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   const indexName = 'idx_conditions_tag_id';
   if (await hasIndex(knex, 'conditions', indexName)) {
     await knex.schema.alterTable('conditions', (table) => {
@@ -84,4 +84,4 @@ exports.down = async function(knex) {
       table.dropColumn('tag_id');
     });
   }
-};
+}

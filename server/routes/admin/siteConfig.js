@@ -1,10 +1,15 @@
-const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const authMiddleware = require('../../middleware/auth');
-const configService = require('../../services/configService');
-const packageInfo = require('../../../package.json');
+import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import authMiddleware from '../../middleware/auth.js';
+import configService from '../../services/configService.js';
+import mailService from '../../services/mailService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const packageInfo = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../package.json'), 'utf8'));
 
 const router = express.Router();
 
@@ -78,7 +83,6 @@ router.post('/test-smtp', authMiddleware, requireAdmin, async (req, res, next) =
   try {
     const { to } = req.body;
     if (!to) return res.status(400).json({ error: '请输入测试收件邮箱' });
-    const mailService = require('../../services/mailService');
     await mailService.testSmtp(to);
     res.json({ message: '测试邮件已发送' });
   } catch (err) { next(err); }
@@ -123,4 +127,4 @@ router.post('/upload-bg', authMiddleware, requireAdmin, multer({ dest: tmpUpload
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

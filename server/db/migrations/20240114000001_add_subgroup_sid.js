@@ -1,7 +1,7 @@
 /**
  * 给 tag_groups 的 subgroups 加 sid 字段
  */
-exports.up = async function(knex) {
+export async function up(knex) {
   // 读取现有分组，给每个子分组分配 sid
   const groups = await knex('tag_groups').select('*');
   for (const group of groups) {
@@ -32,8 +32,8 @@ exports.up = async function(knex) {
       });
     }
   }
-};
+}
 
-exports.down = async function(knex) {
+export async function down(knex) {
   // sid 是 JSON 内的字段，不需要回滚
-};
+}

@@ -1,5 +1,5 @@
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
+import express from 'express';
+import authMiddleware from '../../middleware/auth.js';
 
 const router = express.Router();
 
@@ -26,4 +26,4 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   res.status(501).json({ error: 'AI 模型功能暂未启用' });
 });
 
-module.exports = router;
+export default router;

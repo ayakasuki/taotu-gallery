@@ -1,15 +1,56 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+import dotenv from 'dotenv';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import path from 'path';
+import fs from 'fs';
+import jwt from 'jsonwebtoken';
+import { fileURLToPath } from 'url';
+import errorHandler from './middleware/errorHandler.js';
+import logger from './config/logger.js';
+import db from './db/index.js';
+import imageService from './services/imageService.js';
+import imageProcessor from './utils/imageProcessor.js';
+import apiLogger from './middleware/apiLogger.js';
+import authMiddleware from './middleware/auth.js';
+import requireAdmin from './middleware/requireAdmin.js';
+import internalImagesRouter from './routes/internal/images.js';
+import internalAlbumsRouter from './routes/internal/albums.js';
+import internalDashboardRouter from './routes/internal/dashboard.js';
+import apiTagsRouter from './routes/api/tags.js';
+import apiTagGroupsRouter from './routes/api/tagGroups.js';
+import apiUserTagsRouter from './routes/api/userTags.js';
+import apiImagesRouter from './routes/api/images.js';
+import apiAlbumsRouter from './routes/api/albums.js';
+import apiEmbedRouter from './routes/api/embed.js';
+import apiUploadRouter from './routes/api/upload.js';
+import apiUrlUploadRouter from './routes/api/urlUpload.js';
+import apiAnnouncementsRouter from './routes/api/announcements.js';
+import adminAuthRouter from './routes/admin/auth.js';
+import adminTagsRouter from './routes/admin/tags.js';
+import adminTagConvertRouter from './routes/admin/tagConvert.js';
+import adminTagGroupsRouter from './routes/admin/tagGroups.js';
+import adminAlbumsRouter from './routes/admin/albums.js';
+import adminImagesRouter from './routes/admin/images.js';
+import adminModelsRouter from './routes/admin/models.js';
+import adminConditionsRouter from './routes/admin/conditions.js';
+import adminDatabaseRouter from './routes/admin/database.js';
+import adminGalleryRouter from './routes/admin/gallery.js';
+import adminApiRouter from './routes/admin/api.js';
+import adminSiteConfigRouter from './routes/admin/siteConfig.js';
+import adminAnnouncementsRouter from './routes/admin/announcements.js';
+import adminUsersRouter from './routes/admin/users.js';
+import adminStatsRouter from './routes/admin/stats.js';
+import adminBackupRouter from './routes/admin/backup.js';
+import adminRestoreRouter from './routes/admin/restore.js';
+import adminCloudSyncRouter from './routes/admin/cloudSync.js';
+import tagFileWatcher from './services/tagFileWatcher.js';
+import galleryWatcher from './services/galleryWatcher.js';
 
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const path = require('path');
-const fs = require('fs');
-const jwt = require('jsonwebtoken');
-const errorHandler = require('./middleware/errorHandler');
-const logger = require('./config/logger');
-const db = require('./db');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 
@@ -95,8 +136,6 @@ async function canAccessImageAsset(req, record) {
 }
 
 // 图片静态文件服务（哈希路径映射）
-const imageService = require('./services/imageService');
-const imageProcessor = require('./utils/imageProcessor');
 app.use('/image', async (req, res, next) => {
   try {
     if (!isHashImageAssetPath(req.path)) return next();
@@ -162,7 +201,7 @@ app.use('/thumb', async (req, res, next) => {
 // 公开图库配置（前端首页默认展示使用，不含敏感配置）
 app.get('/api/gallery/config', async (req, res, next) => {
   try {
-    const configService = require('./services/configService');
+    const { default: configService } = await import('./services/configService.js');
     const siteConfig = await configService.readSiteConfig();
     const mode = siteConfig.display?.mode === 'waterfall' ? 'waterfall' : 'grid';
     res.json({ display: { mode }, upload: siteConfig.upload || { showUrlAfterUpload: true } });
@@ -174,7 +213,6 @@ app.get('/api/gallery/config', async (req, res, next) => {
 // 公开联系信息（帮助中心使用，仅返回最早管理员邮箱）
 app.get('/api/public/contact', async (req, res, next) => {
   try {
-    const db = require('./db');
     const admin = await db('users')
       .where({ role: 'admin' })
       .orderBy('id', 'asc')
@@ -190,45 +228,42 @@ app.get('/api/public/contact', async (req, res, next) => {
 });
 
 // API 调用日志（对外 API）
-const apiLogger = require('./middleware/apiLogger');
-const authMiddleware = require('./middleware/auth');
-const requireAdmin = require('./middleware/requireAdmin');
 
 // 内部 API（前端专用，不对外暴露）
-app.use('/api/internal/images', require('./routes/internal/images'));
-app.use('/api/internal/albums', require('./routes/internal/albums'));
-app.use('/api/internal/dashboard', require('./routes/internal/dashboard'));
+app.use('/api/internal/images', internalImagesRouter);
+app.use('/api/internal/albums', internalAlbumsRouter);
+app.use('/api/internal/dashboard', internalDashboardRouter);
 
 // 对外 API
-app.use('/api/tags', apiLogger, require('./routes/api/tags'));
-app.use('/api/tag-groups', require('./routes/api/tagGroups'));
-app.use('/api/user-tags', require('./routes/api/userTags'));
-app.use('/api/images', apiLogger, require('./routes/api/images'));
-app.use('/api/albums', apiLogger, require('./routes/api/albums'));
-app.use('/api/embed', apiLogger, require('./routes/api/embed'));
-app.use('/api/upload', require('./routes/api/upload'));
-app.use('/api/upload/url', require('./routes/api/urlUpload'));
-app.use('/api/announcements', require('./routes/api/announcements'));
+app.use('/api/tags', apiLogger, apiTagsRouter);
+app.use('/api/tag-groups', apiTagGroupsRouter);
+app.use('/api/user-tags', apiUserTagsRouter);
+app.use('/api/images', apiLogger, apiImagesRouter);
+app.use('/api/albums', apiLogger, apiAlbumsRouter);
+app.use('/api/embed', apiLogger, apiEmbedRouter);
+app.use('/api/upload', apiUploadRouter);
+app.use('/api/upload/url', apiUrlUploadRouter);
+app.use('/api/announcements', apiAnnouncementsRouter);
 
 // 管理 API 路由
-app.use('/api/admin/auth', require('./routes/admin/auth'));
-app.use('/api/admin/tags', authMiddleware, requireAdmin, require('./routes/admin/tags'));
-app.use('/api/admin/tag-convert', authMiddleware, requireAdmin, require('./routes/admin/tagConvert'));
-app.use('/api/admin/tag-groups', authMiddleware, requireAdmin, require('./routes/admin/tagGroups'));
-app.use('/api/admin/albums', require('./routes/admin/albums'));
-app.use('/api/admin/images', require('./routes/admin/images'));
-app.use('/api/admin/models', authMiddleware, requireAdmin, require('./routes/admin/models'));
-app.use('/api/admin/conditions', authMiddleware, requireAdmin, require('./routes/admin/conditions'));
-app.use('/api/admin/database', authMiddleware, requireAdmin, require('./routes/admin/database'));
-app.use('/api/admin/gallery', authMiddleware, requireAdmin, require('./routes/admin/gallery'));
-app.use('/api/admin/api', require('./routes/admin/api'));
-app.use('/api/admin/site-config', require('./routes/admin/siteConfig'));
-app.use('/api/admin/announcements', require('./routes/admin/announcements'));
-app.use('/api/admin/users', authMiddleware, requireAdmin, require('./routes/admin/users'));
-app.use('/api/admin/stats', authMiddleware, requireAdmin, require('./routes/admin/stats'));
-app.use('/api/admin/backup', authMiddleware, requireAdmin, require('./routes/admin/backup'));
-app.use('/api/admin/restore', authMiddleware, requireAdmin, require('./routes/admin/restore'));
-app.use('/api/admin/cloud-sync', authMiddleware, requireAdmin, require('./routes/admin/cloudSync'));
+app.use('/api/admin/auth', adminAuthRouter);
+app.use('/api/admin/tags', authMiddleware, requireAdmin, adminTagsRouter);
+app.use('/api/admin/tag-convert', authMiddleware, requireAdmin, adminTagConvertRouter);
+app.use('/api/admin/tag-groups', authMiddleware, requireAdmin, adminTagGroupsRouter);
+app.use('/api/admin/albums', adminAlbumsRouter);
+app.use('/api/admin/images', adminImagesRouter);
+app.use('/api/admin/models', authMiddleware, requireAdmin, adminModelsRouter);
+app.use('/api/admin/conditions', authMiddleware, requireAdmin, adminConditionsRouter);
+app.use('/api/admin/database', authMiddleware, requireAdmin, adminDatabaseRouter);
+app.use('/api/admin/gallery', authMiddleware, requireAdmin, adminGalleryRouter);
+app.use('/api/admin/api', adminApiRouter);
+app.use('/api/admin/site-config', adminSiteConfigRouter);
+app.use('/api/admin/announcements', adminAnnouncementsRouter);
+app.use('/api/admin/users', authMiddleware, requireAdmin, adminUsersRouter);
+app.use('/api/admin/stats', authMiddleware, requireAdmin, adminStatsRouter);
+app.use('/api/admin/backup', authMiddleware, requireAdmin, adminBackupRouter);
+app.use('/api/admin/restore', authMiddleware, requireAdmin, adminRestoreRouter);
+app.use('/api/admin/cloud-sync', authMiddleware, requireAdmin, adminCloudSyncRouter);
 
 // 前端静态文件服务（Nuxt generate 输出）
 const clientDist = fs.existsSync(path.resolve(__dirname, '../client/.output/public'))
@@ -252,9 +287,6 @@ if (fs.existsSync(clientDist)) {
 }
 
 // 启动监听服务
-const tagFileWatcher = require('./services/tagFileWatcher');
-const galleryWatcher = require('./services/galleryWatcher');
-
 setTimeout(() => {
   tagFileWatcher.startWatching();
   galleryWatcher.startWatching();
@@ -263,4 +295,4 @@ setTimeout(() => {
 // 全局错误处理
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

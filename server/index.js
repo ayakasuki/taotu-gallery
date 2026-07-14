@@ -1,10 +1,15 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+import dotenv from 'dotenv';
+import fs from 'fs';
+import https from 'https';
+import http from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import logger from './config/logger.js';
+import {bootstrap} from './services/startupService.js';
 
-const fs = require('fs');
-const https = require('https');
-const http = require('http');
-const logger = require('./config/logger');
-const { bootstrap } = require('./services/startupService');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,8 +17,8 @@ async function startServer() {
   try {
     await bootstrap();
 
-    const app = require('./app');
-    const configService = require('./services/configService');
+    const { default: app } = await import('./app.js');
+    const { default: configService } = await import('./services/configService.js');
     const siteConfig = await configService.readSiteConfig();
     const httpsConfig = siteConfig.https || {};
 

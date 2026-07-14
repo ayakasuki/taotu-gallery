@@ -1,14 +1,15 @@
 /**
  * 管理后台 - 图片管理 API
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const db = require('../../db');
-const fs = require('fs').promises;
-const path = require('path');
-const config = require('../../config');
-const logger = require('../../config/logger');
-const imageProcessor = require('../../utils/imageProcessor');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import db from '../../db/index.js';
+import {promises as fs} from 'fs';
+import path from 'path';
+import config from '../../config/index.js';
+import logger from '../../config/logger.js';
+import imageProcessor from '../../utils/imageProcessor.js';
 
 const router = express.Router();
 
@@ -75,4 +76,4 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,6 +1,6 @@
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const db = require('../../db');
+import express from 'express';
+import authMiddleware from '../../middleware/auth.js';
+import db from '../../db/index.js';
 
 const router = express.Router();
 
@@ -58,4 +58,4 @@ router.get('/logs', authMiddleware, async (req, res) => {
   res.json({ logs: [] });
 });
 
-module.exports = router;
+export default router;

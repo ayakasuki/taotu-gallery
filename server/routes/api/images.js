@@ -3,13 +3,20 @@
  * 支持 JWT 认证（登录用户）和 API Token 认证
  * 未登录用户只能看公共图片
  */
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const imageService = require('../../services/imageService');
-const imageProcessor = require('../../utils/imageProcessor');
-const db = require('../../db');
-const { parseTagIds, assertNoTagFilterConflict } = require('../../utils/tagConflict');
+import express from 'express';
+
+import jwt from 'jsonwebtoken';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import imageService from '../../services/imageService.js';
+import imageProcessor from '../../utils/imageProcessor.js';
+import db from '../../db/index.js';
+import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js';
+import configService from '../../services/configService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -20,7 +27,6 @@ async function resolveUser(req) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
     try {
-      const jwt = require('jsonwebtoken');
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await db('users')
         .where({ id: decoded.id })
@@ -101,7 +107,6 @@ router.get('/random', async (req, res, next) => {
     // sid 参数：按子分组 sid 筛选（支持逗号分隔多值）
     // tags 参数：按标签 ID 筛选
     // 三者叠加（OR 逻辑）
-    const configService = require('../../services/configService');
     const groupData = await configService.readTagGroups();
 
     if (tag_g) {
@@ -201,4 +206,4 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

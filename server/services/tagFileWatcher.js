@@ -3,10 +3,11 @@
  * 现在所有配置存储在数据库，不再监听 JSON 文件
  * 保留定时扫描功能
  */
-const config = require('../config');
-const configService = require('./configService');
-const conditionTagService = require('./conditionTagService');
-const logger = require('../config/logger');
+import config from '../config/index.js';
+
+import configService from './configService.js';
+import conditionTagService from './conditionTagService.js';
+import logger from '../config/logger.js';
 
 let periodicTimer = null;
 
@@ -59,7 +60,7 @@ async function forceConditionTagNow() {
   return result;
 }
 
-module.exports = {
+export default {
   startWatching,
   stopWatching,
   forceConditionTagNow

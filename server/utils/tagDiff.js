@@ -2,7 +2,7 @@
  * 标签配置差异计算工具
  * 对比两份 tags.json 配置，返回新增、修改、删除的标签
  */
-const logger = require('../config/logger');
+import logger from '../config/logger.js';
 
 // 计算标签配置差异
 function computeTagDiff(oldTags, newTags) {
@@ -51,4 +51,6 @@ function isDiffExcessive(oldTags, newTags, threshold = 0.5) {
   return changeRatio > threshold;
 }
 
-module.exports = { computeTagDiff, isDiffExcessive };
+export { computeTagDiff, isDiffExcessive };
+
+export default { computeTagDiff, isDiffExcessive };

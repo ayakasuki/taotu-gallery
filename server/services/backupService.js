@@ -3,16 +3,18 @@
  * 支持数据库、本地图库、自定义路径图片、标签文件、配置文件备份
  * 输出为 .zip 压缩包
  */
-const archiver = require('archiver');
-const fs = require('fs').promises;
-const fsSync = require('fs');
-const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
+import archiver from 'archiver';
+import unzipper from 'unzipper';
+
+import {promises as fs} from 'fs';
+import fsSync from 'fs';
+import path from 'path';
+import {execFile} from 'child_process';
+import {promisify} from 'util';
 const execFileAsync = promisify(execFile);
-const config = require('../config');
-const configService = require('./configService');
-const logger = require('../config/logger');
+import config from '../config/index.js';
+import configService from './configService.js';
+import logger from '../config/logger.js';
 
 const BACKUP_CONTENT = {
   database: { key: 'database', label: '数据库', description: '完整数据库所有表、数据、触发器、事件与存储过程' },
@@ -131,7 +133,7 @@ async function createBackup(options = {}) {
 
     try {
       if (backupOptions.includeDatabase) {
-        warnings.push(...await addDatabaseBackup(archive));
+        warnings.push(...(await addDatabaseBackup(archive)));
       }
 
       if (backupOptions.includeGallery) {
@@ -306,7 +308,6 @@ async function readBackupManifest(filename) {
     throw { statusCode: 404, message: '备份文件不存在' };
   }
 
-  const unzipper = require('unzipper');
   const directory = await unzipper.Open.file(filePath);
   const entry = directory.files.find(file => file.path === 'manifest.json');
   if (!entry) {
@@ -346,7 +347,7 @@ async function deleteBackup(filename) {
   }
 }
 
-module.exports = {
+export default {
   createBackup,
   getBackupList,
   readBackupManifest,

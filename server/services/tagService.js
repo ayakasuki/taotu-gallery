@@ -2,11 +2,12 @@
  * 标签核心服务
  * 管理标签的读取、写入、同步和重建
  */
-const db = require('../db');
-const configService = require('./configService');
-const { computeTagDiff, isDiffExcessive } = require('../utils/tagDiff');
-const config = require('../config');
-const logger = require('../config/logger');
+import db from '../db/index.js';
+
+import configService from './configService.js';
+import {computeTagDiff, isDiffExcessive} from '../utils/tagDiff.js';
+import config from '../config/index.js';
+import logger from '../config/logger.js';
 
 // 获取所有标签（合并可组合和不可组合）
 async function getAllTags() {
@@ -220,7 +221,7 @@ async function syncTagConfig(newTags, options = {}) {
   return { action: 'none', message: '标签配置无变化' };
 }
 
-module.exports = {
+export default {
   getAllTags,
   getTagById,
   getTagByName,

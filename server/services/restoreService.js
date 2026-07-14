@@ -3,17 +3,18 @@
  * 从 .zip 备份包恢复数据库、图片、配置文件
  * 核心风险：路径相对化必须贯穿整个恢复流程
  */
-const unzipper = require('unzipper');
-const fs = require('fs').promises;
-const fsSync = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
-const db = require('../db');
-const config = require('../config');
-const pathUtils = require('../utils/pathUtils');
-const logger = require('../config/logger');
-const backupService = require('./backupService');
-const configService = require('./configService');
+import unzipper from 'unzipper';
+
+import {promises as fs} from 'fs';
+import fsSync from 'fs';
+import path from 'path';
+import {spawn} from 'child_process';
+import db from '../db/index.js';
+import config from '../config/index.js';
+import pathUtils from '../utils/pathUtils.js';
+import logger from '../config/logger.js';
+import backupService from './backupService.js';
+import configService from './configService.js';
 
 function normalizeRestoreOptions(options = {}) {
   if (Array.isArray(options.restoreItems)) {
@@ -392,7 +393,7 @@ async function verifyRestoredPaths() {
   };
 }
 
-module.exports = {
+export default {
   inspectBackup,
   restoreFromBackup,
   normalizeAllImagePaths,

@@ -1,16 +1,17 @@
 /**
  * 内部 API - 相册（前端专用，JWT 认证）
  */
-const express = require('express');
-const db = require('../../db');
-const albumService = require('../../services/albumService');
+import express from 'express';
+
+import jwt from 'jsonwebtoken';
+import db from '../../db/index.js';
+import albumService from '../../services/albumService.js';
 
 const router = express.Router();
 
 async function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const jwt = require('jsonwebtoken');
     try {
       const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
       const user = await db('users')
@@ -71,4 +72,4 @@ router.get('/random', optionalAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-module.exports = router;
+export default router;

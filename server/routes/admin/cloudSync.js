@@ -1,9 +1,10 @@
 /**
  * 管理后台 - 云同步 API（WebDAV）
  */
-const express = require('express');
-const authMiddleware = require('../../middleware/auth');
-const cloudSyncService = require('../../services/cloudSyncService');
+import express from 'express';
+
+import authMiddleware from '../../middleware/auth.js';
+import cloudSyncService from '../../services/cloudSyncService.js';
 
 const router = express.Router();
 
@@ -68,4 +69,4 @@ router.post('/run', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -2,7 +2,7 @@
 
 > 自托管图床 + 智能标签管理平台，支持 AI 标签扩展、条件自动标签、标签分组、参数化 API、多用户隔离。
 
-v0.3.1-pre-fix4 · [MIT License](LICENSE)
+v0.3.1-pre-fix5 · [MIT License](LICENSE)
 
 ---
 
@@ -34,6 +34,18 @@ v0.3.1-pre-fix4 · [MIT License](LICENSE)
 ---
 
 ## 本轮更新摘要
+
+### v0.3.1-pre-fix5（后端 ES Module 等价迁移）
+
+本次提交对比上一提交 `bda30a5`，不改变后端业务接口和数据逻辑，集中把后端 CommonJS 模块体系迁移回原生 ES Module：所有 `server/**/*.js`、迁移、seed、`knexfile.js` 均使用 `import/export`，根包启用 `"type": "module"`，保留 Node.js 18+ 可运行性。
+
+- 后端入口、配置、数据库、middleware、routes、services、utils、validators、migrations 和 seed 全面改为 ESM 导入导出，不再保留 `require()` / `module.exports` / `exports.*`。
+- `server/index.js` 仍然先执行 `startupService.bootstrap()`，再动态 `import('./app.js')`，避免静态导入提前加载 Express app 破坏启动自检顺序。
+- 相对导入全部补齐 `.js` 或 `/index.js`，目录导入改为显式文件路径，兼容 Node 原生 ESM 解析。
+- 原先需要 `__dirname` 的文件统一使用 `fileURLToPath(import.meta.url)` 恢复路径语义，配置目录、日志路径、上传目录和静态资源路径保持不变。
+- `package.json` 增加 `"type": "module"`，Knex CLI 继续使用原生命令 `knex migrate:latest`，避免 Node 24 下旧 `--esm` loader 兼容问题；`npm run migrate` 已验证可用。
+- `webdav` 保持动态 `import('webdav')`，既符合 ESM 语义，也避免服务启动阶段加载可选云同步依赖。
+- ESM 迁移后已通过全量 `node --check`、CommonJS 残留扫描、PM2 Node 18.19 重启、公开接口/管理员接口/普通用户接口 smoke test。
 
 ### v0.3.1-pre-fix4 续更（权限隔离与发布前细节收口）
 
@@ -107,7 +119,8 @@ v0.3.1-pre-fix4 · [MIT License](LICENSE)
 
 ## 发布路线
 
-- `0.3.1-pre-fix4`：当前本地预发布修复线，完成正式版前登录态连续性、权限隔离、私有媒体门禁、导航状态一致性、页面 Q 弹分层、人工标签预览和部署启动兼容收口。
+- `0.3.1-pre-fix5`：当前本地预发布修复线，完成后端 CommonJS 到原生 ES Module 的等价迁移，并保留启动自检、权限隔离、私有媒体门禁和现有 API 行为。
+- `0.3.1-pre-fix4`：完成正式版前登录态连续性、权限隔离、私有媒体门禁、导航状态一致性、页面 Q 弹分层、人工标签预览和部署启动兼容收口。
 - `0.3.1-pre-fix3`：完成正式版前小 bug 收口、图片派生缩略图链路、批量操作与统一确认弹窗。
 - `0.3.1`：替换最终图标资产后发布的正式版，功能与数据表初始化应与当前预发布线一致。
 - `0.4.0` / `0.4.x`：移动端重新适配、主副标题拆分、面板内容收纳和窄屏交互重排，会按独立迭代逐步提交。
@@ -117,7 +130,7 @@ v0.3.1-pre-fix4 · [MIT License](LICENSE)
 
 | 层 | 技术 |
 |----|------|
-| 后端 | Node.js 18+ / Express / Knex.js / MySQL |
+| 后端 | Node.js 18+ / 原生 ES Module / Express / Knex.js / MySQL |
 | 前端 | Nuxt 3 / Vue 3 Composition API / Fluent Design 风格 |
 | 文件监听 | chokidar |
 | 图片处理 | sharp（缩略图/中等图/颜色/分辨率） |

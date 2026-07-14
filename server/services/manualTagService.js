@@ -2,9 +2,10 @@
  * 人工标签服务
  * 支持为单个/多个图片或相册手动打标签
  */
-const db = require('../db');
-const tagService = require('./tagService');
-const logger = require('../config/logger');
+import db from '../db/index.js';
+
+import tagService from './tagService.js';
+import logger from '../config/logger.js';
 
 // 为单个图片打标签
 async function tagImage(imageId, tagIds, overwrite = false, userId = null) {
@@ -38,7 +39,7 @@ async function tagAlbumImages(albumId, tagIds, overwrite = false, userId = null)
   return await tagImages(imageIds, tagIds, overwrite, userId);
 }
 
-module.exports = {
+export default {
   tagImage,
   tagImages,
   tagAlbumImages
