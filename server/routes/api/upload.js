@@ -30,6 +30,22 @@ function assertNoDuplicateInputTags(tagNames) {
   }
 }
 
+async function assertUploadAlbumAccess(albumId, userId, isAdmin) {
+  if (!albumId) return null;
+  const album = await db('albums').where({ id: albumId }).first();
+  if (!album) {
+    const err = new Error('目标相册不存在');
+    err.statusCode = 404;
+    throw err;
+  }
+  if (!isAdmin && album.user_id !== userId) {
+    const err = new Error('无权上传到此相册');
+    err.statusCode = 403;
+    throw err;
+  }
+  return album;
+}
+
 // 单上传 / 批量上传（需登录）
 router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, next) => {
   try {
@@ -53,6 +69,7 @@ router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, nex
     assertNoDuplicateInputTags(newTags);
     const user = await db('users').where({ id: userId }).first();
     const isAdmin = user?.role === 'admin';
+    await assertUploadAlbumAccess(albumId, userId, isAdmin);
 
     // 处理新标签：管理员创建公共标签，普通用户创建自己的私有标签
     if (newTags.length > 0) {

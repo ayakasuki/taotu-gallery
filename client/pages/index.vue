@@ -330,7 +330,7 @@ const loadUsers = async () => {
 const loadSourceCounts = async () => {
   const readTotal = async (params) => {
     try {
-      const data = await api.get('/api/internal/images', { page: 1, limit: 1, ...params })
+      const data = await api.get('/api/internal/images', { page: 1, limit: 1, gallery: 'true', ...params })
       return data.total || 0
     } catch {
       return '-'
@@ -401,7 +401,8 @@ const loadGallery = () => {
   const params = {
     tags: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined,
     page: 1,
-    limit: pageSize
+    limit: pageSize,
+    gallery: 'true'
   }
   if (gallerySource.value === 'mine') {
     params.mine = 'true'
@@ -424,7 +425,8 @@ const loadMore = async () => {
     page: page.value + 1,
     limit: pageSize,
     append: true,
-    tags: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined
+    tags: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined,
+    gallery: 'true'
   }
   if (gallerySource.value === 'mine') params.mine = 'true'
   else if (gallerySource.value === 'user') { if (selectedUserId.value) params.userId = selectedUserId.value }

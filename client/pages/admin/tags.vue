@@ -34,9 +34,10 @@
           <div class="bulk-actions">
             <label class="soft-checkbox">
               <input type="checkbox" :checked="currentPageAllSelected" @change="toggleSelectCurrentPage" />
-              <span class="taotu-checkbox-icon-pair">
+              <span class="taotu-checkbox-icon-pair" :class="{ indeterminate: currentPageSomeSelected && !currentPageAllSelected }">
                 <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
                 <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                <TaotuIcon name="checkbox-square" class="checkbox-indeterminate-icon" filled :stateful="false" />
               </span>
             </label>
             <strong>已选择 {{ selectedTagIds.length }} 项</strong>
@@ -53,9 +54,10 @@
               <span>
                 <label class="soft-checkbox mini">
                   <input type="checkbox" :checked="currentPageAllSelected" @change="toggleSelectCurrentPage" />
-                  <span class="taotu-checkbox-icon-pair">
+                  <span class="taotu-checkbox-icon-pair" :class="{ indeterminate: currentPageSomeSelected && !currentPageAllSelected }">
                     <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
                     <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                    <TaotuIcon name="checkbox-square" class="checkbox-indeterminate-icon" filled :stateful="false" />
                   </span>
                 </label>
               </span>
@@ -555,6 +557,7 @@ const currentPageAllSelected = computed(() => {
   const selectable = pagedTags.value.filter(tag => !tag.isSystemTag)
   return selectable.length > 0 && selectable.every(tag => selectedTagIds.value.includes(tagKey(tag)))
 })
+const currentPageSomeSelected = computed(() => pagedTags.value.some(tag => !tag.isSystemTag && selectedTagIds.value.includes(tagKey(tag))))
 
 const editableGroups = computed(() => tagGroups.value.filter(group => !group.system && group.id !== '__system'))
 

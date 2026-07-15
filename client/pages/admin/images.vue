@@ -66,8 +66,12 @@
         <div class="image-table">
           <div class="image-table-head image-table-row">
             <span class="check-col">
-              <button type="button" class="check-box" :class="{ checked: allCurrentSelected }" @click="toggleSelectAllCurrent">
-                <TaotuIcon :name="allCurrentSelected ? 'checkbox-checked' : 'checkbox'" :filled="allCurrentSelected" :stateful="false" />
+              <button type="button" class="check-box" :class="{ checked: allCurrentSelected, indeterminate: someCurrentSelected && !allCurrentSelected }" @click="toggleSelectAllCurrent">
+                <TaotuIcon
+                  :name="allCurrentSelected ? 'checkbox-checked' : (someCurrentSelected ? 'checkbox-square' : 'checkbox')"
+                  :filled="allCurrentSelected || someCurrentSelected"
+                  :stateful="false"
+                />
               </button>
             </span>
             <span>缩略图</span>
@@ -341,6 +345,7 @@ const filterAlbumOptions = computed(() => [
 ])
 const pageItems = computed(() => buildPageItems(page.value, totalPages.value))
 const allCurrentSelected = computed(() => images.value.length > 0 && images.value.every(img => selectedIds.value.includes(img.id)))
+const someCurrentSelected = computed(() => images.value.some(img => selectedIds.value.includes(img.id)))
 const selectedImagesPublicState = computed(() => {
   const selectedImages = images.value.filter(img => selectedIds.value.includes(img.id))
   return selectedImages.length > 0 && selectedImages.every(img => !!img.is_public)
@@ -1184,7 +1189,8 @@ function tagToneById(id) {
   cursor: pointer;
 }
 
-.check-box.checked {
+.check-box.checked,
+.check-box.indeterminate {
   color: #f45f93;
 }
 

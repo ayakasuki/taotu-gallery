@@ -33,7 +33,7 @@ async function optionalAuth(req, res, next) {
 // 图片列表（内部用，返回完整数据）
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
-    const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnly, userId: targetUserId, userGallery } = req.query;
+    const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnly, userId: targetUserId, userGallery, gallery } = req.query;
     const tagIds = parseTagIds(tags);
     await assertNoTagFilterConflict(tagIds);
     const userId = req.user?.id || null;
@@ -51,6 +51,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
       isAdmin,
       filterUserId: isAdmin && targetUserId ? parseInt(targetUserId) : null,
       userGalleryOnly: isAdmin && userGallery === 'true',
+      excludeHiddenFromGallery: gallery === 'true',
       internal: true
     });
     res.json(result);
@@ -89,6 +90,9 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
     }
     if (!isAdmin && !isOwner && !isPublicAlbum && !image.is_public && image.uploader_id !== null) {
       return res.status(403).json({ error: '无权访问此图片' });
+    }
+    if (!isAdmin && (image.nsfw_status === true || image.nsfw_status === 1)) {
+      return res.status(403).json({ error: '图片已标记为不健康内容' });
     }
     res.json(image);
   } catch (err) { next(err); }

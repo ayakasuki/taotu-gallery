@@ -276,6 +276,20 @@
             </button>
           </div>
 
+          <div class="setting-row gallery-hidden-row">
+            <div>
+              <strong>隐藏于主页图库</strong>
+              <span>开启后该相册内图片不展示在首页公共图库、我的图库和用户图库</span>
+              <small class="setting-warning">
+                <TaotuIcon name="info" />
+                不影响相册内查看、图片详情、随机图 API 和已有外链访问逻辑。
+              </small>
+            </div>
+            <button type="button" class="pink-switch" :class="{ active: editForm.hideFromGallery }" @click="editForm.hideFromGallery = !editForm.hideFromGallery">
+              <i></i>
+            </button>
+          </div>
+
           <button type="button" class="pink-action full" @click="saveAlbumSettings">保存设置</button>
         </div>
       </template>
@@ -323,7 +337,7 @@ const managingAlbum = ref(null)
 const manageImages = ref([])
 const selectedManageIds = ref([])
 const activeManageTab = ref('images')
-const editForm = reactive({ name: '', description: '', isPublic: false, imagesPublic: false })
+const editForm = reactive({ name: '', description: '', isPublic: false, imagesPublic: false, hideFromGallery: false })
 const imagePublicSaving = ref(false)
 const deleteDialog = reactive({
   show: false,
@@ -490,6 +504,7 @@ const openManage = async (album) => {
   editForm.description = album.description || ''
   editForm.isPublic = !!album.is_public
   editForm.imagesPublic = !!album.all_picture_public
+  editForm.hideFromGallery = !!album.hide_from_gallery
   await loadManageImages(album.id)
 }
 
@@ -512,6 +527,7 @@ const loadManageImages = async (albumId) => {
     editForm.description = managingAlbum.value.description || ''
     editForm.isPublic = !!managingAlbum.value.is_public
     editForm.imagesPublic = !!managingAlbum.value.all_picture_public
+    editForm.hideFromGallery = !!managingAlbum.value.hide_from_gallery
   } catch {
     manageImages.value = []
   }
@@ -565,7 +581,8 @@ const saveAlbumSettings = async () => {
     const updated = await api.put(`/api/admin/albums/${managingAlbum.value.id}`, {
       name: editForm.name.trim(),
       description: editForm.description.trim(),
-      is_public: editForm.isPublic
+      is_public: editForm.isPublic,
+      hide_from_gallery: editForm.hideFromGallery
     })
     managingAlbum.value = { ...managingAlbum.value, ...updated }
     await Promise.all([loadAlbums(page.value), loadCounts()])
@@ -1549,7 +1566,8 @@ const confirmDeleteDialog = async () => {
   font-weight: 800;
 }
 
-.image-public-row {
+.image-public-row,
+.gallery-hidden-row {
   align-items: flex-start;
 }
 

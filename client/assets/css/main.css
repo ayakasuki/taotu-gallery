@@ -144,6 +144,23 @@
   transform: scale(0.94);
 }
 
+.taotu-checkbox-icon-pair .checkbox-indeterminate-icon {
+  color: var(--checkbox-checked-color, var(--taotu-pink));
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+.taotu-checkbox-icon-pair.indeterminate .checkbox-unchecked-icon,
+.taotu-checkbox-icon-pair.indeterminate .checkbox-checked-icon {
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+.taotu-checkbox-icon-pair.indeterminate .checkbox-indeterminate-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
 input:checked + .taotu-checkbox-icon-pair .checkbox-unchecked-icon {
   opacity: 0;
   transform: scale(0.94);

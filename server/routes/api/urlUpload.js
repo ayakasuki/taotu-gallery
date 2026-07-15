@@ -7,25 +7,19 @@ import https from 'https';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import {v4 as uuidv4} from 'uuid';
 import authMiddleware from '../../middleware/auth.js';
-import config from '../../config/index.js';
-import imageProcessor from '../../utils/imageProcessor.js';
-import pathUtils from '../../utils/pathUtils.js';
-import imageService from '../../services/imageService.js';
-import db from '../../db/index.js';
 import logger from '../../config/logger.js';
-import conditionTagService from '../../services/conditionTagService.js';
+import uploadService from '../../services/uploadService.js';
 
 const router = express.Router();
 
 // 下载图片到本地
-function downloadImage(url) {
+function downloadImage(url, userId) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
-    client.get(url, { timeout: 30000 }, (res) => {
+    client.get(url, { timeout: 30000 }, async (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return downloadImage(res.headers.location).then(resolve).catch(reject);
+        return downloadImage(res.headers.location, userId).then(resolve).catch(reject);
       }
       if (res.statusCode !== 200) {
         return reject(new Error(`HTTP ${res.statusCode}`));
@@ -36,17 +30,19 @@ function downloadImage(url) {
         return reject(new Error('不是图片文件'));
       }
 
-      const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg';
-      const filename = `${uuidv4()}.${ext}`;
-      const today = new Date().toISOString().split('T')[0];
-      const uploadDir = path.join(config.uploadsDir, today);
-      fs.mkdirSync(uploadDir, { recursive: true });
-
-      const filePath = path.join(uploadDir, filename);
-      const ws = fs.createWriteStream(filePath);
-      res.pipe(ws);
-      ws.on('finish', () => resolve({ filePath, filename, ext, today }));
-      ws.on('error', reject);
+      try {
+        const ext = (contentType.split('/')[1]?.split(';')[0] || 'jpg').replace('jpeg', 'jpg');
+        const sourceName = path.basename(new URL(url).pathname || `remote.${ext}`) || `remote.${ext}`;
+        const originalname = path.extname(sourceName) ? sourceName : `${sourceName}.${ext}`;
+        const target = await uploadService.prepareLocalUploadPath(originalname, userId);
+        const filePath = path.join(target.dir, target.filename);
+        const ws = fs.createWriteStream(filePath);
+        res.pipe(ws);
+        ws.on('finish', () => resolve({ filePath, filename: target.filename, mimetype: contentType.split(';')[0] }));
+        ws.on('error', reject);
+      } catch (err) {
+        reject(err);
+      }
     }).on('error', reject);
   });
 }
@@ -57,56 +53,26 @@ router.post('/', authMiddleware, async (req, res, next) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: '请提供图片 URL' });
 
-    const { filePath, filename, ext, today } = await downloadImage(url);
-    const relativePath = pathUtils.toRelativePath(filePath);
-
-    // 获取元信息
-    const meta = await imageProcessor.getImageMeta(filePath);
-    await imageProcessor.generateThumbnails(filePath);
-
-    const hashPath = imageService.generateHashPath(filename);
+    const { filePath, filename, mimetype } = await downloadImage(url, req.user?.id);
     const fileSize = fs.statSync(filePath).size;
-
-    const [imageId] = await db('images').insert({
-      filename,
-      path: relativePath,
-      hash_path: hashPath,
-      width: meta.width,
-      height: meta.height,
-      size_bytes: fileSize,
-      mime_type: `image/${ext}`,
-      avg_color: meta.avg_color,
-      orientation: meta.orientation,
-      upload_source: 'api',
-      uploader_id: req.user?.id
-    });
-
-    // 立即对新图片执行条件标签
-    try {
-      const matchedConditions = await conditionTagService.tagImageByConditions(imageId);
-      if (matchedConditions.length > 0) {
-        for (const cond of matchedConditions) {
-          await conditionTagService.insertConditionTag(imageId, cond);
-        }
-        logger.info(`URL上传条件标签: ${filename} 匹配 ${matchedConditions.length} 个条件`);
-      }
-    } catch (condErr) {
-      logger.warn(`URL上传条件标签执行失败: ${condErr.message}`);
+    const quotaCheck = await uploadService.checkUserQuota(req.user?.id, fileSize);
+    if (!quotaCheck.ok) {
+      fs.unlinkSync(filePath);
+      return res.status(413).json({ error: quotaCheck.error });
     }
 
-    const urls = imageService.buildImageUrls({ hash_path: hashPath });
-    const baseUrl = await imageService.getPublicBaseUrl();
-    logger.info(`URL上传成功: ${url} -> ${hashPath}`);
+    const result = await uploadService.processUploadedFile({
+      filename,
+      originalname: filename,
+      path: filePath,
+      size: fileSize,
+      mimetype
+    }, null, [], req.user?.id, false, [], 'api');
+    logger.info(`URL上传成功: ${url} -> ${result.hash_path}`);
 
     res.json({
       success: true,
-      id: imageId,
-      filename,
-      hash_path: hashPath,
-      url: urls.url,
-      source_url: baseUrl + urls.url,
-      thumb_url: baseUrl + urls.thumb_url,
-      medium_url: baseUrl + urls.medium_url
+      ...result
     });
   } catch (err) {
     logger.error(`URL上传失败: ${err.message}`);

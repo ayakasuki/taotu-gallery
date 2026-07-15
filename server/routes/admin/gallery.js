@@ -38,6 +38,101 @@ async function getScanMetaForPath(filePath) {
   };
 }
 
+async function getImagesForPath(filePath) {
+  const normalized = normalizePathForLike(filePath);
+  const prefix = withTrailingSlash(filePath);
+  return db('images')
+    .where(function() {
+      this.where('path', normalized).orWhere('path', 'like', `${prefix}%`);
+    })
+    .select('id', 'path', 'album_id');
+}
+
+async function resolveAlbumForPath({ albumId, albumName, userId }) {
+  if (albumId) return Number(albumId);
+  const normalizedAlbumName = String(albumName || '').trim();
+  if (!normalizedAlbumName) return null;
+  const album = await albumService.createAlbum({ name: normalizedAlbumName, user_id: userId, is_public: false });
+  return album.id;
+}
+
+async function resolvePathTagIds(tagIds = [], newTagNames = []) {
+  const ids = (tagIds || []).map(id => Number(id)).filter(Number.isInteger);
+  if (!newTagNames?.length) return [...new Set(ids)];
+  const newIds = [];
+  for (const rawName of newTagNames) {
+    const name = String(rawName || '').trim();
+    if (!name) continue;
+    const existing = await db('tags').whereRaw('LOWER(name) = LOWER(?)', [name]).first();
+    if (existing) {
+      newIds.push(existing.id);
+      continue;
+    }
+    const maxRow = await db('tags').max('id as maxId').first();
+    const newId = Number(maxRow?.maxId || 0) + 1;
+    await db('tags').insert({
+      id: newId,
+      name,
+      display_name: name,
+      combinable: true,
+      is_public: true,
+      tag_type: 'manual'
+    });
+    newIds.push(newId);
+  }
+  return [...new Set([...ids, ...newIds].map(id => Number(id)).filter(Number.isInteger))];
+}
+
+async function applyPathImageSettings({ oldPathEntry = {}, nextPathEntry = {}, userId }) {
+  const images = await getImagesForPath(oldPathEntry.path);
+  const imageIds = images.map(image => image.id);
+  const oldTagIds = (oldPathEntry.tagIds || []).map(id => Number(id)).filter(Number.isInteger);
+  const nextTagIds = await resolvePathTagIds(nextPathEntry.tagIds || [], nextPathEntry.newTagNames || []);
+  const finalAlbumId = await resolveAlbumForPath({
+    albumId: nextPathEntry.albumId || null,
+    albumName: nextPathEntry.albumMode === 'new' ? nextPathEntry.albumName : null,
+    userId
+  });
+
+  if (imageIds.length > 0) {
+    await db('images').whereIn('id', imageIds).update({
+      album_id: finalAlbumId,
+      is_public: !!nextPathEntry.makePublic,
+      updated_at: db.fn.now()
+    });
+
+    const removeTagIds = [...new Set([...oldTagIds, ...nextTagIds])];
+    if (removeTagIds.length > 0) {
+      await db('image_tags')
+        .whereIn('image_id', imageIds)
+        .whereIn('tag_id', removeTagIds)
+        .whereNull('user_tag_id')
+        .where('source', 'manual')
+        .del();
+    }
+    for (const imageId of imageIds) {
+      for (const tagId of nextTagIds) {
+        await db('image_tags').insert({
+          image_id: imageId,
+          tag_id: tagId,
+          source: 'manual'
+        }).onConflict(['image_id', 'tag_id']).ignore();
+      }
+    }
+  }
+
+  const affectedAlbumIds = [...new Set([
+    ...images.map(image => image.album_id).filter(Boolean),
+    finalAlbumId
+  ].filter(Boolean))];
+  for (const albumId of affectedAlbumIds) {
+    const [{ cnt }] = await db('images').where({ album_id: albumId }).count('* as cnt');
+    await db('albums').where({ id: albumId }).update({ image_count: cnt });
+  }
+
+  return { imageCount: imageIds.length, albumId: finalAlbumId, tagIds: nextTagIds, newTagNames: [] };
+}
+
 function inferPathType(filePath, isDefault = false) {
   if (isDefault) return 'default';
   const value = String(filePath || '').toLowerCase();
@@ -131,7 +226,7 @@ router.post('/scan', authMiddleware, async (req, res, next) => {
 // 扫描指定路径（支持指定相册和标签）
 router.post('/scan-path', authMiddleware, async (req, res, next) => {
   try {
-    const { path: targetPath, recursive, albumId, albumName, tagIds, newTags, makePublic } = req.body;
+    const { path: targetPath, recursive, albumId, albumName, tagIds, newTags, makePublic, allowDelete } = req.body;
     if (!targetPath) return res.status(400).json({ error: '请提供路径' });
 
     let finalAlbumId = albumId || null;
@@ -166,6 +261,7 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
       albumId: finalAlbumId,
       albumName: albumName || null,
       makePublic: !!makePublic,
+      allowDelete: !!allowDelete,
       tagIds: result.tagIds || tagIds || [],
       newTagNames: result.newTagNames || []
     };
@@ -174,6 +270,44 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
     await configService.writePaths({ galleryPaths: [], customPaths: existingPaths });
 
     res.json({ ...result, pathCount: 1 });
+  } catch (err) { next(err); }
+});
+
+router.post('/update-path', authMiddleware, async (req, res, next) => {
+  try {
+    const { path: targetPath } = req.body || {};
+    if (!targetPath) return res.status(400).json({ error: '请提供路径' });
+
+    const pathsConfig = await configService.readPaths();
+    const existingPaths = pathsConfig.customPaths || [];
+    const existingIndex = existingPaths.findIndex(pathEntry => pathEntry.path === targetPath);
+    if (existingIndex < 0) return res.status(404).json({ error: '路径配置不存在，请先添加路径' });
+
+    const oldPathEntry = existingPaths[existingIndex];
+    const nextPathEntry = {
+      ...oldPathEntry,
+      path: oldPathEntry.path,
+      recursive: req.body.recursive !== false,
+      albumMode: req.body.albumMode || 'none',
+      albumId: req.body.albumMode === 'existing' ? (req.body.albumId || null) : null,
+      albumName: req.body.albumMode === 'new' ? String(req.body.albumName || '').trim() : null,
+      makePublic: !!req.body.makePublic,
+      allowDelete: !!req.body.allowDelete,
+      tagIds: req.body.tagIds || [],
+      newTagNames: req.body.newTagNames || req.body.newTags || []
+    };
+
+    const applied = await applyPathImageSettings({ oldPathEntry, nextPathEntry, userId: req.user.id });
+    existingPaths[existingIndex] = {
+      ...nextPathEntry,
+      albumMode: applied.albumId ? 'existing' : 'none',
+      albumId: applied.albumId,
+      albumName: nextPathEntry.albumMode === 'new' ? nextPathEntry.albumName : null,
+      tagIds: applied.tagIds,
+      newTagNames: []
+    };
+    await configService.writePaths({ galleryPaths: [], customPaths: existingPaths });
+    res.json({ message: '路径配置已更新', updatedImages: applied.imageCount, ...applied });
   } catch (err) { next(err); }
 });
 

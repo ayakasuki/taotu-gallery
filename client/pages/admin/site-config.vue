@@ -299,63 +299,6 @@
         </div>
       </article>
 
-      <article class="site-card image-card">
-        <div class="card-heading">
-          <h2>上传与图片处理</h2>
-          <span class="saved-badge" :class="{ dirty: isCardDirty('image') }">
-            <TaotuIcon :name="cardBadgeIcon('image')" />{{ cardBadgeText('image') }}
-          </span>
-        </div>
-
-        <div class="two-col-grid">
-          <label class="field-block suffix-field">
-            <span>中等图最大宽度</span>
-            <input v-model.number="form.mediumWidth" class="soft-input" type="number" min="1" />
-            <em>px</em>
-          </label>
-          <label class="field-block suffix-field">
-            <span>中等图最大高度</span>
-            <input v-model.number="form.mediumHeight" class="soft-input" type="number" min="1" />
-            <em>px</em>
-          </label>
-        </div>
-        <p class="inline-hint">用于列表页、详情页等中等尺寸图片生成</p>
-
-        <div class="range-field image-quality">
-          <div class="range-title">
-            <span>图片质量</span>
-            <b>{{ form.imageQuality }}%</b>
-          </div>
-          <input v-model.number="form.imageQuality" type="range" min="40" max="100" class="pink-range" :style="rangeFillStyle(form.imageQuality, 40, 100)" />
-        </div>
-
-        <label class="field-block suffix-field max-size-field">
-          <span>允许上传的最大文件大小</span>
-          <input v-model.number="form.defaultMaxFileSize" class="soft-input" type="number" min="0" />
-          <em>MB</em>
-        </label>
-
-        <div class="formats-block">
-          <span>支持的图片格式</span>
-          <div class="format-row">
-            <label v-for="format in formatOptions" :key="format.key" class="format-check">
-              <input v-model="form.allowedFormats" type="checkbox" :value="format.key" />
-              <span class="taotu-checkbox-icon-pair">
-                <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
-                <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
-              </span>
-              <b>{{ format.label }}</b>
-            </label>
-          </div>
-        </div>
-
-        <div class="card-footer">
-          <button type="button" class="primary-action" :disabled="saving" @click="saveSiteConfig('图片配置已保存')">
-            <TaotuIcon name="edit" />保存图片配置
-          </button>
-        </div>
-      </article>
-
       <article class="site-card security-card">
         <div class="card-heading">
           <h2>安全与部署</h2>
@@ -490,7 +433,6 @@ const cardFields = {
   access: ['publicDomain', 'registrationEnabled', 'registrationRequireReview', 'emailVerification', 'registrationMaxUsers', 'defaultStorageLimit'],
   password: ['oldPassword', 'newPassword', 'confirmPassword'],
   smtp: ['smtpHost', 'smtpPort', 'smtpSecurity', 'smtpUsername', 'smtpPassword', 'smtpFrom', 'smtpTestTo'],
-  image: ['mediumWidth', 'mediumHeight', 'imageQuality', 'allowedFormats', 'defaultMaxFileSize'],
   security: ['recordNumber', 'httpsEnabled', 'certPath', 'keyPath']
 }
 
@@ -609,16 +551,8 @@ function buildSiteConfigPayload() {
       keyPath: form.keyPath || ''
     },
     background: buildBackgroundConfig(),
-    mediumSize: {
-      width: Math.max(1, Number(form.mediumWidth || 1920)), height: Math.max(1, Number(form.mediumHeight || 1080))
-    },
     defaultQuota: {
-      storageLimit: Math.max(0, Number(form.defaultStorageLimit || 0)) * 1024 * 1024,
-      maxFileSize: Math.max(0, Number(form.defaultMaxFileSize || 0))
-    },
-    imageProcessing: {
-      quality: clampNumber(form.imageQuality, 40, 100, 85),
-      formats: normalizeFormats(form.allowedFormats)
+      storageLimit: Math.max(0, Number(form.defaultStorageLimit || 0)) * 1024 * 1024
     },
     smtp: {
       host: form.smtpHost || '',

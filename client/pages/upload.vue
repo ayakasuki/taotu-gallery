@@ -74,8 +74,22 @@
 
             <section class="upload-config-panel">
               <div class="config-row">
-                <label>目标相册</label>
-                <TaotuSelect v-model="uploadConfig.albumId" :options="albumOptions" />
+                <label>{{ isAdmin ? '上传位置' : '目标相册' }}</label>
+                <div v-if="isAdmin" class="admin-album-picker">
+                  <div class="picker-field">
+                    <span>目标图库</span>
+                    <TaotuSelect v-model="albumScope" :options="albumScopeOptions" />
+                  </div>
+                  <div v-if="albumScope === 'user'" class="picker-field">
+                    <span>用户图库</span>
+                    <TaotuSelect v-model="targetAlbumUserId" :options="albumUserOptions" />
+                  </div>
+                  <div class="picker-field">
+                    <span>目标相册</span>
+                    <TaotuSelect v-model="uploadConfig.albumId" :options="albumOptions" />
+                  </div>
+                </div>
+                <TaotuSelect v-else v-model="uploadConfig.albumId" :options="albumOptions" />
               </div>
 
               <div class="config-row tags-row">
@@ -90,7 +104,7 @@
                     <input
                       v-model="newTagName"
                       :placeholder="isAdmin ? '输入新公共标签名，回车添加' : '输入新私有标签名，回车添加'"
-                      @keyup.enter="addNewTag"
+                      @keydown.enter.prevent="addNewTag"
                     />
                     <button v-if="newTagName" type="button" @click="addNewTag">新增标签</button>
                   </div>
@@ -189,6 +203,7 @@ curl -X POST {{ baseUrl }}/api/upload \
             <span>状态</span>
             <span>链接（{{ siteName }}）</span>
             <span>错误信息</span>
+            <span>存储策略</span>
             <span>操作</span>
             <span>时间</span>
           </div>
@@ -205,6 +220,7 @@ curl -X POST {{ baseUrl }}/api/upload \
             </span>
             <span class="record-link">{{ record.success ? record.url : '-' }}</span>
             <span class="record-error">{{ record.success ? '-' : (record.error || '上传失败') }}</span>
+            <span class="record-strategy">{{ record.success ? record.storageStrategyName : '-' }}</span>
             <span class="record-op">
               <button v-if="record.success" type="button" @click="copyLink(record.url)">复制链接</button>
               <button v-else type="button" @click="retryRecord(record)">重试</button>
@@ -233,6 +249,7 @@ const getInitialAuthPayload = () => {
 const initialAuthPayload = getInitialAuthPayload()
 const isLoggedIn = ref(!!initialAuthPayload)
 const isAdmin = ref(initialAuthPayload?.role === 'admin')
+const currentUserId = ref(initialAuthPayload?.id || null)
 const authReady = ref(!!initialAuthPayload)
 const siteName = ref('桃图智库')
 const activeTab = ref('file')
@@ -245,6 +262,7 @@ const uploadTabs = [
 const handleAuthInvalid = () => {
   isLoggedIn.value = false
   isAdmin.value = false
+  currentUserId.value = null
   authReady.value = true
 }
 
@@ -256,10 +274,12 @@ onMounted(async () => {
   const payload = readAuthPayload()
   isLoggedIn.value = !!payload
   isAdmin.value = payload?.role === 'admin'
+  currentUserId.value = payload?.id || null
   authReady.value = true
   if (isLoggedIn.value) {
     fetchTags()
     fetchAlbums()
+    if (isAdmin.value) fetchAlbumUsers()
   }
   window.addEventListener('taotu:auth-invalid', handleAuthInvalid)
   window.addEventListener('paste', handlePaste)
@@ -281,6 +301,9 @@ const uploadProgress = ref(0)
 const uploadRecords = ref([])
 const currentXhr = ref(null)
 const albums = ref([])
+const albumUsers = ref([])
+const albumScope = ref('mine')
+const targetAlbumUserId = ref(null)
 const recordStatusFilter = ref('all')
 const recordStatusOptions = [
   { label: '全部状态', value: 'all' },
@@ -297,9 +320,34 @@ const uploadConfig = reactive({
 })
 
 const newTagName = ref('')
+const albumScopeOptions = [
+  { label: '我的图库', value: 'mine' },
+  { label: '全部', value: 'all' },
+  { label: '用户图库', value: 'user' }
+]
+const albumUserOptions = computed(() => albumUsers.value.map(user => ({
+  label: user.username,
+  value: user.id,
+  description: user.role === 'admin' ? '管理员' : '普通用户'
+})))
+const visibleAlbums = computed(() => {
+  if (!isAdmin.value) return albums.value
+  if (albumScope.value === 'mine') {
+    return albums.value.filter(album => String(album.user_id || '') === String(currentUserId.value || ''))
+  }
+  if (albumScope.value === 'user') {
+    if (!targetAlbumUserId.value) return []
+    return albums.value.filter(album => String(album.user_id || '') === String(targetAlbumUserId.value))
+  }
+  return albums.value
+})
 const albumOptions = computed(() => [
   { label: '不指定相册', value: null },
-  ...albums.value.map(album => ({ label: album.name, value: album.id }))
+  ...visibleAlbums.value.map(album => ({
+    label: isAdmin.value && albumScope.value === 'all' && album.owner_name ? `${album.name} · ${album.owner_name}` : album.name,
+    value: album.id,
+    description: isAdmin.value && albumScope.value !== 'mine' ? (album.owner_name || '系统') : ''
+  }))
 ])
 const selectedTotalSize = computed(() => selectedFiles.value.reduce((sum, item) => sum + item.size, 0))
 const successRecords = computed(() => uploadRecords.value.filter(record => record.success && record.url))
@@ -326,9 +374,19 @@ const uploadTagOptions = computed(() => {
 
 const addNewTag = () => {
   const name = newTagName.value.trim()
-  if (!name || uploadConfig.newTags.includes(name)) return
-  const existing = availableTags.value.combinable.concat(availableTags.value.nonCombinable)
-    .find(tag => String(tag.name || '').toLowerCase() === name.toLowerCase())
+  if (!name) return
+  const duplicateNewTag = uploadConfig.newTags.some(tagName => tagName.toLowerCase() === name.toLowerCase())
+  if (duplicateNewTag) {
+    newTagName.value = ''
+    return
+  }
+  const existing = [
+    ...(uploadTagOptions.value.combinable || []),
+    ...(uploadTagOptions.value.nonCombinable || [])
+  ].find((tag) => {
+    const names = [tag.name, tag.display_name, tag.label].filter(Boolean).map(item => String(item).toLowerCase())
+    return names.includes(name.toLowerCase())
+  })
   if (existing) {
     alert(`${isAdmin.value ? '公共标签' : '私有标签'}名「${name}」已存在，请从已有标签中选择`)
     return
@@ -340,12 +398,38 @@ const addNewTag = () => {
 const fetchAlbums = async () => {
   try {
     const api = useApi()
-    const data = await api.get('/api/internal/albums')
+    const data = await api.get(isAdmin.value ? '/api/admin/albums?limit=10000' : '/api/internal/albums?mine=true&limit=10000')
     albums.value = data.albums || []
   } catch (err) {
     console.error('获取相册失败:', err)
   }
 }
+
+const fetchAlbumUsers = async () => {
+  try {
+    const data = await api.get('/api/admin/users?all=true')
+    albumUsers.value = data.users || []
+  } catch (err) {
+    console.error('获取用户列表失败:', err)
+  }
+}
+
+watch(albumScope, (scope) => {
+  uploadConfig.albumId = null
+  if (scope === 'user' && !targetAlbumUserId.value && albumUserOptions.value.length > 0) {
+    targetAlbumUserId.value = albumUserOptions.value[0].value
+  }
+})
+
+watch(targetAlbumUserId, () => {
+  if (albumScope.value === 'user') uploadConfig.albumId = null
+})
+
+watch(albumUserOptions, (options) => {
+  if (albumScope.value === 'user' && !targetAlbumUserId.value && options.length > 0) {
+    targetAlbumUserId.value = options[0].value
+  }
+})
 
 const triggerFileInput = () => fileInput.value?.click()
 
@@ -505,6 +589,7 @@ const appendUploadRecords = (results, sourceItems = []) => {
       success: !!result.success,
       url,
       error: result.error || '',
+      storageStrategyName: result.storage_strategy_name || result.storageStrategyName || '默认本地',
       time: formatDateTime(new Date()),
       retryFile: matched || null
     })
@@ -888,6 +973,25 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   font-weight: 900;
 }
 
+.admin-album-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.picker-field {
+  min-width: 0;
+}
+
+.picker-field > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #8b93a7;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .tag-config-box {
   min-width: 0;
   padding: 10px;
@@ -1067,9 +1171,9 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 .records-head,
 .record-row {
   display: grid;
-  grid-template-columns: minmax(210px, 1.4fr) 110px 110px minmax(320px, 2fr) minmax(260px, 1.5fr) 110px 160px;
+  grid-template-columns: minmax(210px, 1.4fr) 110px 110px minmax(320px, 2fr) minmax(240px, 1.4fr) 140px 110px 160px;
   align-items: center;
-  min-width: 1380px;
+  min-width: 1500px;
 }
 
 .records-head {
@@ -1107,7 +1211,8 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 
 .record-file strong,
 .record-link,
-.record-error {
+.record-error,
+.record-strategy {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;

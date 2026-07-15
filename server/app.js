@@ -45,8 +45,11 @@ import adminStatsRouter from './routes/admin/stats.js';
 import adminBackupRouter from './routes/admin/backup.js';
 import adminRestoreRouter from './routes/admin/restore.js';
 import adminCloudSyncRouter from './routes/admin/cloudSync.js';
+import adminGroupsRouter from './routes/admin/groups.js';
+import adminStrategiesRouter from './routes/admin/strategies.js';
 import tagFileWatcher from './services/tagFileWatcher.js';
 import galleryWatcher from './services/galleryWatcher.js';
+import nsfwService from './services/nsfwService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -122,6 +125,15 @@ async function resolveMediaUser(req) {
 
 async function canAccessImageAsset(req, record) {
   if (!record) return false;
+  const user = record.nsfw_status === true || record.nsfw_status === 1
+    ? await resolveMediaUser(req)
+    : null;
+  if (record.nsfw_status === true || record.nsfw_status === 1) {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    return record.uploader_id === user.id;
+  }
+
   if (record.is_public === true || record.is_public === 1) return true;
 
   if (record.album_id) {
@@ -129,10 +141,10 @@ async function canAccessImageAsset(req, record) {
     if (album?.is_public === true || album?.is_public === 1) return true;
   }
 
-  const user = await resolveMediaUser(req);
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-  return record.uploader_id === user.id;
+  const resolvedUser = user || await resolveMediaUser(req);
+  if (!resolvedUser) return false;
+  if (resolvedUser.role === 'admin') return true;
+  return record.uploader_id === resolvedUser.id;
 }
 
 // 图片静态文件服务（哈希路径映射）
@@ -260,6 +272,8 @@ app.use('/api/admin/api', adminApiRouter);
 app.use('/api/admin/site-config', adminSiteConfigRouter);
 app.use('/api/admin/announcements', adminAnnouncementsRouter);
 app.use('/api/admin/users', authMiddleware, requireAdmin, adminUsersRouter);
+app.use('/api/admin/groups', authMiddleware, requireAdmin, adminGroupsRouter);
+app.use('/api/admin/strategies', authMiddleware, requireAdmin, adminStrategiesRouter);
 app.use('/api/admin/stats', authMiddleware, requireAdmin, adminStatsRouter);
 app.use('/api/admin/backup', authMiddleware, requireAdmin, adminBackupRouter);
 app.use('/api/admin/restore', authMiddleware, requireAdmin, adminRestoreRouter);
@@ -290,6 +304,7 @@ if (fs.existsSync(clientDist)) {
 setTimeout(() => {
   tagFileWatcher.startWatching();
   galleryWatcher.startWatching();
+  nsfwService.startScheduler();
 }, 2000);
 
 // 全局错误处理

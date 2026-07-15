@@ -174,6 +174,11 @@
           <TaotuSelect v-model="form.role" :options="roleOptions" />
         </div>
 
+        <div class="form-field">
+          <label>用户组</label>
+          <TaotuSelect v-model="form.userGroupId" :options="userGroupOptions" />
+        </div>
+
         <div class="quota-grid">
           <div class="form-field">
             <label>存储上限（MB）</label>
@@ -241,6 +246,7 @@ const { showAdminToast } = useAdminToast()
 const { normalizeAssetUrl } = useUiCache()
 
 const users = ref([])
+const userGroups = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const formDialog = ref(false)
@@ -267,6 +273,7 @@ const form = reactive({
   password: '',
   email: '',
   role: 'user',
+  userGroupId: null,
   storageLimitMB: 5000,
   maxFileSizeMB: 20
 })
@@ -289,6 +296,12 @@ const statusFilterOptions = [
   { label: '未审核', value: 'pending' }
 ]
 
+const userGroupOptions = computed(() => userGroups.value.map(group => ({
+  label: group.name,
+  value: group.id,
+  description: group.is_default ? '默认用户组' : `${group.user_count || 0} 个用户`
+})))
+
 const pageSizeOptions = [
   { label: '10 条/页', value: 10 },
   { label: '20 条/页', value: 20 },
@@ -299,7 +312,7 @@ let searchTimer = null
 
 onMounted(async () => {
   readCurrentUser()
-  await loadUsers()
+  await Promise.all([loadUserGroups(), loadUsers()])
 })
 
 watch(() => filters.search, () => {
@@ -344,6 +357,15 @@ async function loadUsers() {
   }
 }
 
+async function loadUserGroups() {
+  try {
+    const data = await api.get('/api/admin/groups')
+    userGroups.value = data.groups || []
+  } catch {
+    userGroups.value = []
+  }
+}
+
 function applyFilters() {
   pagination.page = 1
   loadUsers()
@@ -366,6 +388,7 @@ function resetForm() {
   form.password = ''
   form.email = ''
   form.role = 'user'
+  form.userGroupId = userGroups.value.find(group => group.is_default)?.id || null
   form.storageLimitMB = 5000
   form.maxFileSizeMB = 20
   showPassword.value = false
@@ -383,6 +406,7 @@ function openEditDialog(user) {
   form.password = ''
   form.email = user.email || ''
   form.role = user.role || 'user'
+  form.userGroupId = user.user_group_id || userGroups.value.find(group => group.is_default)?.id || null
   form.storageLimitMB = bytesToMb(user.storage_limit)
   form.maxFileSizeMB = bytesToMb(user.max_file_size)
   showPassword.value = false
@@ -418,6 +442,7 @@ async function saveUser() {
     const payload = {
       email: form.email || null,
       role: form.role,
+      user_group_id: form.userGroupId,
       storage_limit: mbToBytes(form.storageLimitMB),
       max_file_size: mbToBytes(form.maxFileSizeMB)
     }

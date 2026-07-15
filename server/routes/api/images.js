@@ -200,6 +200,9 @@ router.get('/:id', async (req, res, next) => {
     if (!isAdmin && image.uploader_id !== userId && !isPublicAlbum && !image.is_public) {
       return res.status(403).json({ error: '无权访问此图片' });
     }
+    if (!isAdmin && (image.nsfw_status === true || image.nsfw_status === 1)) {
+      return res.status(403).json({ error: '图片已标记为不健康内容' });
+    }
     res.json(image);
   } catch (err) {
     next(err);

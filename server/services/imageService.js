@@ -127,6 +127,19 @@ function applyTagFilters(query, tagIds) {
   return query;
 }
 
+function applyGalleryHiddenFilter(query) {
+  return query.where(function() {
+    this.whereNull('album_id')
+      .orWhereNotIn('album_id', db('albums').select('id').where('hide_from_gallery', 1));
+  });
+}
+
+function applyNsfwVisibilityFilter(query) {
+  return query.where(function() {
+    this.whereNull('nsfw_status').orWhere('nsfw_status', false).orWhere('nsfw_status', 0);
+  });
+}
+
 // 查询图片列表
 async function getImages(options = {}) {
   const {
@@ -134,7 +147,7 @@ async function getImages(options = {}) {
     sort = 'created_at', order = 'desc',
     tagIds, albumId, orientation, search,
     userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, userGalleryOnly = false,
-    internal = false
+    internal = false, excludeHiddenFromGallery = false
   } = options;
 
   const offset = (page - 1) * limit;
@@ -182,6 +195,8 @@ async function getImages(options = {}) {
   }
   if (orientation) query = query.where({ orientation });
   if (search) query = query.where('filename', 'like', `%${search}%`);
+  if (!albumId && excludeHiddenFromGallery) query = applyGalleryHiddenFilter(query);
+  if (!isAdmin && (albumId || publicOnly || userGalleryOnly || filterUserId || excludeHiddenFromGallery || !ownOnly)) query = applyNsfwVisibilityFilter(query);
 
   query = applyTagFilters(query, tagIds);
 
@@ -228,6 +243,8 @@ async function getImages(options = {}) {
     else if (filterUserId) countQuery = countQuery.where({ uploader_id: filterUserId });
     else if (userGalleryOnly) countQuery = countQuery.whereNotNull('uploader_id');
   }
+  if (!albumId && excludeHiddenFromGallery) countQuery = applyGalleryHiddenFilter(countQuery);
+  if (!isAdmin && (albumId || publicOnly || userGalleryOnly || filterUserId || excludeHiddenFromGallery || !ownOnly)) countQuery = applyNsfwVisibilityFilter(countQuery);
   countQuery = applyTagFilters(countQuery, tagIds);
   const [{ count }] = await countQuery;
 
@@ -331,6 +348,7 @@ async function getRandomImages(options = {}) {
   query = applyTagFilters(query, tagIds);
   if (albumId) query = query.where({ album_id: albumId });
   if (orientation) query = query.where({ orientation });
+  if (!isAdmin) query = applyNsfwVisibilityFilter(query);
 
   const images = await query.orderByRaw('RAND()').limit(count);
 

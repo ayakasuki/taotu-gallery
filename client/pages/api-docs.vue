@@ -1270,7 +1270,7 @@ onBeforeUnmount(() => {
   position: relative;
   overflow: hidden;
   border-radius: 8px;
-  background: rgba(245, 248, 255, 0.86);
+  background: #fff;
 }
 
 .preview-tile {
@@ -1302,11 +1302,12 @@ onBeforeUnmount(() => {
 }
 
 .single-preview {
-  height: 430px;
+  height: 535px;
   max-width: 100%;
 }
 
 .single-preview img {
+  object-fit: scale-down;
 }
 
 .preview-data {

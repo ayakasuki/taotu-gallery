@@ -49,6 +49,7 @@ import {
   CheckSquare,
   Checkbox,
   CheckboxChecked,
+  CheckboxSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -111,6 +112,7 @@ import {
   Shield,
   Trash,
   User,
+  UserSquare,
   X,
   XCircle
 } from '@boxicons/vue'
@@ -178,6 +180,8 @@ const iconMap = {
   'user-permissions': 'Shield',
   users: 'User',
   user: 'User',
+  'user-groups': 'UserSquare',
+  'storage-strategy': 'Database',
   'return-front': 'Home',
   announcements: 'Announcement',
   'status-ok-placeholder': 'CheckCircle',
@@ -187,8 +191,10 @@ const iconMap = {
   'toast-error': 'XCircle',
   'toast-danger': 'XCircle',
   'toast-info': 'InfoCircle',
+  info: 'InfoCircle',
   checkbox: 'Checkbox',
   'checkbox-checked': 'CheckboxChecked',
+  'checkbox-square': 'CheckboxSquare',
   'grid-view': 'Grid9',
   grid: 'Grid9',
   'list-view': 'ListUl',
@@ -311,6 +317,7 @@ const iconComponents = {
   CheckSquare,
   Checkbox,
   CheckboxChecked,
+  CheckboxSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -373,6 +380,7 @@ const iconComponents = {
   Shield,
   Trash,
   User,
+  UserSquare,
   X,
   XCircle
 }

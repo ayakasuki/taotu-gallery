@@ -305,11 +305,13 @@ router.post('/register', async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const requireReview = !!siteConfig.registration?.requireReview;
+    const defaultGroup = await db('user_groups').where({ is_default: true }).first().catch(() => null);
     const [id] = await db('users').insert({
       username,
       password_hash: passwordHash,
       email: normalizedEmail || null,
       role: 'user',
+      user_group_id: defaultGroup?.id || null,
       is_disabled: requireReview,
       review_status: requireReview ? 'pending' : 'approved'
     });

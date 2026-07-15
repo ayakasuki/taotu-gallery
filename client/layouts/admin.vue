@@ -128,7 +128,9 @@ const menuGroups = [
   {
     title: '用户与权限',
     items: [
-      { to: '/admin/users', label: '用户管理', icon: 'users' }
+      { to: '/admin/users', label: '用户管理', icon: 'users' },
+      { to: '/admin/groups', label: '用户组', icon: 'user-groups' },
+      { to: '/admin/strategies', label: '存储策略', icon: 'storage-strategy' }
     ]
   },
   {

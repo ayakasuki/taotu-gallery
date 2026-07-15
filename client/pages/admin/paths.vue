@@ -17,7 +17,7 @@
       </div>
 
       <div class="path-toolbar">
-        <button type="button" class="primary-action" @click="showAdd = true">
+        <button type="button" class="primary-action" @click="openAddPath">
           <TaotuIcon name="add" />添加路径
         </button>
         <button type="button" class="plain-action" @click="savePaths">
@@ -68,6 +68,9 @@
               <button type="button" class="scan-row-btn" :disabled="scanning" @click="scanPath(pathItem)">
                 <TaotuIcon name="scan" />扫描
               </button>
+              <button type="button" class="edit-row-btn" :disabled="scanning" @click="openEditPath(index)">
+                <TaotuIcon name="edit" />编辑
+              </button>
               <button type="button" class="delete-row-btn" @click="removePath(index)">
                 <TaotuIcon name="trash" />删除
               </button>
@@ -81,15 +84,16 @@
 
       <section v-if="showAdd" class="add-path-panel">
         <div class="add-title-row">
-          <h2><TaotuIcon name="add" />添加路径</h2>
-          <button type="button" @click="showAdd = false">×</button>
+          <h2><TaotuIcon :name="isEditingPath ? 'edit' : 'add'" />{{ isEditingPath ? '编辑路径' : '添加路径' }}</h2>
+          <button type="button" @click="closePathPanel">×</button>
         </div>
 
         <div class="add-grid">
           <div class="add-inner-card">
             <label class="field-line">
               <span>路径 *</span>
-              <input v-model="newPath.path" placeholder="例如：/mnt/storage/illustration/ 或 smb://nas.local/桃图资源/" />
+              <input v-model="newPath.path" :disabled="isEditingPath" placeholder="例如：/mnt/storage/illustration/ 或 smb://nas.local/桃图资源/" />
+              <small v-if="isEditingPath">已扫描路径不能直接变更；如需换路径，请删除后重新添加。</small>
             </label>
 
             <div class="switch-row">
@@ -131,6 +135,17 @@
               </div>
               <label class="pink-switch muted-switch">
                 <input v-model="newPath.makePublic" type="checkbox" />
+                <i></i>
+              </label>
+            </div>
+
+            <div class="switch-row danger-setting">
+              <div>
+                <strong><TaotuIcon name="warning" />管理图片删减</strong>
+                <small>为扫描到的图片批量管理，开启后删除图片会同步删除该路径原始文件。</small>
+              </div>
+              <label class="pink-switch muted-switch">
+                <input v-model="newPath.allowDelete" type="checkbox" />
                 <i></i>
               </label>
             </div>
@@ -177,8 +192,8 @@
         </div>
 
         <div class="add-footer">
-          <button type="button" class="cancel-add" @click="showAdd = false">取消</button>
-          <button type="button" class="confirm-add" @click="addPath">添加</button>
+          <button type="button" class="cancel-add" @click="closePathPanel">取消</button>
+          <button type="button" class="confirm-add" @click="savePathPanel">{{ isEditingPath ? '保存编辑' : '添加' }}</button>
         </div>
       </section>
     </section>
@@ -284,6 +299,7 @@ const dbStatus = ref({ stats: {} })
 const displayMode = ref('grid')
 const uploadConfig = ref({ showUrlAfterUpload: true })
 const showAdd = ref(false)
+const editingPathIndex = ref(-1)
 const scanning = ref(false)
 const selectedGroupId = ref('')
 const tokenMenuOpen = ref(null)
@@ -308,11 +324,14 @@ const newPath = reactive({
   albumId: null,
   albumName: '',
   makePublic: false,
+  allowDelete: false,
   enableTags: false,
   tagIds: [],
   newTagName: '',
   newTagNames: []
 })
+
+const isEditingPath = computed(() => editingPathIndex.value >= 0)
 
 const selectedPreviewTags = computed(() => {
   const existing = allTags.value
@@ -412,11 +431,42 @@ function resetNewPath() {
   newPath.albumId = null
   newPath.albumName = ''
   newPath.makePublic = false
+  newPath.allowDelete = false
   newPath.enableTags = false
   newPath.tagIds = []
   newPath.newTagName = ''
   newPath.newTagNames = []
   selectedGroupId.value = ''
+}
+
+function openAddPath() {
+  editingPathIndex.value = -1
+  resetNewPath()
+  showAdd.value = true
+}
+
+function closePathPanel() {
+  showAdd.value = false
+  editingPathIndex.value = -1
+  resetNewPath()
+}
+
+function openEditPath(index) {
+  const pathItem = customPaths.value[index]
+  editingPathIndex.value = index
+  newPath.path = pathItem.path || ''
+  newPath.recursive = pathItem.recursive !== false
+  newPath.albumMode = pathItem.albumMode || (pathItem.albumId ? 'existing' : 'none')
+  newPath.albumId = pathItem.albumId || null
+  newPath.albumName = pathItem.albumName || ''
+  newPath.makePublic = !!pathItem.makePublic
+  newPath.allowDelete = !!pathItem.allowDelete
+  newPath.enableTags = Boolean((pathItem.tagIds || []).length || (pathItem.newTagNames || []).length)
+  newPath.tagIds = [...(pathItem.tagIds || [])]
+  newPath.newTagName = ''
+  newPath.newTagNames = [...(pathItem.newTagNames || [])]
+  selectedGroupId.value = ''
+  showAdd.value = true
 }
 
 function getPathTagNames(pathItem) {
@@ -531,6 +581,7 @@ function addPath() {
     albumId: newPath.albumMode === 'existing' ? newPath.albumId : null,
     albumName: newPath.albumMode === 'new' ? newPath.albumName.trim() : '',
     makePublic: !!newPath.makePublic,
+    allowDelete: !!newPath.allowDelete,
     tagIds: newPath.enableTags ? [...newPath.tagIds] : [],
     newTagNames: newPath.enableTags ? [...newPath.newTagNames] : [],
     status: 'normal',
@@ -539,6 +590,38 @@ function addPath() {
   })
   resetNewPath()
   showAdd.value = false
+}
+
+async function updatePath() {
+  const index = editingPathIndex.value
+  if (index < 0) return
+  const payload = {
+    path: customPaths.value[index].path,
+    recursive: newPath.recursive !== false,
+    albumMode: newPath.albumMode || 'none',
+    albumId: newPath.albumMode === 'existing' ? newPath.albumId : null,
+    albumName: newPath.albumMode === 'new' ? newPath.albumName.trim() : '',
+    makePublic: !!newPath.makePublic,
+    allowDelete: !!newPath.allowDelete,
+    tagIds: newPath.enableTags ? [...newPath.tagIds] : [],
+    newTagNames: newPath.enableTags ? [...newPath.newTagNames] : []
+  }
+  const data = await api.post('/api/admin/gallery/update-path', payload)
+  showToast('编辑完成', `已更新 ${data.updatedImages || 0} 张已扫描图片`)
+  closePathPanel()
+  await Promise.all([loadConfig(), loadAlbums(), loadTags(), loadDatabaseStatus()])
+}
+
+async function savePathPanel() {
+  try {
+    if (isEditingPath.value) {
+      await updatePath()
+    } else {
+      addPath()
+    }
+  } catch (err) {
+    showToast(isEditingPath.value ? '编辑失败' : '添加失败', err?.data?.error || err.message || '路径操作失败', true)
+  }
 }
 
 function removePath(index) {
@@ -566,6 +649,7 @@ async function savePaths() {
       albumId: pathItem.albumId || null,
       albumName: pathItem.albumName || null,
       makePublic: !!pathItem.makePublic,
+      allowDelete: !!pathItem.allowDelete,
       tagIds: pathItem.tagIds || [],
       newTagNames: pathItem.newTagNames || []
     }))
@@ -583,6 +667,7 @@ async function scanPath(pathItem) {
       albumId: pathItem.albumId || null,
       albumName: pathItem.albumName || null,
       makePublic: !!pathItem.makePublic,
+      allowDelete: !!pathItem.allowDelete,
       tagIds: pathItem.tagIds || [],
       newTags: pathItem.newTagNames || []
     })
@@ -774,7 +859,7 @@ function maskToken(value) {
 .plain-action, .cancel-add { border: 1px solid rgba(218, 224, 238, 0.92); background: rgba(255,255,255,0.72); color: #66728a; }
 .scan-action { border: 1px solid rgba(153, 123, 244, 0.36); background: rgba(248, 244, 255, 0.82); color: #8d72e8; }
 .path-table { border: 1px solid rgba(226, 230, 241, 0.82); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.42); }
-.path-head, .path-row { display: grid; grid-template-columns: minmax(180px, 1.45fr) 82px 62px 110px minmax(116px, 0.95fr) 146px 70px 112px; align-items: center; gap: 10px; padding: 0 13px; }
+.path-head, .path-row { display: grid; grid-template-columns: minmax(180px, 1.45fr) 82px 62px 110px minmax(116px, 0.95fr) 146px 70px 174px; align-items: center; gap: 10px; padding: 0 13px; }
 .path-head { min-height: 38px; color: #7d879c; font-size: 12px; font-weight: 900; background: rgba(255,255,255,0.5); border-bottom: 1px solid rgba(226, 230, 241, 0.76); }
 .path-row { min-height: 58px; border-bottom: 1px solid rgba(226, 230, 241, 0.66); color: #5f6a82; font-size: 12px; font-weight: 800; }
 .path-row:last-child { border-bottom: none; }
@@ -790,10 +875,11 @@ function maskToken(value) {
 .status-pill.ok { background: #e7f8ee; color: #44b875; } .status-pill.warn { background: #fff3dc; color: #c78a2a; }
 .tag-summary { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .tag-summary i { background: #f2f4f8; color: #8b96aa; } .tag-summary em, .tag-summary b { color: #9aa4b7; font-style: normal; font-weight: 900; }
-.row-actions { display: flex; justify-content: flex-end; gap: 7px; min-width: 108px; }
+.row-actions { display: flex; justify-content: flex-end; gap: 6px; min-width: 168px; }
 .row-actions button { flex: 0 0 52px; width: 52px; min-height: 26px; padding: 0 5px; gap: 4px; border-radius: 6px; font-size: 12px; line-height: 1; }
 .row-actions .taotu-svg-icon { width: 13px; height: 13px; }
 .scan-row-btn { border: 1px solid rgba(153, 123, 244, 0.28); background: rgba(247, 243, 255, 0.82); color: #8c72e8; }
+.edit-row-btn { border: 1px solid rgba(96, 176, 230, 0.28); background: rgba(239, 249, 255, 0.86); color: #4c9bd5; }
 .delete-row-btn { border: 1px solid rgba(255, 111, 157, 0.26); background: rgba(255, 241, 246, 0.86); color: #ff6f9d; }
 .default-action { justify-self: center; color: #8792a8; font-size: 17px; }
 .empty-custom-paths { padding: 32px 14px; text-align: center; color: #98a3b7; font-size: 13px; font-weight: 900; }
@@ -808,7 +894,10 @@ function maskToken(value) {
 .field-line input::placeholder, .soft-input::placeholder { color: #bdc5d3; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 14px; }
 .switch-row strong, .album-mode-row strong { color: #61708a; font-size: 12px; font-weight: 900; }
+.switch-row strong .taotu-svg-icon { width: 14px; height: 14px; margin-right: 4px; color: #ff4d68; vertical-align: -2px; }
 .switch-row small { display: block; margin-top: 4px; color: #a0aabc; font-size: 11px; font-weight: 800; }
+.danger-setting { padding-top: 10px; border-top: 1px dashed rgba(255, 120, 150, 0.32); }
+.danger-setting strong { color: #e95d78; }
 .pink-switch input { display: none; } .pink-switch i { position: relative; display: block; width: 34px; height: 18px; border-radius: 999px; background: #dfe5ee; }
 .pink-switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(80,90,110,0.22); transition: transform 0.18s ease; }
 .pink-switch input:checked + i { background: #ff6f9d; } .pink-switch input:checked + i::after { transform: translateX(16px); }

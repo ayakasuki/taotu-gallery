@@ -200,9 +200,10 @@
             <div class="image-table-head">
               <label class="soft-checkbox">
                 <input type="checkbox" :checked="allMyImagesSelected" :disabled="myImages.length === 0" @change="toggleSelectAllCurrentImages" />
-                <span class="taotu-checkbox-icon-pair">
+                <span class="taotu-checkbox-icon-pair" :class="{ indeterminate: someMyImagesSelected && !allMyImagesSelected }">
                   <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
                   <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                  <TaotuIcon name="checkbox-square" class="checkbox-indeterminate-icon" filled :stateful="false" />
                 </span>
               </label>
               <span>缩略图</span>
@@ -311,9 +312,10 @@
                 <div class="private-tags-head">
                   <label class="soft-checkbox">
                     <input type="checkbox" :checked="allPrivateTagsSelected" :disabled="pagedPrivateTags.length === 0" @change="toggleSelectAllPrivateTags" />
-                    <span class="taotu-checkbox-icon-pair">
+                    <span class="taotu-checkbox-icon-pair" :class="{ indeterminate: somePrivateTagsSelected && !allPrivateTagsSelected }">
                       <TaotuIcon name="checkbox" class="checkbox-unchecked-icon" :stateful="false" />
                       <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
+                      <TaotuIcon name="checkbox-square" class="checkbox-indeterminate-icon" filled :stateful="false" />
                     </span>
                   </label>
                   <span>名称</span>
@@ -511,7 +513,7 @@
                   <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="" />
                   <span v-else>{{ userInitial }}</span>
                   <span class="avatar-hover-layer">
-                    <strong>+</strong>
+                    <TaotuIcon name="create-plus" class="avatar-upload-plus" />
                     <em>{{ avatarUploading ? '上传中' : '上传头像' }}</em>
                   </span>
                 </button>
@@ -917,6 +919,7 @@ const canChangePassword = computed(() => {
   return !!passwordForm.oldPassword && !!passwordForm.newPassword && !!passwordForm.confirmPassword && passwordForm.newPassword === passwordForm.confirmPassword
 })
 const allMyImagesSelected = computed(() => myImages.value.length > 0 && myImages.value.every(img => selectedImageIds.value.includes(img.id)))
+const someMyImagesSelected = computed(() => myImages.value.some(img => selectedImageIds.value.includes(img.id)))
 const imageTotalPages = computed(() => Math.max(1, Math.ceil((myTotal.value || 0) / Number(imagePageSize.value || 7))))
 const imagePageItems = computed(() => buildPageItems(myPage.value, imageTotalPages.value))
 const privateTagTotalPages = computed(() => Math.max(1, Math.ceil((myTags.value.length || 0) / Number(privateTagPageSize.value || 10))))
@@ -955,6 +958,7 @@ const parseUserMutualIds = (value) => {
 }
 const mutualTagOptions = computed(() => myTags.value.filter(tag => tag.id !== editingTag.value?.id))
 const allPrivateTagsSelected = computed(() => pagedPrivateTags.value.length > 0 && pagedPrivateTags.value.every(tag => selectedPrivateTagIds.value.includes(tag.id)))
+const somePrivateTagsSelected = computed(() => pagedPrivateTags.value.some(tag => selectedPrivateTagIds.value.includes(tag.id)))
 const formatMutualNames = (value) => {
   const ids = parseUserMutualIds(value)
   return ids.map(id => myTags.value.find(tag => tag.id === id)).filter(Boolean).map(tag => tag.display_name || tag.name).join('，')
@@ -1929,9 +1933,10 @@ const buildPageItems = (current, total) => {
   font-size: 13px;
   font-weight: 900;
 }
-.recent-empty img {
-  width: 112px;
-  height: 112px;
+.recent-empty .taotu-svg-icon {
+  width: 4em;
+  height: 4em;
+  margin-bottom: 10px;
   opacity: 0.78;
 }
 .overview-side-stack {
@@ -3582,10 +3587,10 @@ const buildPageItems = (current, total) => {
 .security-avatar:hover .avatar-hover-layer {
   opacity: 1;
 }
-.avatar-hover-layer strong {
-  font-size: 25px;
-  line-height: 1;
-  font-weight: 600;
+.avatar-upload-plus {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
 }
 .avatar-hover-layer em {
   font-size: 12px;

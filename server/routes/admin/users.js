@@ -2,12 +2,9 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import authMiddleware from '../../middleware/auth.js';
 import db from '../../db/index.js';
-import {promises as fs} from 'fs';
-import path from 'path';
-import config from '../../config/index.js';
 import logger from '../../config/logger.js';
-import imageProcessor from '../../utils/imageProcessor.js';
 import mailService from '../../services/mailService.js';
+import storageDeleteService from '../../services/storageDeleteService.js';
 
 const router = express.Router();
 
@@ -38,6 +35,16 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+async function resolveUserGroupId(value) {
+  const parsed = Number(value || 0);
+  if (Number.isInteger(parsed) && parsed > 0) {
+    const group = await db('user_groups').where({ id: parsed }).first();
+    if (group) return group.id;
+  }
+  const defaultGroup = await db('user_groups').where({ is_default: true }).first();
+  return defaultGroup?.id || null;
+}
+
 async function requireAdminUser(req) {
   const user = await db('users').where({ id: req.user.id }).first();
   if (user?.role !== 'admin') throw createUserTagError('仅管理员可操作', 403);
@@ -55,25 +62,15 @@ async function cleanupUserData(userId, user) {
   const tagCount = await db('user_tags').where({ user_id: userId }).del();
   logger.info(`删除用户 ${userId} 的 ${tagCount} 个私有标签`);
 
-  const userImages = await db('images').where({ uploader_id: userId }).select('id', 'path');
+  const userImages = await db('images').where({ uploader_id: userId }).select('*');
   const imageIds = userImages.map(img => img.id);
   if (imageIds.length > 0) {
-    await db('image_tags').whereIn('image_id', imageIds).del();
     let deletedFiles = 0;
     for (const img of userImages) {
-      if (img.path) {
-        const fullPath = path.resolve(config.projectRoot, img.path);
-        try {
-          await fs.unlink(fullPath);
-          for (const thumbPath of imageProcessor.getExistingThumbnailPath(fullPath, 'thumb')) await fs.unlink(thumbPath).catch(() => {});
-          for (const mediumPath of imageProcessor.getExistingThumbnailPath(fullPath, 'medium')) await fs.unlink(mediumPath).catch(() => {});
-          await imageProcessor.removeDerivedThumbnailsForImage(fullPath).catch(() => {});
-          deletedFiles++;
-        } catch {}
-      }
+      const result = await storageDeleteService.deleteImageRecord(img);
+      if (result.deletedOriginal) deletedFiles++;
     }
     logger.info(`删除用户 ${userId} 的 ${deletedFiles} 个图片文件`);
-    await db('images').whereIn('id', imageIds).del();
     logger.info(`删除用户 ${userId} 的 ${imageIds.length} 条图片记录`);
   }
 
@@ -127,7 +124,8 @@ router.get('/', authMiddleware, async (req, res, next) => {
       .as('img');
 
     const baseQuery = db('users as u')
-      .leftJoin(imageUsage, 'img.uploader_id', 'u.id');
+      .leftJoin(imageUsage, 'img.uploader_id', 'u.id')
+      .leftJoin('user_groups as ug', 'ug.id', 'u.user_group_id');
 
     if (search) {
       baseQuery.where((builder) => {
@@ -167,6 +165,8 @@ router.get('/', authMiddleware, async (req, res, next) => {
         'u.created_at',
         'u.is_disabled',
         'u.review_status',
+        'u.user_group_id',
+        'ug.name as user_group_name',
         db.raw('COALESCE(img.used_storage, 0) as used_storage'),
         db.raw('COALESCE(img.image_count, 0) as image_count')
       )
@@ -254,7 +254,7 @@ router.post('/:id/tags', authMiddleware, async (req, res, next) => {
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     await requireAdminUser(req);
-    const { username, password, email, role, storage_limit, max_file_size } = req.body;
+    const { username, password, email, role, storage_limit, max_file_size, user_group_id } = req.body;
     const normalizedUsername = String(username || '').trim();
     const normalizedEmail = String(email || '').trim() || null;
     if (!normalizedUsername || !password) return res.status(400).json({ error: '请填写用户名和密码' });
@@ -271,6 +271,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
       role: role || 'user',
       storage_limit: normalizeBytes(storage_limit),
       max_file_size: normalizeBytes(max_file_size),
+      user_group_id: await resolveUserGroupId(user_group_id),
       is_disabled: false,
       review_status: 'approved'
     });
@@ -288,7 +289,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
     const target = await db('users').where({ id: req.params.id }).first();
     if (!target) return res.status(404).json({ error: '用户不存在' });
 
-    const { email, role, storage_limit, max_file_size } = req.body;
+    const { email, role, storage_limit, max_file_size, user_group_id } = req.body;
     const updates = {};
     if (email !== undefined) updates.email = String(email || '').trim() || null;
     if (role !== undefined) {
@@ -297,6 +298,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
     }
     if (storage_limit !== undefined) updates.storage_limit = normalizeBytes(storage_limit);
     if (max_file_size !== undefined) updates.max_file_size = normalizeBytes(max_file_size);
+    if (user_group_id !== undefined) updates.user_group_id = await resolveUserGroupId(user_group_id);
     await db('users').where({ id: req.params.id }).update(updates);
     res.json({ message: '用户已更新' });
   } catch (err) {

@@ -6,6 +6,7 @@ import multer from 'multer';
 
 import path from 'path';
 import {promises as fs} from 'fs';
+import crypto from 'crypto';
 import {v4 as uuidv4} from 'uuid';
 import db from '../db/index.js';
 import config from '../config/index.js';
@@ -13,24 +14,114 @@ import imageProcessor from '../utils/imageProcessor.js';
 import pathUtils from '../utils/pathUtils.js';
 import imageService from './imageService.js';
 import logger from '../config/logger.js';
-import configService from './configService.js';
 import tagService from './tagService.js';
 import conditionTagService from './conditionTagService.js';
+import nsfwService from './nsfwService.js';
+
+const DEFAULT_FORMATS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'ico'];
+
+function parseJson(value, fallback) {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function randomString(length = 16) {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+}
+
+function renderNameRule(rule, file, userId, includeExt = false) {
+  const now = new Date();
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const basename = path.basename(file.originalname || 'image', ext);
+  const uniqid = uuidv4();
+  const md5 = crypto.createHash('md5').update(`${uniqid}-${file.originalname || ''}-${Date.now()}`).digest('hex');
+  const values = {
+    yyyy: String(now.getFullYear()),
+    yy: String(now.getFullYear()).slice(-2),
+    Y: String(now.getFullYear()),
+    y: String(now.getFullYear()).slice(-2),
+    mm: pad2(now.getMonth() + 1),
+    m: pad2(now.getMonth() + 1),
+    dd: pad2(now.getDate()),
+    d: pad2(now.getDate()),
+    timestamp: Math.floor(now.getTime() / 1000),
+    uniqid,
+    md5,
+    'md5-16': md5.slice(0, 16),
+    'str-random-16': randomString(16),
+    'str-random-10': randomString(10),
+    filename: basename,
+    uid: userId || 'system'
+  };
+  const rendered = String(rule || (includeExt ? '{uniqid}' : '{yyyy}-{mm}-{dd}'))
+    .replace(/\{([^}]+)\}/g, (_, key) => values[key] ?? '');
+  if (includeExt) {
+    const safeName = String(rendered || uniqid).replace(/[\\/:\0]/g, '_').trim() || uniqid;
+    return `${safeName}${ext}`;
+  }
+  const safePath = rendered
+    .replace(/\\/g, '/')
+    .split('/')
+    .map(segment => segment.replace(/[:\0]/g, '_').trim())
+    .filter(segment => segment && segment !== '.' && segment !== '..')
+    .join('/');
+  return safePath || `${values.yyyy}-${values.mm}-${values.dd}`;
+}
+
+async function getUploadPolicy(req) {
+  if (req._taotuUploadPolicy) return req._taotuUploadPolicy;
+  const userId = req.user?.id || null;
+  const user = userId ? await db('users').where({ id: userId }).first() : null;
+  let group = null;
+  if (user?.user_group_id) group = await db('user_groups').where({ id: user.user_group_id }).first();
+  if (!group) group = await db('user_groups').where({ is_default: true }).first();
+  const strategy = group
+    ? await db('storage_strategies').where({ user_group_id: group.id }).orderBy('is_system_default', 'asc').orderBy('id', 'desc').first()
+    : await db('storage_strategies').where({ is_system_default: true }).first();
+  const fallbackStrategy = strategy || await db('storage_strategies').where({ is_system_default: true }).first();
+  const strategyConfig = parseJson(fallbackStrategy?.config, {});
+  req._taotuUploadPolicy = {
+    user,
+    group,
+    strategy: fallbackStrategy,
+    strategyConfig,
+    allowedFormats: parseJson(group?.allowed_formats, DEFAULT_FORMATS),
+    maxFileSizeBytes: Number(group?.max_file_size_mb || 0) > 0 ? Math.floor(Number(group.max_file_size_mb) * 1024 * 1024) : 0,
+    maxFiles: Number(group?.max_concurrent_uploads || 0) > 0 ? Number(group.max_concurrent_uploads) : config.uploadLimits.maxFiles
+  };
+  return req._taotuUploadPolicy;
+}
 
 // Multer 存储配置
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const today = new Date().toISOString().split('T')[0];
-    const uploadDir = path.join(config.uploadsDir, today);
-    await fs.mkdir(uploadDir, { recursive: true });
-    cb(null, uploadDir);
+    try {
+      const policy = await getUploadPolicy(req);
+      if (policy.strategy && policy.strategy.type !== 'local') {
+        return cb(new Error('当前存储策略暂未接入上传流，请先使用本地策略'));
+      }
+      const basePath = policy.strategyConfig?.basePath || config.uploadsDir;
+      const uploadDir = path.resolve(basePath, renderNameRule(policy.group?.path_rule, file, req.user?.id, false));
+      await fs.mkdir(uploadDir, { recursive: true });
+      cb(null, uploadDir);
+    } catch (err) {
+      cb(err);
+    }
   },
-  filename: (req, file, cb) => {
+  filename: async (req, file, cb) => {
     // 修复中文文件名编码：浏览器可能用 latin1 传输，需转为 utf8
     file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    const ext = path.extname(file.originalname);
-    const uniqueName = `${uuidv4()}${ext}`;
-    cb(null, uniqueName);
+    try {
+      const policy = await getUploadPolicy(req);
+      cb(null, renderNameRule(policy.group?.filename_rule, file, req.user?.id, true));
+    } catch (err) {
+      cb(err);
+    }
   }
 });
 
@@ -41,21 +132,41 @@ async function checkUserQuota(userId, fileSize) {
   const user = await db('users').where({ id: userId }).first();
   if (!user || user.role === 'admin') return { ok: true }; // 管理员不受限
 
-  const siteConfig = await configService.readSiteConfig();
-  const defaultQuota = siteConfig.defaultQuota || {};
+  const group = user.user_group_id
+    ? await db('user_groups').where({ id: user.user_group_id }).first()
+    : await db('user_groups').where({ is_default: true }).first();
 
   // 检查单文件大小
-  const maxFileSize = user.max_file_size || (defaultQuota.maxFileSize || 0) * 1024 * 1024;
+  const groupLimit = Number(group?.max_file_size_mb || 0) > 0 ? Number(group.max_file_size_mb) * 1024 * 1024 : 0;
+  const maxFileSize = user.max_file_size || groupLimit;
   if (maxFileSize > 0 && fileSize > maxFileSize) {
     return { ok: false, error: `文件大小 ${Math.round(fileSize / 1024 / 1024)}MB 超出限制 ${Math.round(maxFileSize / 1024 / 1024)}MB` };
   }
 
   // 检查存储配额
-  const storageLimit = user.storage_limit || (defaultQuota.storageLimit || 0);
+  const storageLimit = user.storage_limit || 0;
   if (storageLimit > 0) {
     const [{ used }] = await db('images').where({ uploader_id: userId }).sum('size_bytes as used');
     if ((used || 0) + fileSize > storageLimit) {
       return { ok: false, error: `存储空间不足。已用 ${Math.round((used || 0) / 1024 / 1024)}MB，上限 ${Math.round(storageLimit / 1024 / 1024)}MB` };
+    }
+  }
+
+  const limitMap = [
+    ['upload_limit_minute', 60 * 1000, '每分钟'],
+    ['upload_limit_hour', 60 * 60 * 1000, '每小时'],
+    ['upload_limit_day', 24 * 60 * 60 * 1000, '每天'],
+    ['upload_limit_week', 7 * 24 * 60 * 60 * 1000, '每周'],
+    ['upload_limit_month', 30 * 24 * 60 * 60 * 1000, '每月']
+  ];
+  for (const [field, windowMs, label] of limitMap) {
+    const limit = Number(group?.[field] || 0);
+    if (limit > 0) {
+      const [{ count }] = await db('upload_logs')
+        .where({ user_id: userId, status: 'success' })
+        .where('created_at', '>=', new Date(Date.now() - windowMs))
+        .count('* as count');
+      if (Number(count || 0) >= limit) return { ok: false, error: `${label}上传数量已达上限 ${limit} 张` };
     }
   }
 
@@ -74,14 +185,15 @@ function mimetypeToFormat(mimetype) {
   if (normalized === 'image/webp') return 'webp';
   if (normalized === 'image/gif') return 'gif';
   if (normalized === 'image/bmp') return 'bmp';
+  if (normalized === 'image/x-icon' || normalized === 'image/vnd.microsoft.icon') return 'ico';
   return '';
 }
 
 // 文件过滤器
 const fileFilter = async (req, file, cb) => {
   try {
-      const siteConfig = await configService.readSiteConfig();
-    const allowedFormats = normalizeAllowedFormats(siteConfig.imageProcessing?.formats);
+    const policy = await getUploadPolicy(req);
+    const allowedFormats = normalizeAllowedFormats(policy.allowedFormats);
     const currentFormat = mimetypeToFormat(file.mimetype);
     if (allowedFormats.has(currentFormat)) {
       cb(null, true);
@@ -93,8 +205,8 @@ const fileFilter = async (req, file, cb) => {
   }
 };
 
-function buildUpload(maxFileSizeBytes) {
-  const limits = { files: config.uploadLimits.maxFiles };
+function buildUpload(maxFileSizeBytes, maxFiles = config.uploadLimits.maxFiles) {
+  const limits = { files: maxFiles };
   const maxFileSize = Number(maxFileSizeBytes);
   if (Number.isFinite(maxFileSize) && maxFileSize > 0) {
     limits.fileSize = maxFileSize;
@@ -109,32 +221,54 @@ const upload = buildUpload();
 
 async function uploadFiles(req, res, next) {
   try {
-      const siteConfig = await configService.readSiteConfig();
-    const user = req.user?.id ? await db('users').where({ id: req.user.id }).first() : null;
-    const userLimit = Number(user?.max_file_size || 0);
-    const defaultLimit = Number(siteConfig.defaultQuota?.maxFileSize || 0) * 1024 * 1024;
-    const effectiveLimit = user?.role === 'admin' ? 0 : (userLimit > 0 ? userLimit : defaultLimit);
-    return buildUpload(effectiveLimit).array('files', config.uploadLimits.maxFiles)(req, res, next);
+    const policy = await getUploadPolicy(req);
+    const userLimit = Number(policy.user?.max_file_size || 0);
+    const effectiveLimit = userLimit > 0 ? userLimit : policy.maxFileSizeBytes;
+    return buildUpload(effectiveLimit, policy.maxFiles).array('files', policy.maxFiles)(req, res, next);
   } catch (err) {
     next(err);
   }
 }
 
+async function prepareLocalUploadPath(originalname, userId = null) {
+  const file = { originalname: originalname || 'image.jpg' };
+  const policy = await getUploadPolicy({ user: userId ? { id: userId } : null });
+  if (policy.strategy && policy.strategy.type !== 'local') {
+    throw new Error('当前存储策略暂未接入上传流，请先使用本地策略');
+  }
+  const basePath = policy.strategyConfig?.basePath || config.uploadsDir;
+  const uploadDir = path.resolve(basePath, renderNameRule(policy.group?.path_rule, file, userId, false));
+  await fs.mkdir(uploadDir, { recursive: true });
+  return {
+    dir: uploadDir,
+    filename: renderNameRule(policy.group?.filename_rule, file, userId, true),
+    policy
+  };
+}
+
 // 处理上传后的图片
-async function processUploadedFile(file, albumId = null, tags = [], userId = null, isPublic = false, userTagIds = []) {
+async function processUploadedFile(file, albumId = null, tags = [], userId = null, isPublic = false, userTagIds = [], uploadSource = 'upload') {
   const relativePath = pathUtils.toRelativePath(file.path);
 
   // 获取图片元信息
   const meta = await imageProcessor.getImageMeta(file.path);
 
   // 生成缩略图
-  const siteConfig = await configService.readSiteConfig();
-  const mediumOpts = siteConfig.mediumSize || {};
-  const processingOpts = siteConfig.imageProcessing || {};
+  let uploadGroup = null;
+  let uploadStrategy = null;
+  if (userId) {
+    const user = await db('users').where({ id: userId }).first();
+    if (user?.user_group_id) uploadGroup = await db('user_groups').where({ id: user.user_group_id }).first();
+  }
+  if (!uploadGroup) uploadGroup = await db('user_groups').where({ is_default: true }).first();
+  if (uploadGroup) {
+    uploadStrategy = await db('storage_strategies').where({ user_group_id: uploadGroup.id }).orderBy('is_system_default', 'asc').orderBy('id', 'desc').first();
+  }
+  if (!uploadStrategy) uploadStrategy = await db('storage_strategies').where({ is_system_default: true }).first();
   await imageProcessor.generateThumbnails(file.path, {
-    mediumWidth: mediumOpts.width,
-    mediumHeight: mediumOpts.height,
-    quality: processingOpts.quality
+    mediumWidth: uploadGroup?.medium_width,
+    mediumHeight: uploadGroup?.medium_height,
+    quality: uploadGroup?.image_quality
   });
 
   // 生成哈希路径（对外展示用，不暴露本地路径）
@@ -152,7 +286,9 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     mime_type: file.mimetype,
     avg_color: meta.avg_color,
     orientation: meta.orientation,
-    upload_source: 'upload',
+    upload_source: uploadSource,
+    storage_strategy_id: uploadStrategy?.id || null,
+    nsfw_status: uploadGroup?.image_review_enabled ? null : false,
     album_id: albumId,
     uploader_id: userId || null,
     is_public: isPublic
@@ -206,22 +342,22 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     }
   }
 
-  // 记录上传日志
-  // 自动设置相册封面（如果相册没有封面）
-  if (albumId) {
+  let nsfwReview = null;
+  if (uploadGroup?.image_review_enabled) {
     try {
-      const album = await db('albums').where({ id: albumId }).first();
-      if (album && !album.cover_image_id) {
-        await db('albums').where({ id: albumId }).update({ cover_image_id: imageId });
-        logger.info(`自动设置相册 ${albumId} 封面: 图片 ${imageId}`);
+      nsfwReview = await nsfwService.reviewImage(imageId);
+      if (nsfwReview.nsfw) {
+        logger.warn(`图片已标记为不健康内容: ${file.originalname} (ID: ${imageId})`);
       }
     } catch (err) {
-      logger.warn(`自动设置封面失败: ${err.message}`);
+      logger.warn(`图片合规审核失败: ${file.originalname} - ${err.message}`);
+      nsfwReview = { ok: false, error: err.message };
     }
   }
 
   // 记录上传日志
   await db('upload_logs').insert({
+    user_id: userId || null,
     image_id: imageId,
     source: file.size > 5000000 ? 'batch' : 'single',
     status: 'success',
@@ -244,7 +380,12 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     url: urls.url,
     source_url: baseUrl + urls.url,
     thumb_url: baseUrl + urls.thumb_url,
-    medium_url: baseUrl + urls.medium_url
+    medium_url: baseUrl + urls.medium_url,
+    storage_strategy_id: uploadStrategy?.id || null,
+    storage_strategy_name: uploadStrategy?.name || '默认本地',
+    storage_strategy_type: uploadStrategy?.type || 'local',
+    nsfw_status: nsfwReview?.nsfw ?? (uploadGroup?.image_review_enabled ? null : false),
+    nsfw_review: nsfwReview
   };
 }
 
@@ -277,6 +418,7 @@ async function getUploadLogs(page = 1, limit = 20) {
 export default {
   upload,
   uploadFiles,
+  prepareLocalUploadPath,
   processUploadedFile,
   processUploadedFiles,
   getUploadLogs,

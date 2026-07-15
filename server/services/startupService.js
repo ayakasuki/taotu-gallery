@@ -95,12 +95,14 @@ async function ensureDefaultAdmin() {
   const password = generated ? randomInitialPassword() : process.env.DEFAULT_ADMIN_PASSWORD;
   const email = process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com';
   const passwordHash = await bcrypt.hash(password, 10);
+  const defaultGroup = await db('user_groups').where({ is_default: true }).first().catch(() => null);
 
   await db('users').insert({
     username,
     password_hash: passwordHash,
     email,
-    role: 'admin'
+    role: 'admin',
+    user_group_id: defaultGroup?.id || null
   });
 
   logger.warn('检测到空用户表，已创建首个管理员账号: ' + username);

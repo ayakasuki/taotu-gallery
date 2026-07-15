@@ -23,7 +23,8 @@ export function useGallery() {
         album: params.album || undefined,
         mine: params.mine || undefined,
         public: params.public || undefined,
-        userId: params.userId || undefined
+        userId: params.userId || undefined,
+        gallery: params.gallery || undefined
       })
       if (params.append) images.value = [...images.value, ...(data.images || [])]
       else images.value = data.images || []
