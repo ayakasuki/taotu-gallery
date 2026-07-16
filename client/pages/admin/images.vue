@@ -77,6 +77,10 @@
             <span>缩略图</span>
             <span>文件名</span>
             <span>图片元信息</span>
+            <span class="health-head">
+              健康内容
+              <TaotuIcon name="visibility-info" title="? 代表未开启 NSFW 状态的用户组图片，√ 和 × 代表检测的相应内容。" />
+            </span>
             <span>平台标签</span>
             <span>用户私有标签（摘要）</span>
             <span>公开</span>
@@ -102,6 +106,21 @@
                 <b>{{ formatSize(img.size_bytes) }}</b>
                 <b>{{ formatMime(img.mime_type || img.filename) }}</b>
                 <b>sRGB</b>
+              </span>
+              <span class="health-col" :class="healthStatus(img).status">
+                <TaotuIcon
+                  v-if="healthStatus(img).status === 'none'"
+                  name="help-circle"
+                  filled
+                  :stateful="false"
+                  title="? 代表未开启 NSFW 状态的用户组图片"
+                />
+                <BoolStatusIcon
+                  v-else
+                  :value="healthStatus(img).status === 'safe'"
+                  true-label="健康内容"
+                  false-label="不健康内容"
+                />
               </span>
               <span class="tag-col">
                 <template v-for="(tag, index) in platformTags(img).slice(0, 3)" :key="tagKey(tag, index)">
@@ -792,6 +811,13 @@ function tagToneById(id) {
   const number = parseInt(String(id).replace(/^u/, '')) || 0
   return tagTone(number)
 }
+
+function healthStatus(img) {
+  if (img?.nsfw_status === null || img?.nsfw_status === undefined) return { status: 'none' }
+  return (img.nsfw_status === true || img.nsfw_status === 1 || img.nsfw_status === '1')
+    ? { status: 'unsafe' }
+    : { status: 'safe' }
+}
 </script>
 
 <style scoped>
@@ -1118,7 +1144,7 @@ function tagToneById(id) {
 
 .image-table-row {
   display: grid;
-  grid-template-columns: 34px 88px minmax(128px, 1.05fr) minmax(138px, 0.88fr) minmax(150px, 0.98fr) minmax(170px, 1.06fr) 62px 82px;
+  grid-template-columns: 34px 88px minmax(116px, 0.92fr) minmax(132px, 0.8fr) 74px minmax(136px, 0.86fr) minmax(154px, 0.94fr) 62px 82px;
   align-items: center;
   gap: 10px;
   padding: 0 12px;
@@ -1131,6 +1157,20 @@ function tagToneById(id) {
   color: #69758c;
   font-size: 12px;
   font-weight: 900;
+}
+
+.health-head {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.health-head .taotu-svg-icon {
+  width: 13px;
+  height: 13px;
+  color: #f45f93;
 }
 
 .image-table-body {
@@ -1249,6 +1289,26 @@ function tagToneById(id) {
   content: '·';
   margin-right: 8px;
   color: #b5bfce;
+}
+
+.health-col {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  color: #a8b0c0;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.health-col :deep(.bool-status-icon) {
+  --bool-icon-size: 18px;
+}
+
+.health-col > .taotu-svg-icon {
+  width: 18px;
+  height: 18px;
+  color: #ffb226;
 }
 
 .tag-col {
@@ -1787,7 +1847,7 @@ button:active {
     grid-template-columns: repeat(4, minmax(68px, 1fr));
   }
   .image-table-row {
-    grid-template-columns: 30px 80px minmax(118px, 1fr) minmax(118px, 0.82fr) minmax(128px, 0.84fr) minmax(138px, 0.9fr) 56px 76px;
+    grid-template-columns: 30px 80px minmax(104px, 0.86fr) minmax(110px, 0.74fr) 68px minmax(116px, 0.78fr) minmax(124px, 0.84fr) 56px 76px;
     gap: 8px;
     padding: 0 8px;
   }

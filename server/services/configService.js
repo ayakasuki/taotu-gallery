@@ -55,6 +55,7 @@ async function readSiteConfig() {
         enabled: !!config.registration?.enabled,
         emailVerification: !!config.registration?.emailVerification,
         requireReview: !!config.registration?.requireReview,
+        privacyMode: !!config.registration?.privacyMode,
         maxUsers: Number(config.registration?.maxUsers || 0)
       },
       display: config.display || { mode: 'grid' },
@@ -82,7 +83,7 @@ async function readSiteConfig() {
     };
   } catch (err) {
     logger.error(`读取网站配置失败: ${err.message}`);
-    return { siteName: '桃图智库', registration: { enabled: false, emailVerification: false, requireReview: false, maxUsers: 0 }, background: DEFAULT_SITE_BACKGROUND };
+    return { siteName: '桃图智库', registration: { enabled: false, emailVerification: false, requireReview: false, privacyMode: false, maxUsers: 0 }, background: DEFAULT_SITE_BACKGROUND };
   }
 }
 

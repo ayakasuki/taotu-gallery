@@ -96,7 +96,7 @@ async function confirmDeleteStrategy() {
   deleteDialog.loading = true
   try {
     await api.del(`/api/admin/strategies/${deleteDialog.target.id}`)
-    closeDeleteDialog()
+    Object.assign(deleteDialog, { show: false, target: null, message: '', effects: [], loading: false })
     await loadStrategies()
   } finally {
     deleteDialog.loading = false

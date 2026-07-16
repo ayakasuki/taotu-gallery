@@ -7,7 +7,7 @@
       </header>
       <div class="form-grid">
         <label class="field"><span>策略名称 <b>*</b></span><input v-model.trim="form.name" /></label>
-        <label class="field"><span>关联用户组</span><TaotuSelect v-model="form.user_group_id" :options="groupOptions" /></label>
+        <label class="field"><span>关联用户组</span><TaotuSelect v-model="form.group_ids" multiple :options="groupOptions" placeholder="可选择多个用户组" /></label>
         <label class="field full"><span>简介</span><textarea v-model.trim="form.description" /></label>
         <label class="field"><span>挂载策略</span><TaotuSelect v-model="form.type" :options="typeOptions" :disabled="!isCreate" /></label>
       </div>
@@ -78,7 +78,7 @@ const typeOptions = [
   { label: 'FTP', value: 'ftp' },
   { label: 'SFTP', value: 'sftp' }
 ]
-const groupOptions = computed(() => [{ label: '不关联用户组', value: null }, ...groups.value.map(g => ({ label: g.name, value: g.id, description: g.is_default ? '默认用户组' : `${g.user_count || 0} 个用户` }))])
+const groupOptions = computed(() => groups.value.map(g => ({ label: g.name, value: g.id, description: g.is_default ? '默认用户组' : `${g.user_count || 0} 个用户` })))
 const form = reactive(defaultForm())
 
 function defaultConfig(type) {
@@ -88,13 +88,13 @@ function defaultConfig(type) {
   if (type === 'ftp') return { host: '', port: 21, username: '', password: '', rootDir: '/', publicDomain: '', urlQueries: '', secure: false, passive: true }
   return { host: '', port: 22, username: '', password: '', privateKey: '', passphrase: '', rootDir: '/', publicDomain: '', urlQueries: '', useProxy: false, proxyUrl: '' }
 }
-function defaultForm() { return { name: '', description: '', type: 'local', user_group_id: null, config: defaultConfig('local') } }
+function defaultForm() { return { name: '', description: '', type: 'local', group_ids: [], config: defaultConfig('local') } }
 watch(() => form.type, (type, oldType) => { if (type !== oldType && isCreate.value) form.config = defaultConfig(type) })
 onMounted(async () => {
   groups.value = (await api.get('/api/admin/groups')).groups || []
   if (!isCreate.value) {
     const data = await api.get(`/api/admin/strategies/${route.params.id}`)
-    Object.assign(form, defaultForm(), data, { config: { ...defaultConfig(data.type), ...(data.config || {}) } })
+    Object.assign(form, defaultForm(), data, { group_ids: data.group_ids || [], config: { ...defaultConfig(data.type), ...(data.config || {}) } })
   }
 })
 async function saveStrategy() {

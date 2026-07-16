@@ -174,6 +174,20 @@
           </label>
         </div>
 
+        <div class="switch-row">
+          <span class="switch-label-with-info">
+            网站隐私模式
+            <TaotuIcon
+              name="visibility-info"
+              title="开启时仅注册用户才能访问，关闭时访客可访问公共图库、相册和 API。"
+            />
+          </span>
+          <label class="pink-switch">
+            <input v-model="form.privacyMode" type="checkbox" />
+            <i></i>
+          </label>
+        </div>
+
         <label class="field-block">
           <span>用户配额</span>
           <input v-model.number="form.registrationMaxUsers" class="soft-input" type="number" min="0" placeholder="10000" />
@@ -369,6 +383,7 @@ const form = reactive({
   registrationEnabled: false,
   registrationRequireReview: false,
   emailVerification: false,
+  privacyMode: false,
   registrationMaxUsers: 0,
   recordNumber: '',
   httpsEnabled: false,
@@ -430,7 +445,7 @@ function showMessage(text, type = 'success') {
 
 const cardFields = {
   brand: ['siteName', 'icon', 'bgUrl', 'bgBlur', 'overlayTop', 'overlayBottom'],
-  access: ['publicDomain', 'registrationEnabled', 'registrationRequireReview', 'emailVerification', 'registrationMaxUsers', 'defaultStorageLimit'],
+  access: ['publicDomain', 'registrationEnabled', 'registrationRequireReview', 'emailVerification', 'privacyMode', 'registrationMaxUsers', 'defaultStorageLimit'],
   password: ['oldPassword', 'newPassword', 'confirmPassword'],
   smtp: ['smtpHost', 'smtpPort', 'smtpSecurity', 'smtpUsername', 'smtpPassword', 'smtpFrom', 'smtpTestTo'],
   security: ['recordNumber', 'httpsEnabled', 'certPath', 'keyPath']
@@ -486,6 +501,7 @@ function applyForm(data = {}) {
   form.registrationEnabled = !!data.registration?.enabled
   form.registrationRequireReview = !!data.registration?.requireReview
   form.emailVerification = !!data.registration?.emailVerification
+  form.privacyMode = !!data.registration?.privacyMode
   form.registrationMaxUsers = Number(data.registration?.maxUsers || 0)
   form.recordNumber = data.recordNumber || ''
   form.httpsEnabled = !!data.https?.enabled
@@ -543,6 +559,7 @@ function buildSiteConfigPayload() {
       enabled: !!form.registrationEnabled,
       requireReview: !!form.registrationRequireReview,
       emailVerification: !!form.emailVerification,
+      privacyMode: !!form.privacyMode,
       maxUsers: Math.max(0, Number(form.registrationMaxUsers || 0))
     },
     https: {
@@ -576,6 +593,7 @@ function buildPublicSiteConfigCache(overrides = {}) {
       enabled: !!form.registrationEnabled,
       requireReview: !!form.registrationRequireReview,
       emailVerification: !!form.emailVerification,
+      privacyMode: !!form.privacyMode,
       maxUsers: Math.max(0, Number(form.registrationMaxUsers || 0))
     },
     background: buildBackgroundConfig(),
@@ -1295,6 +1313,19 @@ onMounted(() => {
   color: #566277;
   font-size: 14px;
   font-weight: 900;
+}
+
+.switch-label-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.switch-label-with-info .taotu-svg-icon {
+  width: 15px;
+  height: 15px;
+  color: #ff6f9d;
+  cursor: help;
 }
 
 .pink-switch input {

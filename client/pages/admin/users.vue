@@ -179,14 +179,10 @@
           <TaotuSelect v-model="form.userGroupId" :options="userGroupOptions" />
         </div>
 
-        <div class="quota-grid">
+        <div class="quota-grid single">
           <div class="form-field">
             <label>存储上限（MB）</label>
             <input v-model.number="form.storageLimitMB" type="number" min="0" class="dialog-input" />
-          </div>
-          <div class="form-field">
-            <label>单图最大大小（MB）</label>
-            <input v-model.number="form.maxFileSizeMB" type="number" min="0" class="dialog-input" />
           </div>
         </div>
 
@@ -274,8 +270,7 @@ const form = reactive({
   email: '',
   role: 'user',
   userGroupId: null,
-  storageLimitMB: 5000,
-  maxFileSizeMB: 20
+  storageLimitMB: 5000
 })
 
 const roleOptions = [
@@ -390,7 +385,6 @@ function resetForm() {
   form.role = 'user'
   form.userGroupId = userGroups.value.find(group => group.is_default)?.id || null
   form.storageLimitMB = 5000
-  form.maxFileSizeMB = 20
   showPassword.value = false
 }
 
@@ -408,7 +402,6 @@ function openEditDialog(user) {
   form.role = user.role || 'user'
   form.userGroupId = user.user_group_id || userGroups.value.find(group => group.is_default)?.id || null
   form.storageLimitMB = bytesToMb(user.storage_limit)
-  form.maxFileSizeMB = bytesToMb(user.max_file_size)
   showPassword.value = false
   formDialog.value = true
 }
@@ -443,8 +436,7 @@ async function saveUser() {
       email: form.email || null,
       role: form.role,
       user_group_id: form.userGroupId,
-      storage_limit: mbToBytes(form.storageLimitMB),
-      max_file_size: mbToBytes(form.maxFileSizeMB)
+      storage_limit: mbToBytes(form.storageLimitMB)
     }
     if (editingUser.value) {
       await api.put(`/api/admin/users/${editingUser.value.id}`, payload)

@@ -861,7 +861,7 @@ function maskToken(value) {
 .path-table { border: 1px solid rgba(226, 230, 241, 0.82); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.42); }
 .path-head, .path-row { display: grid; grid-template-columns: minmax(180px, 1.45fr) 82px 62px 110px minmax(116px, 0.95fr) 146px 70px 174px; align-items: center; gap: 10px; padding: 0 13px; }
 .path-head { min-height: 38px; color: #7d879c; font-size: 12px; font-weight: 900; background: rgba(255,255,255,0.5); border-bottom: 1px solid rgba(226, 230, 241, 0.76); }
-.path-head > span:nth-child(3),
+.path-head > span:nth-child(3) { justify-self: start; white-space: nowrap; }
 .path-row > span:nth-child(3) { justify-self: start; width: 2em; text-align: center; }
 .path-row { min-height: 58px; border-bottom: 1px solid rgba(226, 230, 241, 0.66); color: #5f6a82; font-size: 12px; font-weight: 800; }
 .path-row:last-child { border-bottom: none; }

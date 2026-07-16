@@ -16,13 +16,13 @@
 
       <div v-if="tab === 'base'" class="form-grid">
         <label class="field full"><span>用户组名称 <b>*</b></span><input v-model.trim="form.name" /></label>
-        <label class="field"><span>最大文件大小 MB <b>*</b></span><input v-model.number="form.max_file_size_mb" type="number" min="0" step="0.01" /></label>
-        <label class="field"><span>并发上传限制 <b>*</b></span><input v-model.number="form.max_concurrent_uploads" type="number" min="0" /></label>
-        <label class="field"><span>每分钟上传限制 <b>*</b></span><input v-model.number="form.upload_limit_minute" type="number" min="0" /></label>
-        <label class="field"><span>每小时上传限制 <b>*</b></span><input v-model.number="form.upload_limit_hour" type="number" min="0" /></label>
-        <label class="field"><span>每天上传限制 <b>*</b></span><input v-model.number="form.upload_limit_day" type="number" min="0" /></label>
-        <label class="field"><span>每周上传限制 <b>*</b></span><input v-model.number="form.upload_limit_week" type="number" min="0" /></label>
-        <label class="field"><span>每月上传限制 <b>*</b></span><input v-model.number="form.upload_limit_month" type="number" min="0" /></label>
+        <label class="field"><span>最大文件大小 MB <b>*</b> <TaotuIcon name="visibility-info" title="默认 0 代表不限制单张图片大小。" /></span><input v-model.number="form.max_file_size_mb" type="number" min="0" step="0.01" /></label>
+        <label class="field"><span>并发上传限制 <b>*</b> <TaotuIcon name="visibility-info" title="默认 0 代表不限制单次选择或并发上传数量。" /></span><input v-model.number="form.max_concurrent_uploads" type="number" min="0" /></label>
+        <label class="field"><span>每分钟上传限制 <b>*</b> <TaotuIcon name="visibility-info" title="默认 0 代表不限制每分钟上传数量。" /></span><input v-model.number="form.upload_limit_minute" type="number" min="0" /></label>
+        <label class="field"><span>每小时上传限制 <b>*</b> <TaotuIcon name="visibility-info" title="默认 0 代表不限制每小时上传数量。" /></span><input v-model.number="form.upload_limit_hour" type="number" min="0" /></label>
+        <label class="field"><span>每天上传限制 <b>*</b> <TaotuIcon name="visibility-info" title="默认 0 代表不限制每天上传数量。" /></span><input v-model.number="form.upload_limit_day" type="number" min="0" /></label>
+        <label class="field"><span>每周上传限制 <b>*</b> <TaotuIcon name="visibility-info" title="默认 0 代表不限制每周上传数量。" /></span><input v-model.number="form.upload_limit_week" type="number" min="0" /></label>
+        <label class="field"><span>每月上传限制 <b>*</b> <TaotuIcon name="visibility-info" title="默认 0 代表不限制每月上传数量。" /></span><input v-model.number="form.upload_limit_month" type="number" min="0" /></label>
 
         <label class="field">
           <span>路径命名规则 <TaotuIcon name="visibility-info" title="点击查看命名规则对照表" @click.prevent="showRuleHelp = true" /></span>
@@ -95,6 +95,7 @@
 definePageMeta({ layout: 'admin' })
 
 const api = useApi()
+const { showAdminToast } = useAdminToast()
 const route = useRoute()
 const isCreate = computed(() => route.params.id === 'create')
 const tab = ref('base')
@@ -145,14 +146,21 @@ onMounted(async () => {
 })
 
 async function saveGroup() {
-  if (!form.name.trim()) return
+  if (!form.name.trim()) return showAdminToast('请输入用户组名称', 'error')
   saving.value = true
   try {
     const payload = JSON.parse(JSON.stringify(form))
     const saved = isCreate.value
       ? await api.post('/api/admin/groups', payload)
       : await api.put(`/api/admin/groups/${route.params.id}`, payload)
+    const queued = Number(saved.review_queue?.queued || 0)
+    showAdminToast(
+      queued > 0 ? `用户组已保存，${queued} 张已有图片已进入内容审核` : '用户组已保存',
+      'success'
+    )
     navigateTo(`/admin/groups/${saved.id}`)
+  } catch (error) {
+    showAdminToast(error?.data?.error || error.message || '用户组保存失败', 'error', 5000)
   } finally {
     saving.value = false
   }

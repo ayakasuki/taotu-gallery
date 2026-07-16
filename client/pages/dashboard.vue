@@ -209,6 +209,10 @@
               <span>缩略图</span>
               <span>文件名</span>
               <span>元信息</span>
+              <span class="health-head">
+                健康内容
+                <TaotuIcon name="visibility-info" title="? 代表未开启 NSFW 状态的用户组图片，√ 和 × 代表检测的相应内容。" />
+              </span>
               <span>标签摘要</span>
               <span>公开状态</span>
               <span>操作</span>
@@ -233,6 +237,21 @@
                   <i></i>
                   <span>{{ img.width || '-' }}×{{ img.height || '-' }}</span>
                   <span class="meta-date">{{ formatDateMinute(img.created_at) }}</span>
+                </div>
+                <div class="table-health" :class="healthStatus(img).status">
+                  <TaotuIcon
+                    v-if="healthStatus(img).status === 'none'"
+                    name="help-circle"
+                    filled
+                    :stateful="false"
+                    title="? 代表未开启 NSFW 状态的用户组图片"
+                  />
+                  <BoolStatusIcon
+                    v-else
+                    :value="healthStatus(img).status === 'safe'"
+                    true-label="健康内容"
+                    false-label="不健康内容"
+                  />
                 </div>
                 <div class="table-tags" :class="{ single: normalizedImageTags(img).length <= 1, multiple: normalizedImageTags(img).length > 1 }">
                   <span v-for="tag in normalizedImageTags(img).slice(0, 4)" :key="tag.key" class="table-tag">{{ tag.label }}</span>
@@ -320,7 +339,7 @@
                   </label>
                   <span>名称</span>
                   <span>显示名</span>
-                  <span class="head-with-info">是否可组合<TaotuIcon name="visibility-info" title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。" /></span>
+                  <span class="head-with-info">可组合<TaotuIcon name="visibility-info" title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。" /></span>
                   <span class="head-with-info">互斥标签<TaotuIcon name="visibility-info" title="互斥标签会成组互相排斥，选择其中一个时应避免同时选择同组其它标签。" /></span>
                   <span>操作</span>
                 </div>
@@ -705,7 +724,7 @@
           </div>
         </div>
         <div class="tag-modal-switch-row">
-          <span>是否可组合 <TaotuIcon name="visibility-info" title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。" /></span>
+          <span>可组合 <TaotuIcon name="visibility-info" title="开启后该标签可与其它私有标签同时应用；关闭后适合用于互斥分类。" /></span>
           <label class="tag-switch" :class="{ active: tagForm.combinable }">
             <input type="checkbox" v-model="tagForm.combinable" />
             <i></i>
@@ -1507,6 +1526,12 @@ const normalizedImageTags = (img) => (img.tags || []).map((tag, index) => ({
   key: `${tag.source || 'tag'}-${tag.id || tag.user_tag_id || index}`,
   label: tag.display_name || tag.name || '标签'
 }))
+const healthStatus = (img) => {
+  if (img?.nsfw_status === null || img?.nsfw_status === undefined) return { status: 'none' }
+  return (img.nsfw_status === true || img.nsfw_status === 1 || img.nsfw_status === '1')
+    ? { status: 'unsafe' }
+    : { status: 'safe' }
+}
 const buildPageItems = (current, total) => {
   const items = []
   const pushPage = (page) => {
@@ -2308,7 +2333,7 @@ const buildPageItems = (current, total) => {
 .image-table-head,
 .image-table-row {
   display: grid;
-  grid-template-columns: 42px 148px minmax(170px, 1.05fr) minmax(180px, 1.18fr) minmax(220px, 1.2fr) 130px 148px;
+  grid-template-columns: 42px 148px minmax(154px, 0.96fr) minmax(168px, 1.04fr) 82px minmax(198px, 1.08fr) 130px 148px;
   align-items: center;
   column-gap: 8px;
 }
@@ -2321,8 +2346,23 @@ const buildPageItems = (current, total) => {
   font-size: 12px;
   font-weight: 900;
 }
-.image-table-head span:nth-child(5) {
+.image-table-head span:nth-child(5),
+.image-table-head span:nth-child(6) {
   text-align: center;
+}
+
+.health-head {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.health-head .taotu-svg-icon {
+  width: 13px;
+  height: 13px;
+  color: #f06c9e;
 }
 .image-table-scroll {
   max-height: 428px;
@@ -2420,6 +2460,23 @@ const buildPageItems = (current, total) => {
 }
 .meta-date {
   flex-basis: 100%;
+}
+.table-health {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  color: #a8b0c0;
+  font-size: 12px;
+  font-weight: 900;
+}
+.table-health :deep(.bool-status-icon) {
+  --bool-icon-size: 18px;
+}
+.table-health > .taotu-svg-icon {
+  width: 18px;
+  height: 18px;
+  color: #ffb226;
 }
 .table-tags {
   width: 100%;
@@ -2868,10 +2925,14 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
 }
 
-.private-tags-head > span:nth-child(4),
+.private-tags-head > span:nth-child(4) {
+  justify-self: start;
+  white-space: nowrap;
+}
+
 .private-tags-row > span:nth-child(4) {
   justify-self: start;
-  width: 5em;
+  width: 3em;
   text-align: center;
 }
 .head-with-info {
@@ -4258,7 +4319,7 @@ const buildPageItems = (current, total) => {
   }
   .image-table-head,
   .image-table-row {
-    grid-template-columns: 38px 118px minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 1fr) 112px 132px;
+    grid-template-columns: 38px 118px minmax(138px, 0.9fr) minmax(140px, 0.9fr) 78px minmax(154px, 0.95fr) 112px 132px;
   }
   .table-thumb {
     width: 92px;

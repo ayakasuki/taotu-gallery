@@ -15,6 +15,7 @@ import imageProcessor from './utils/imageProcessor.js';
 import apiLogger from './middleware/apiLogger.js';
 import authMiddleware from './middleware/auth.js';
 import requireAdmin from './middleware/requireAdmin.js';
+import requirePrivacyAccess, { isPrivacyModeEnabled, resolvePrivacyUser } from './middleware/privacyMode.js';
 import internalImagesRouter from './routes/internal/images.js';
 import internalAlbumsRouter from './routes/internal/albums.js';
 import internalDashboardRouter from './routes/internal/dashboard.js';
@@ -125,9 +126,12 @@ async function resolveMediaUser(req) {
 
 async function canAccessImageAsset(req, record) {
   if (!record) return false;
-  const user = record.nsfw_status === true || record.nsfw_status === 1
-    ? await resolveMediaUser(req)
-    : null;
+  const privacyModeEnabled = await isPrivacyModeEnabled();
+  let user = privacyModeEnabled ? await resolvePrivacyUser(req) : null;
+  if (privacyModeEnabled && !user) return false;
+  if (!user && (record.nsfw_status === true || record.nsfw_status === 1)) {
+    user = await resolveMediaUser(req);
+  }
   if (record.nsfw_status === true || record.nsfw_status === 1) {
     if (!user) return false;
     if (user.role === 'admin') return true;
@@ -211,7 +215,7 @@ app.use('/thumb', async (req, res, next) => {
 });
 
 // 公开图库配置（前端首页默认展示使用，不含敏感配置）
-app.get('/api/gallery/config', async (req, res, next) => {
+app.get('/api/gallery/config', requirePrivacyAccess, async (req, res, next) => {
   try {
     const { default: configService } = await import('./services/configService.js');
     const siteConfig = await configService.readSiteConfig();
@@ -242,17 +246,17 @@ app.get('/api/public/contact', async (req, res, next) => {
 // API 调用日志（对外 API）
 
 // 内部 API（前端专用，不对外暴露）
-app.use('/api/internal/images', internalImagesRouter);
-app.use('/api/internal/albums', internalAlbumsRouter);
+app.use('/api/internal/images', requirePrivacyAccess, internalImagesRouter);
+app.use('/api/internal/albums', requirePrivacyAccess, internalAlbumsRouter);
 app.use('/api/internal/dashboard', internalDashboardRouter);
 
 // 对外 API
-app.use('/api/tags', apiLogger, apiTagsRouter);
-app.use('/api/tag-groups', apiTagGroupsRouter);
+app.use('/api/tags', apiLogger, requirePrivacyAccess, apiTagsRouter);
+app.use('/api/tag-groups', requirePrivacyAccess, apiTagGroupsRouter);
 app.use('/api/user-tags', apiUserTagsRouter);
-app.use('/api/images', apiLogger, apiImagesRouter);
-app.use('/api/albums', apiLogger, apiAlbumsRouter);
-app.use('/api/embed', apiLogger, apiEmbedRouter);
+app.use('/api/images', apiLogger, requirePrivacyAccess, apiImagesRouter);
+app.use('/api/albums', apiLogger, requirePrivacyAccess, apiAlbumsRouter);
+app.use('/api/embed', apiLogger, requirePrivacyAccess, apiEmbedRouter);
 app.use('/api/upload', apiUploadRouter);
 app.use('/api/upload/url', apiUrlUploadRouter);
 app.use('/api/announcements', apiAnnouncementsRouter);

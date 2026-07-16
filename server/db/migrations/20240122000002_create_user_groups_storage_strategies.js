@@ -64,6 +64,17 @@ export async function up(knex) {
     });
   }
 
+  const hasStorageStrategyGroups = await knex.schema.hasTable('storage_strategy_groups');
+  if (!hasStorageStrategyGroups) {
+    await knex.schema.createTable('storage_strategy_groups', (table) => {
+      table.increments('id').primary();
+      table.integer('storage_strategy_id').notNullable().index();
+      table.integer('user_group_id').notNullable().index();
+      table.timestamp('created_at').defaultTo(knex.fn.now());
+      table.unique(['storage_strategy_id', 'user_group_id']);
+    });
+  }
+
   await ensureColumn(knex, 'users', 'user_group_id', (table) => {
     table.integer('user_group_id').index();
   });
@@ -124,7 +135,7 @@ export async function up(knex) {
 
   const defaultStrategy = await knex('storage_strategies').where({ is_system_default: true }).first();
   if (!defaultStrategy) {
-    await knex('storage_strategies').insert({
+    const [strategyId] = await knex('storage_strategies').insert({
       name: '默认本地存储',
       description: '系统默认本地上传目录，旧版本升级后继续使用 data/uploads。',
       type: 'local',
@@ -132,6 +143,15 @@ export async function up(knex) {
       is_system_default: 1,
       config: JSON.stringify({ basePath: path.resolve(process.cwd(), 'data/uploads') })
     });
+    await knex('storage_strategy_groups')
+      .insert({ storage_strategy_id: strategyId, user_group_id: defaultGroup.id })
+      .onConflict(['storage_strategy_id', 'user_group_id'])
+      .ignore();
+  } else if (defaultStrategy.user_group_id) {
+    await knex('storage_strategy_groups')
+      .insert({ storage_strategy_id: defaultStrategy.id, user_group_id: defaultStrategy.user_group_id })
+      .onConflict(['storage_strategy_id', 'user_group_id'])
+      .ignore();
   }
 
   const localStrategy = await knex('storage_strategies').where({ is_system_default: true }).first();
@@ -151,6 +171,8 @@ export async function down(knex) {
   await dropColumnIfExists(knex, 'users', 'user_group_id');
 
   const hasStorageStrategies = await knex.schema.hasTable('storage_strategies');
+  const hasStorageStrategyGroups = await knex.schema.hasTable('storage_strategy_groups');
+  if (hasStorageStrategyGroups) await knex.schema.dropTable('storage_strategy_groups');
   if (hasStorageStrategies) await knex.schema.dropTable('storage_strategies');
   const hasUserGroups = await knex.schema.hasTable('user_groups');
   if (hasUserGroups) await knex.schema.dropTable('user_groups');

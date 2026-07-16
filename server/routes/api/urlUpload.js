@@ -76,7 +76,10 @@ router.post('/', authMiddleware, async (req, res, next) => {
     });
   } catch (err) {
     logger.error(`URL上传失败: ${err.message}`);
-    res.status(400).json({ error: err.message });
+    res.status(err.statusCode || 400).json({
+      error: err.message,
+      error_code: err.code || 'URL_UPLOAD_FAILED'
+    });
   }
 });
 

@@ -13,7 +13,12 @@
 
       <div class="groups-table">
         <div class="table-head">
-          <span>ID</span><span>用户组名称</span><span>默认</span><span>图片审核</span><span>用户数量</span><span>策略数量</span><span>操作</span>
+          <span>ID</span><span>用户组名称</span><span>默认</span><span>图片审核</span><span>用户数量</span>
+          <span class="head-with-info">
+            策略数量
+            <TaotuIcon name="visibility-info" title="同一用户组绑定多个策略时，上传只选择一个策略：非系统默认优先，策略 ID 较大优先；不会同步写多份，也不会按容量自动轮换。" />
+          </span>
+          <span>操作</span>
         </div>
         <div v-if="loading" class="empty-row">加载中...</div>
         <div v-else-if="groups.length === 0" class="empty-row">暂无用户组</div>
@@ -69,6 +74,8 @@ async function loadGroups() {
 .table-head { height: 42px; background: rgba(247,249,253,.82); color: #7e879a; font-size: 12px; font-weight: 900; }
 .table-row { min-height: 54px; border-top: 1px solid rgba(226,231,242,.74); color: #566077; font-size: 13px; font-weight: 850; }
 .table-row strong { color: #323a50; }
+.head-with-info { display: inline-flex; align-items: center; gap: 5px; }
+.head-with-info .taotu-svg-icon { width: 14px; height: 14px; color: #f05f98; cursor: help; }
 .status-icon .taotu-svg-icon { width: 22px; height: 22px; }
 .status-icon.ok { color: #45bd8f; }
 .status-icon.no { color: #f26193; }

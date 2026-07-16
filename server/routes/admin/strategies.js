@@ -133,9 +133,68 @@ function serialize(row = {}) {
     type_label: typeLabel(row.type),
     is_system_default: !!row.is_system_default,
     config: parseJson(row.config, defaultConfig(row.type)),
+    group_ids: row.group_ids || [],
+    groups: row.groups || [],
+    group_name: row.group_name || summarizeGroups(row.groups || []),
     image_count: Number(row.image_count || 0),
     used_storage: Number(row.used_storage || 0)
   };
+}
+
+function summarizeGroups(groups = []) {
+  if (!groups.length) return '';
+  const names = groups.map(group => group.name).filter(Boolean);
+  if (names.length <= 2) return names.join('、');
+  return `${names.slice(0, 2).join('、')} 等 ${names.length} 个用户组`;
+}
+
+function normalizeGroupIds(body = {}) {
+  const raw = Array.isArray(body.group_ids)
+    ? body.group_ids
+    : (body.user_group_id ? [body.user_group_id] : []);
+  return [...new Set(raw.map(id => Number(id)).filter(id => Number.isInteger(id) && id > 0))];
+}
+
+async function validGroupIds(groupIds) {
+  if (!groupIds.length) return [];
+  const rows = await db('user_groups').whereIn('id', groupIds).select('id');
+  const valid = new Set(rows.map(row => Number(row.id)));
+  return groupIds.filter(id => valid.has(id));
+}
+
+async function syncStrategyGroups(trx, strategyId, groupIds) {
+  await trx('storage_strategy_groups').where({ storage_strategy_id: strategyId }).del();
+  if (!groupIds.length) return;
+  await trx('storage_strategy_groups').insert(groupIds.map(groupId => ({
+    storage_strategy_id: strategyId,
+    user_group_id: groupId
+  })));
+}
+
+async function attachGroups(strategies) {
+  const strategyIds = strategies.map(strategy => strategy.id).filter(Boolean);
+  if (!strategyIds.length) return strategies.map(serialize);
+  const rows = await db('storage_strategy_groups as sg')
+    .join('user_groups as g', 'g.id', 'sg.user_group_id')
+    .whereIn('sg.storage_strategy_id', strategyIds)
+    .select('sg.storage_strategy_id', 'g.id', 'g.name', 'g.is_default')
+    .orderBy('g.is_default', 'desc')
+    .orderBy('g.id', 'asc');
+  const groupMap = new Map();
+  for (const row of rows) {
+    const list = groupMap.get(row.storage_strategy_id) || [];
+    list.push({ id: row.id, name: row.name, is_default: !!row.is_default });
+    groupMap.set(row.storage_strategy_id, list);
+  }
+  return strategies.map(strategy => {
+    const groups = groupMap.get(strategy.id) || [];
+    return serialize({
+      ...strategy,
+      groups,
+      group_ids: groups.map(group => group.id),
+      group_name: summarizeGroups(groups)
+    });
+  });
 }
 
 router.get('/', async (req, res, next) => {
@@ -147,12 +206,11 @@ router.get('/', async (req, res, next) => {
       .groupBy('storage_strategy_id')
       .as('iu');
     const strategies = await db('storage_strategies as s')
-      .leftJoin('user_groups as g', 'g.id', 's.user_group_id')
       .leftJoin(imageUsage, 'iu.storage_strategy_id', 's.id')
-      .select('s.*', 'g.name as group_name', db.raw('COALESCE(iu.image_count, 0) as image_count'), db.raw('COALESCE(iu.used_storage, 0) as used_storage'))
+      .select('s.*', db.raw('COALESCE(iu.image_count, 0) as image_count'), db.raw('COALESCE(iu.used_storage, 0) as used_storage'))
       .orderBy('s.is_system_default', 'desc')
       .orderBy('s.id', 'asc');
-    res.json({ strategies: strategies.map(serialize) });
+    res.json({ strategies: await attachGroups(strategies) });
   } catch (err) { next(err); }
 });
 
@@ -166,17 +224,14 @@ router.get('/status', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const strategy = await db('storage_strategies as s')
-      .leftJoin('user_groups as g', 'g.id', 's.user_group_id')
-      .where('s.id', req.params.id)
-      .select('s.*', 'g.name as group_name')
-      .first();
+    const strategy = await db('storage_strategies').where({ id: req.params.id }).first();
     if (!strategy) return res.status(404).json({ error: '存储策略不存在' });
     const [{ image_count: imageCount, used_storage: usedStorage }] = await db('images')
       .where({ storage_strategy_id: strategy.id })
       .count({ image_count: 'id' })
       .sum({ used_storage: 'size_bytes' });
-    res.json(serialize({ ...strategy, image_count: imageCount, used_storage: usedStorage }));
+    const [serialized] = await attachGroups([{ ...strategy, image_count: imageCount, used_storage: usedStorage }]);
+    res.json(serialized);
   } catch (err) { next(err); }
 });
 
@@ -185,16 +240,21 @@ router.post('/', async (req, res, next) => {
     const type = normalizeType(req.body.type);
     const name = String(req.body.name || '').trim();
     if (!name) return res.status(400).json({ error: '策略名称不能为空' });
-    const [id] = await db('storage_strategies').insert({
-      name,
-      description: String(req.body.description || '').trim() || null,
-      type,
-      user_group_id: req.body.user_group_id ? Number(req.body.user_group_id) : null,
-      is_system_default: 0,
-      config: JSON.stringify(normalizeConfig(type, req.body.config))
+    const groupIds = await validGroupIds(normalizeGroupIds(req.body));
+    const saved = await db.transaction(async trx => {
+      const [id] = await trx('storage_strategies').insert({
+        name,
+        description: String(req.body.description || '').trim() || null,
+        type,
+        user_group_id: groupIds[0] || null,
+        is_system_default: 0,
+        config: JSON.stringify(normalizeConfig(type, req.body.config))
+      });
+      await syncStrategyGroups(trx, id, groupIds);
+      return trx('storage_strategies').where({ id }).first();
     });
-    const saved = await db('storage_strategies').where({ id }).first();
-    res.json(serialize(saved));
+    const [serialized] = await attachGroups([saved]);
+    res.json(serialized);
   } catch (err) { next(err); }
 });
 
@@ -206,15 +266,20 @@ router.put('/:id', async (req, res, next) => {
     if (requestedType !== existing.type) return res.status(400).json({ error: '已创建的存储策略不能更改挂载方式，请新建策略' });
     const name = String(req.body.name || '').trim();
     if (!name) return res.status(400).json({ error: '策略名称不能为空' });
-    await db('storage_strategies').where({ id: existing.id }).update({
-      name,
-      description: String(req.body.description || '').trim() || null,
-      user_group_id: req.body.user_group_id ? Number(req.body.user_group_id) : null,
-      config: JSON.stringify(normalizeConfig(existing.type, req.body.config)),
-      updated_at: db.fn.now()
+    const groupIds = await validGroupIds(normalizeGroupIds(req.body));
+    const saved = await db.transaction(async trx => {
+      await trx('storage_strategies').where({ id: existing.id }).update({
+        name,
+        description: String(req.body.description || '').trim() || null,
+        user_group_id: groupIds[0] || null,
+        config: JSON.stringify(normalizeConfig(existing.type, req.body.config)),
+        updated_at: trx.fn.now()
+      });
+      await syncStrategyGroups(trx, existing.id, groupIds);
+      return trx('storage_strategies').where({ id: existing.id }).first();
     });
-    const saved = await db('storage_strategies').where({ id: existing.id }).first();
-    res.json(serialize(saved));
+    const [serialized] = await attachGroups([saved]);
+    res.json(serialized);
   } catch (err) { next(err); }
 });
 
@@ -229,6 +294,7 @@ router.delete('/:id', async (req, res, next) => {
         await trx('image_tags').whereIn('image_id', imageIds).del();
         await trx('images').whereIn('id', imageIds).del();
       }
+      await trx('storage_strategy_groups').where({ storage_strategy_id: existing.id }).del();
       await trx('storage_strategies').where({ id: existing.id }).del();
       return imageIds.length;
     });

@@ -46,6 +46,16 @@ async function assertUploadAlbumAccess(albumId, userId, isAdmin) {
   return album;
 }
 
+// 获取当前登录用户实际上传策略（上传页提示用）
+router.get('/policy', authMiddleware, async (req, res, next) => {
+  try {
+    const policy = await uploadService.getUserUploadPolicy(req.user?.id || null);
+    res.json(policy);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 单上传 / 批量上传（需登录）
 router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, next) => {
   try {

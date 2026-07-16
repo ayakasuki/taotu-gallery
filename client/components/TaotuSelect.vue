@@ -10,7 +10,7 @@
       @keydown.enter.prevent="toggle"
       @keydown.space.prevent="toggle"
     >
-      <span class="taotu-select-value" :class="{ placeholder: !selectedOption }">{{ selectedLabel }}</span>
+      <span class="taotu-select-value" :class="{ placeholder: !hasSelection }">{{ selectedLabel }}</span>
       <TaotuIcon name="chevron-down" class="taotu-select-caret" :class="{ open }" />
     </button>
 
@@ -53,12 +53,13 @@
 
 <script setup>
 const props = defineProps({
-  modelValue: { type: [String, Number, Boolean, null], default: null },
+  modelValue: { type: [String, Number, Boolean, Array, null], default: null },
   options: { type: Array, default: () => [] },
   placeholder: { type: String, default: '请选择' },
   disabled: { type: Boolean, default: false },
   minWidth: { type: Number, default: 0 },
-  maxVisibleOptions: { type: Number, default: 4 }
+  maxVisibleOptions: { type: Number, default: 4 },
+  multiple: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -93,8 +94,19 @@ const normalizedOptions = computed(() => props.options.map((option, index) => {
   }
 }))
 
-const selectedOption = computed(() => normalizedOptions.value.find(option => isSameValue(option.value, props.modelValue)))
-const selectedLabel = computed(() => selectedOption.value?.label || props.placeholder)
+const selectedValues = computed(() => {
+  if (!props.multiple) return props.modelValue === null || props.modelValue === undefined ? [] : [props.modelValue]
+  return Array.isArray(props.modelValue) ? props.modelValue : []
+})
+const selectedOptions = computed(() => normalizedOptions.value.filter(option => selectedValues.value.some(value => isSameValue(option.value, value))))
+const selectedOption = computed(() => selectedOptions.value[0] || null)
+const hasSelection = computed(() => selectedOptions.value.length > 0)
+const selectedLabel = computed(() => {
+  if (!props.multiple) return selectedOption.value?.label || props.placeholder
+  if (selectedOptions.value.length === 0) return props.placeholder
+  if (selectedOptions.value.length <= 2) return selectedOptions.value.map(option => option.label).join('、')
+  return `${selectedOptions.value.slice(0, 2).map(option => option.label).join('、')} 等 ${selectedOptions.value.length} 项`
+})
 const hasDescriptions = computed(() => normalizedOptions.value.some(option => option.description))
 
 function isSameValue(a, b) {
@@ -104,7 +116,7 @@ function isSameValue(a, b) {
 }
 
 function isSelected(value) {
-  return isSameValue(value, props.modelValue)
+  return selectedValues.value.some(item => isSameValue(value, item))
 }
 
 function updatePosition() {
@@ -155,6 +167,17 @@ function toggle() {
 
 function selectOption(option) {
   if (option.disabled) return
+  if (props.multiple) {
+    const current = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+    const existingIndex = current.findIndex(value => isSameValue(value, option.value))
+    const next = existingIndex >= 0
+      ? current.filter((_, index) => index !== existingIndex)
+      : [...current, option.value]
+    emit('update:modelValue', next)
+    emit('change', next)
+    nextTick(updatePosition)
+    return
+  }
   emit('update:modelValue', option.value)
   emit('change', option.value)
   closeMenu()

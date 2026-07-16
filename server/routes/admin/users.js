@@ -159,7 +159,6 @@ router.get('/', authMiddleware, async (req, res, next) => {
         'u.avatar',
         'u.role',
         'u.storage_limit',
-        'u.max_file_size',
         'u.last_login_at',
         'u.last_login_ip',
         'u.created_at',
@@ -187,8 +186,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
         review_status: user.review_status || 'approved',
         used_storage: toNumber(user.used_storage),
         image_count: toNumber(user.image_count),
-        storage_limit: toNumber(user.storage_limit),
-        max_file_size: toNumber(user.max_file_size)
+        storage_limit: toNumber(user.storage_limit)
       })),
       pagination: {
         page,
@@ -254,7 +252,7 @@ router.post('/:id/tags', authMiddleware, async (req, res, next) => {
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     await requireAdminUser(req);
-    const { username, password, email, role, storage_limit, max_file_size, user_group_id } = req.body;
+    const { username, password, email, role, storage_limit, user_group_id } = req.body;
     const normalizedUsername = String(username || '').trim();
     const normalizedEmail = String(email || '').trim() || null;
     if (!normalizedUsername || !password) return res.status(400).json({ error: '请填写用户名和密码' });
@@ -270,7 +268,6 @@ router.post('/', authMiddleware, async (req, res, next) => {
       email: normalizedEmail,
       role: role || 'user',
       storage_limit: normalizeBytes(storage_limit),
-      max_file_size: normalizeBytes(max_file_size),
       user_group_id: await resolveUserGroupId(user_group_id),
       is_disabled: false,
       review_status: 'approved'
@@ -289,7 +286,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
     const target = await db('users').where({ id: req.params.id }).first();
     if (!target) return res.status(404).json({ error: '用户不存在' });
 
-    const { email, role, storage_limit, max_file_size, user_group_id } = req.body;
+    const { email, role, storage_limit, user_group_id } = req.body;
     const updates = {};
     if (email !== undefined) updates.email = String(email || '').trim() || null;
     if (role !== undefined) {
@@ -297,7 +294,6 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
       updates.role = role;
     }
     if (storage_limit !== undefined) updates.storage_limit = normalizeBytes(storage_limit);
-    if (max_file_size !== undefined) updates.max_file_size = normalizeBytes(max_file_size);
     if (user_group_id !== undefined) updates.user_group_id = await resolveUserGroupId(user_group_id);
     await db('users').where({ id: req.params.id }).update(updates);
     res.json({ message: '用户已更新' });

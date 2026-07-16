@@ -90,6 +90,7 @@ const bgOverlayTop = ref('rgba(255, 255, 255, 0.08)')
 const bgOverlayBottom = ref('rgba(255, 246, 250, 0.42)')
 const defaultSiteBg = '/site_bg.png'
 const hasCustomBackground = ref(false)
+const sitePrivacyMode = ref(false)
 const siteConfigReady = ref(false)
 const currentUserReady = ref(false)
 const isGalleryAtTop = ref(true)
@@ -134,6 +135,16 @@ const syncNavPath = (path) => {
   currentPath.value = path
   if (path !== '/') isGalleryAtTop.value = false
   else updateNavScrollState()
+}
+
+const isPrivacyProtectedPath = (path = '') => {
+  return path === '/' || path.startsWith('/albums') || path === '/api-docs' || path.startsWith('/api-docs/') || path.startsWith('/image')
+}
+
+const enforcePrivacyMode = (path = route.path) => {
+  if (!import.meta.client || !sitePrivacyMode.value || !isPrivacyProtectedPath(path)) return
+  if (readAuthPayload()) return
+  router.replace({ path: '/login', query: { redirect: path } })
 }
 
 const getNavFrameTarget = () => {
@@ -203,6 +214,7 @@ const applySiteConfig = (siteConfig = {}) => {
   const useDefaultBackground = isDefaultBackground(background)
   siteName.value = siteConfig.siteName || '桃图智库'
   recordNumber.value = siteConfig.recordNumber || ''
+  sitePrivacyMode.value = !!siteConfig.registration?.privacyMode
   iconUrl.value = siteConfig.icon || ''
   hasCustomBackground.value = !useDefaultBackground
   bgUrl.value = useDefaultBackground ? '' : normalizeAssetUrl(background.value)
@@ -223,6 +235,7 @@ const applySiteConfig = (siteConfig = {}) => {
     }
     link.href = normalizeAssetUrl(siteConfig.icon)
   }
+  nextTick(() => enforcePrivacyMode(route.path))
 }
 
 const initialSiteConfig = import.meta.client ? readSiteConfigCache() : null
@@ -241,6 +254,7 @@ const handleAuthInvalid = () => {
   isAdmin.value = false
   currentUser.value = null
   currentUserReady.value = true
+  enforcePrivacyMode(route.path)
 }
 
 const checkAuth = () => {
@@ -248,6 +262,7 @@ const checkAuth = () => {
   const payload = readAuthPayload()
   if (!payload) {
     resetAuthState()
+    enforcePrivacyMode(route.path)
     return
   }
   syncAuthCookie()
@@ -279,6 +294,7 @@ const handleCurrentUserUpdated = (event) => {
 onMounted(async () => {
   removeRouteAfterEach = router.afterEach((to) => {
     syncNavPath(to.path)
+    enforcePrivacyMode(to.path)
     nextTick(refreshNavStateAfterRoute)
   })
   const cachedSiteConfig = readSiteConfigCache()
@@ -316,6 +332,7 @@ watch(() => route.path, (nextPath) => {
   if (nextPath !== '/') isGalleryAtTop.value = false
   const token = import.meta.client ? localStorage.getItem('jwt_token') : ''
   if (token && !isLoggedIn.value) checkAuth()
+  enforcePrivacyMode(nextPath)
   nextTick(() => {
     refreshNavStateAfterRoute()
     observeNavFrameTarget()

@@ -36,14 +36,14 @@
                 ref="fileInput"
                 type="file"
                 multiple
-                accept="image/*"
+                :accept="uploadAccept"
                 style="display: none"
                 @change="handleFileSelect"
               />
               <div class="dropzone-content">
                 <TaotuIcon name="upload-cloud" class="dropzone-icon" />
                 <p class="dropzone-text">将文件拖拽到这里开始上传</p>
-                <p class="dropzone-hint">支持 JPG / PNG / WebP / GIF / AVIF，最大 20MB / 张</p>
+                <p class="dropzone-hint">{{ uploadPolicyHint }}</p>
                 <div class="dropzone-actions">
                   <button type="button" @click.stop="triggerFileInput">点击选择文件</button>
                   <span>或按 Ctrl + V 粘贴截图上传</span>
@@ -140,7 +140,7 @@
               </button>
               <div class="progress-wrap">
                 <div class="progress-text">
-                  <span>{{ uploading ? `上传中 ${uploadProgress}%` : selectedFiles.length ? `待上传 ${selectedFiles.length} 张` : '等待选择文件' }}</span>
+                  <span>{{ uploading ? uploadProgressLabel : selectedFiles.length ? `待上传 ${selectedFiles.length} 张` : '等待选择文件' }}</span>
                   <span>{{ uploadProgress }}%</span>
                 </div>
                 <div class="progress-track"><i :style="{ width: `${uploadProgress}%` }"></i></div>
@@ -201,6 +201,7 @@ curl -X POST {{ baseUrl }}/api/upload \
             <span>文件名</span>
             <span>大小</span>
             <span>状态</span>
+            <span>内容审核</span>
             <span>链接（{{ siteName }}）</span>
             <span>错误信息</span>
             <span>存储策略</span>
@@ -217,6 +218,10 @@ curl -X POST {{ baseUrl }}/api/upload \
             <span class="status-cell" :class="record.success ? 'success' : 'failed'">
               <TaotuIcon :name="record.success ? 'success' : 'failure'" />
               {{ record.success ? '成功' : '失败' }}
+            </span>
+            <span class="audit-cell" :class="record.auditStatus">
+              <TaotuIcon :name="record.auditIcon" :filled="record.auditStatus === 'safe' || record.auditStatus === 'unsafe'" />
+              {{ record.auditLabel }}
             </span>
             <span class="record-link">{{ record.success ? record.url : '-' }}</span>
             <span class="record-error">{{ record.success ? '-' : (record.error || '上传失败') }}</span>
@@ -238,6 +243,7 @@ import TagSelector from '~/components/tags/TagSelector.vue'
 
 const config = useRuntimeConfig()
 const api = useApi()
+const { showAdminToast } = useAdminToast()
 const { readAuthPayload, syncAuthCookie } = useUiCache()
 const { tags, fetchTags } = useTags()
 
@@ -279,6 +285,7 @@ onMounted(async () => {
   if (isLoggedIn.value) {
     fetchTags()
     fetchAlbums()
+    fetchUploadPolicy()
     if (isAdmin.value) fetchAlbumUsers()
   }
   window.addEventListener('taotu:auth-invalid', handleAuthInvalid)
@@ -318,6 +325,12 @@ const uploadConfig = reactive({
   newTags: [],
   isPublic: false
 })
+const uploadPolicy = reactive({
+  loading: true,
+  allowedFormats: [],
+  maxFileSizeBytes: 0,
+  imageReviewEnabled: false
+})
 
 const newTagName = ref('')
 const albumScopeOptions = [
@@ -351,6 +364,24 @@ const albumOptions = computed(() => [
 ])
 const selectedTotalSize = computed(() => selectedFiles.value.reduce((sum, item) => sum + item.size, 0))
 const successRecords = computed(() => uploadRecords.value.filter(record => record.success && record.url))
+const uploadAccept = computed(() => {
+  const formats = normalizeUploadFormats(uploadPolicy.allowedFormats)
+  if (formats.length === 0) return 'image/*'
+  return formats.flatMap(format => formatAcceptMap[format] || [`.${format}`]).join(',')
+})
+const uploadPolicyHint = computed(() => {
+  if (uploadPolicy.loading) return '正在读取当前账号上传策略...'
+  const formats = formatUploadFormats(uploadPolicy.allowedFormats)
+  const sizeText = uploadPolicy.maxFileSizeBytes > 0
+    ? `最大 ${formatSize(uploadPolicy.maxFileSizeBytes)} / 张`
+    : '单张大小不限制'
+  return `支持 ${formats || '当前用户组配置格式'}，${sizeText}`
+})
+const uploadProgressLabel = computed(() => (
+  uploadPolicy.imageReviewEnabled && uploadProgress.value >= 99
+    ? '正在审核图片合规性'
+    : `上传中 ${uploadProgress.value}%`
+))
 const filteredUploadRecords = computed(() => {
   if (recordStatusFilter.value === 'success') return uploadRecords.value.filter(record => record.success)
   if (recordStatusFilter.value === 'failed') return uploadRecords.value.filter(record => !record.success)
@@ -402,6 +433,23 @@ const fetchAlbums = async () => {
     albums.value = data.albums || []
   } catch (err) {
     console.error('获取相册失败:', err)
+  }
+}
+
+const fetchUploadPolicy = async () => {
+  uploadPolicy.loading = true
+  try {
+    const data = await api.get('/api/upload/policy')
+    uploadPolicy.allowedFormats = Array.isArray(data.allowed_formats) ? data.allowed_formats : []
+    uploadPolicy.maxFileSizeBytes = Number(data.max_file_size_bytes || 0)
+    uploadPolicy.imageReviewEnabled = !!data.image_review_enabled
+  } catch (err) {
+    console.error('获取上传策略失败:', err)
+    uploadPolicy.allowedFormats = []
+    uploadPolicy.maxFileSizeBytes = 0
+    uploadPolicy.imageReviewEnabled = false
+  } finally {
+    uploadPolicy.loading = false
   }
 }
 
@@ -516,7 +564,10 @@ const handleUpload = async () => {
     if (jwt) xhr.setRequestHeader('Authorization', `Bearer ${jwt}`)
 
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) uploadProgress.value = Math.round((e.loaded / e.total) * 100)
+      if (e.lengthComputable) {
+        const nextProgress = Math.round((e.loaded / e.total) * 100)
+        uploadProgress.value = uploadPolicy.imageReviewEnabled ? Math.min(99, nextProgress) : nextProgress
+      }
     }
 
     xhr.onload = () => {
@@ -524,17 +575,22 @@ const handleUpload = async () => {
         const data = JSON.parse(xhr.responseText)
         if (xhr.status < 200 || xhr.status >= 300) {
           const message = data.error || data.message || `上传失败 (${xhr.status})`
-          appendUploadRecords(buildFailureResults(uploadingItems, message), uploadingItems)
+          const failures = buildFailureResults(uploadingItems, message, data.error_code)
+          appendUploadRecords(failures, uploadingItems)
+          notifyNsfwFailure(failures)
           return
         }
         const results = data.results || buildFailureResults(uploadingItems, '响应中没有上传结果')
+        uploadProgress.value = 100
         appendUploadRecords(results, uploadingItems)
+        notifyNsfwFailure(results)
         removeUploadedSuccessFiles(uploadingItems, results)
       } catch {
         appendUploadRecords(buildFailureResults(uploadingItems, '解析响应失败'), uploadingItems)
+      } finally {
+        uploading.value = false
+        currentXhr.value = null
       }
-      uploading.value = false
-      currentXhr.value = null
     }
 
     xhr.onerror = () => {
@@ -558,11 +614,13 @@ const handleUpload = async () => {
 
 const cancelUpload = () => currentXhr.value?.abort()
 
-const buildFailureResults = (items, error) => items.map(item => ({
+const buildFailureResults = (items, error, errorCode = 'UPLOAD_FAILED') => items.map(item => ({
   success: false,
   filename: item.name,
   size: item.size,
-  error
+  error,
+  error_code: errorCode,
+  nsfw_review_status: errorCode === 'NSFW_SERVICE_UNAVAILABLE' ? 'failed' : 'not_started'
 }))
 
 const buildDisplayUrl = (result) => {
@@ -573,12 +631,32 @@ const buildDisplayUrl = (result) => {
   return base.replace(new RegExp('/+$'), '') + result.url
 }
 
+const resolveAuditStatus = (result) => {
+  const status = result.nsfw_review_status
+    || result.nsfw_review?.status
+    || (result.nsfw_enabled ? (result.nsfw_status ? 'unsafe' : 'safe') : 'disabled')
+  const statusMap = {
+    safe: { label: '安全', icon: 'status-ok-placeholder' },
+    unsafe: { label: '不安全', icon: 'status-error-placeholder' },
+    failed: { label: '审核失败', icon: 'status-error-placeholder' },
+    disabled: { label: '未启用', icon: 'info' },
+    not_started: { label: '未完成', icon: 'info' }
+  }
+  return { status, ...(statusMap[status] || { label: '待审核', icon: 'info' }) }
+}
+
+const notifyNsfwFailure = (results = []) => {
+  if (!results.some(result => result.error_code === 'NSFW_SERVICE_UNAVAILABLE')) return
+  showAdminToast('NSFW 接口验证失败，不予上传，请联系管理员', 'error', 5000)
+}
+
 const appendUploadRecords = (results, sourceItems = []) => {
   const sourceQueue = [...sourceItems]
   for (const result of results || []) {
     const matched = sourceQueue.find(item => item.name === result.filename) || sourceQueue.shift()
     const url = result.success ? buildDisplayUrl(result) : ''
     const preview = matched?.file ? URL.createObjectURL(matched.file) : (result.thumb_url || '')
+    const audit = resolveAuditStatus(result)
     uploadRecords.value.unshift({
       key: `${Date.now()}-${recordId++}`,
       id: result.id,
@@ -589,6 +667,10 @@ const appendUploadRecords = (results, sourceItems = []) => {
       success: !!result.success,
       url,
       error: result.error || '',
+      errorCode: result.error_code || '',
+      auditStatus: audit.status,
+      auditLabel: result.nsfw_review_message || audit.label,
+      auditIcon: audit.icon,
       storageStrategyName: result.storage_strategy_name || result.storageStrategyName || '默认本地',
       time: formatDateTime(new Date()),
       retryFile: matched || null
@@ -678,13 +760,59 @@ const uploadFromUrls = async () => {
       const data = await api.post('/api/upload/url', { url })
       appendUploadRecords([{ url, success: true, ...data }])
     } catch (err) {
-      appendUploadRecords([{ url, success: false, error: err.data?.error || err.message }])
+      const failure = {
+        url,
+        success: false,
+        error: err.data?.error || err.message,
+        error_code: err.data?.error_code || 'URL_UPLOAD_FAILED',
+        nsfw_review_status: err.data?.error_code === 'NSFW_SERVICE_UNAVAILABLE' ? 'failed' : 'not_started'
+      }
+      appendUploadRecords([failure])
+      notifyNsfwFailure([failure])
     }
   }
   urlUploading.value = false
 }
 
 const baseUrl = computed(() => config.public.apiBase || window.location.origin)
+
+const formatAliasMap = {
+  jpg: 'JPG',
+  jpeg: 'JPEG',
+  png: 'PNG',
+  webp: 'WebP',
+  gif: 'GIF',
+  bmp: 'BMP',
+  ico: 'ICO'
+}
+const formatAcceptMap = {
+  jpg: ['.jpg', '.jpeg', 'image/jpeg'],
+  jpeg: ['.jpg', '.jpeg', 'image/jpeg'],
+  png: ['.png', 'image/png'],
+  webp: ['.webp', 'image/webp'],
+  gif: ['.gif', 'image/gif'],
+  bmp: ['.bmp', 'image/bmp'],
+  ico: ['.ico', 'image/x-icon', 'image/vnd.microsoft.icon']
+}
+const normalizeUploadFormats = (formats = []) => {
+  const normalized = []
+  for (const item of formats || []) {
+    const format = String(item || '').trim().toLowerCase().replace(/^\./, '')
+    if (!format || normalized.includes(format)) continue
+    normalized.push(format)
+  }
+  return normalized
+}
+const formatUploadFormats = (formats = []) => {
+  const normalized = normalizeUploadFormats(formats)
+  const labels = []
+  if (normalized.includes('jpg') || normalized.includes('jpeg')) labels.push('JPG/JPEG')
+  for (const format of normalized) {
+    if (format === 'jpg' || format === 'jpeg') continue
+    labels.push(formatAliasMap[format] || format.toUpperCase())
+  }
+  return labels.join(' / ')
+}
 </script>
 
 <style scoped>
@@ -853,6 +981,7 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 .records-actions,
 .upload-footer,
 .status-cell,
+.audit-cell,
 .record-file,
 .record-op,
 .pretty-check,
@@ -1171,9 +1300,9 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 .records-head,
 .record-row {
   display: grid;
-  grid-template-columns: minmax(210px, 1.4fr) 110px 110px minmax(320px, 2fr) minmax(240px, 1.4fr) 140px 110px 160px;
+  grid-template-columns: minmax(190px, 1.35fr) 100px 100px 120px minmax(190px, 1.25fr) minmax(220px, 1.35fr) 130px 100px 150px;
   align-items: center;
-  min-width: 1500px;
+  min-width: 1400px;
 }
 
 .records-head {
@@ -1223,11 +1352,13 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
   color: #65708a;
 }
 
-.status-cell {
+.status-cell,
+.audit-cell {
   gap: 7px;
 }
 
-.status-cell .taotu-svg-icon {
+.status-cell .taotu-svg-icon,
+.audit-cell .taotu-svg-icon {
   width: 16px;
   height: 16px;
 }
@@ -1237,8 +1368,19 @@ const baseUrl = computed(() => config.public.apiBase || window.location.origin)
 }
 
 .status-cell.failed,
+.audit-cell.unsafe,
+.audit-cell.failed,
 .record-error {
   color: #ff6f96;
+}
+
+.audit-cell.safe {
+  color: #21bd87;
+}
+
+.audit-cell.disabled,
+.audit-cell.not_started {
+  color: #9aa3b7;
 }
 
 .record-op button {

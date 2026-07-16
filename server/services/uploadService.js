@@ -17,6 +17,7 @@ import logger from '../config/logger.js';
 import tagService from './tagService.js';
 import conditionTagService from './conditionTagService.js';
 import nsfwService from './nsfwService.js';
+import storageDeleteService from './storageDeleteService.js';
 
 const DEFAULT_FORMATS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'ico'];
 
@@ -73,28 +74,58 @@ function renderNameRule(rule, file, userId, includeExt = false) {
   return safePath || `${values.yyyy}-${values.mm}-${values.dd}`;
 }
 
-async function getUploadPolicy(req) {
-  if (req._taotuUploadPolicy) return req._taotuUploadPolicy;
-  const userId = req.user?.id || null;
+async function resolveUploadPolicy(userId = null) {
   const user = userId ? await db('users').where({ id: userId }).first() : null;
   let group = null;
   if (user?.user_group_id) group = await db('user_groups').where({ id: user.user_group_id }).first();
   if (!group) group = await db('user_groups').where({ is_default: true }).first();
   const strategy = group
-    ? await db('storage_strategies').where({ user_group_id: group.id }).orderBy('is_system_default', 'asc').orderBy('id', 'desc').first()
+    ? await db('storage_strategies as s')
+      .join('storage_strategy_groups as sg', 'sg.storage_strategy_id', 's.id')
+      .where('sg.user_group_id', group.id)
+      .select('s.*')
+      .orderBy('s.is_system_default', 'asc')
+      .orderBy('s.id', 'desc')
+      .first()
     : await db('storage_strategies').where({ is_system_default: true }).first();
   const fallbackStrategy = strategy || await db('storage_strategies').where({ is_system_default: true }).first();
   const strategyConfig = parseJson(fallbackStrategy?.config, {});
-  req._taotuUploadPolicy = {
+  const groupMaxFileSizeBytes = Number(group?.max_file_size_mb || 0) > 0 ? Math.floor(Number(group.max_file_size_mb) * 1024 * 1024) : 0;
+  const groupMaxFiles = Number(group?.max_concurrent_uploads || 0) > 0 ? Number(group.max_concurrent_uploads) : 0;
+  return {
     user,
     group,
     strategy: fallbackStrategy,
     strategyConfig,
     allowedFormats: parseJson(group?.allowed_formats, DEFAULT_FORMATS),
-    maxFileSizeBytes: Number(group?.max_file_size_mb || 0) > 0 ? Math.floor(Number(group.max_file_size_mb) * 1024 * 1024) : 0,
-    maxFiles: Number(group?.max_concurrent_uploads || 0) > 0 ? Number(group.max_concurrent_uploads) : config.uploadLimits.maxFiles
+    groupMaxFileSizeBytes,
+    userMaxFileSizeBytes: 0,
+    maxFileSizeBytes: groupMaxFileSizeBytes,
+    maxFiles: groupMaxFiles
   };
+}
+
+async function getUploadPolicy(req) {
+  if (req._taotuUploadPolicy) return req._taotuUploadPolicy;
+  const userId = req.user?.id || null;
+  req._taotuUploadPolicy = await resolveUploadPolicy(userId);
   return req._taotuUploadPolicy;
+}
+
+async function getUserUploadPolicy(userId = null) {
+  const policy = await resolveUploadPolicy(userId);
+  return {
+    allowed_formats: policy.allowedFormats,
+    max_file_size_bytes: policy.maxFileSizeBytes,
+    group_max_file_size_bytes: policy.groupMaxFileSizeBytes,
+    max_files: policy.maxFiles,
+    user_group_id: policy.group?.id || null,
+    user_group_name: policy.group?.name || '',
+    image_review_enabled: !!policy.group?.image_review_enabled,
+    nsfw_engine: policy.group?.image_review_enabled ? (policy.group.nsfw_engine || 'nsfwjs') : null,
+    storage_strategy_id: policy.strategy?.id || null,
+    storage_strategy_name: policy.strategy?.name || ''
+  };
 }
 
 // Multer 存储配置
@@ -138,7 +169,7 @@ async function checkUserQuota(userId, fileSize) {
 
   // 检查单文件大小
   const groupLimit = Number(group?.max_file_size_mb || 0) > 0 ? Number(group.max_file_size_mb) * 1024 * 1024 : 0;
-  const maxFileSize = user.max_file_size || groupLimit;
+  const maxFileSize = groupLimit;
   if (maxFileSize > 0 && fileSize > maxFileSize) {
     return { ok: false, error: `文件大小 ${Math.round(fileSize / 1024 / 1024)}MB 超出限制 ${Math.round(maxFileSize / 1024 / 1024)}MB` };
   }
@@ -206,7 +237,11 @@ const fileFilter = async (req, file, cb) => {
 };
 
 function buildUpload(maxFileSizeBytes, maxFiles = config.uploadLimits.maxFiles) {
-  const limits = { files: maxFiles };
+  const limits = {};
+  const maxFileCount = Number(maxFiles);
+  if (Number.isFinite(maxFileCount) && maxFileCount > 0) {
+    limits.files = maxFileCount;
+  }
   const maxFileSize = Number(maxFileSizeBytes);
   if (Number.isFinite(maxFileSize) && maxFileSize > 0) {
     limits.fileSize = maxFileSize;
@@ -222,9 +257,8 @@ const upload = buildUpload();
 async function uploadFiles(req, res, next) {
   try {
     const policy = await getUploadPolicy(req);
-    const userLimit = Number(policy.user?.max_file_size || 0);
-    const effectiveLimit = userLimit > 0 ? userLimit : policy.maxFileSizeBytes;
-    return buildUpload(effectiveLimit, policy.maxFiles).array('files', policy.maxFiles)(req, res, next);
+    const maxCount = Number(policy.maxFiles || 0) > 0 ? Number(policy.maxFiles) : undefined;
+    return buildUpload(policy.maxFileSizeBytes, policy.maxFiles).array('files', maxCount)(req, res, next);
   } catch (err) {
     next(err);
   }
@@ -262,7 +296,13 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
   }
   if (!uploadGroup) uploadGroup = await db('user_groups').where({ is_default: true }).first();
   if (uploadGroup) {
-    uploadStrategy = await db('storage_strategies').where({ user_group_id: uploadGroup.id }).orderBy('is_system_default', 'asc').orderBy('id', 'desc').first();
+    uploadStrategy = await db('storage_strategies as s')
+      .join('storage_strategy_groups as sg', 'sg.storage_strategy_id', 's.id')
+      .where('sg.user_group_id', uploadGroup.id)
+      .select('s.*')
+      .orderBy('s.is_system_default', 'asc')
+      .orderBy('s.id', 'desc')
+      .first();
   }
   if (!uploadStrategy) uploadStrategy = await db('storage_strategies').where({ is_system_default: true }).first();
   await imageProcessor.generateThumbnails(file.path, {
@@ -293,6 +333,49 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     uploader_id: userId || null,
     is_public: isPublic
   });
+
+  let nsfwReview = {
+    ok: true,
+    status: 'disabled',
+    disabled: true,
+    nsfw: false,
+    engine: null
+  };
+  if (uploadGroup?.image_review_enabled) {
+    try {
+      nsfwReview = await nsfwService.reviewImage(imageId);
+      if (typeof nsfwReview.nsfw !== 'boolean' || !['safe', 'unsafe'].includes(nsfwReview.status)) {
+        const reviewError = new Error('审核服务未返回明确的 0/1 结果');
+        reviewError.code = 'NSFW_SERVICE_UNAVAILABLE';
+        reviewError.statusCode = 503;
+        throw reviewError;
+      }
+      if (nsfwReview.nsfw) {
+        logger.warn(`图片已标记为不健康内容: ${file.originalname} (ID: ${imageId})`);
+      }
+    } catch (error) {
+      logger.warn(`图片合规审核失败并回滚上传: ${file.originalname} - ${error.message}`);
+      const imageRecord = await db('images').where({ id: imageId }).first();
+      if (imageRecord) {
+        try {
+          await storageDeleteService.deleteImageRecord(imageRecord);
+        } catch (rollbackError) {
+          logger.error(`NSFW 上传失败后的图片回滚异常: image=${imageId} - ${rollbackError.message}`);
+          await db('image_tags').where({ image_id: imageId }).del().catch(() => {});
+          await db('images').where({ id: imageId }).del().catch(() => {});
+        }
+      }
+      const errorMessage = String(error.message || '审核服务不可用');
+      const strictError = new Error(
+        errorMessage.startsWith('NSFW 接口验证失败')
+          ? errorMessage
+          : `NSFW 接口验证失败，不予上传，请联系管理员：${errorMessage}`
+      );
+      strictError.code = 'NSFW_SERVICE_UNAVAILABLE';
+      strictError.statusCode = 503;
+      throw strictError;
+    }
+  }
 
   // 写入公共标签
   if (tags && tags.length > 0) {
@@ -342,19 +425,6 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     }
   }
 
-  let nsfwReview = null;
-  if (uploadGroup?.image_review_enabled) {
-    try {
-      nsfwReview = await nsfwService.reviewImage(imageId);
-      if (nsfwReview.nsfw) {
-        logger.warn(`图片已标记为不健康内容: ${file.originalname} (ID: ${imageId})`);
-      }
-    } catch (err) {
-      logger.warn(`图片合规审核失败: ${file.originalname} - ${err.message}`);
-      nsfwReview = { ok: false, error: err.message };
-    }
-  }
-
   // 记录上传日志
   await db('upload_logs').insert({
     user_id: userId || null,
@@ -384,7 +454,13 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     storage_strategy_id: uploadStrategy?.id || null,
     storage_strategy_name: uploadStrategy?.name || '默认本地',
     storage_strategy_type: uploadStrategy?.type || 'local',
-    nsfw_status: nsfwReview?.nsfw ?? (uploadGroup?.image_review_enabled ? null : false),
+    nsfw_enabled: !!uploadGroup?.image_review_enabled,
+    nsfw_status: !!nsfwReview.nsfw,
+    nsfw_review_status: nsfwReview.status,
+    nsfw_review_message: nsfwReview.status === 'unsafe'
+      ? '不安全'
+      : (nsfwReview.status === 'safe' ? '安全' : '未启用'),
+    nsfw_engine: nsfwReview.engine,
     nsfw_review: nsfwReview
   };
 }
@@ -398,7 +474,15 @@ async function processUploadedFiles(files, albumId = null, tags = [], userId = n
       results.push({ success: true, ...result });
     } catch (err) {
       logger.error(`上传处理失败: ${file.originalname} - ${err.message}`);
-      results.push({ success: false, filename: file.originalname, error: err.message });
+      results.push({
+        success: false,
+        filename: file.originalname,
+        size: file.size,
+        error: err.message,
+        error_code: err.code || 'UPLOAD_FAILED',
+        nsfw_review_status: err.code === 'NSFW_SERVICE_UNAVAILABLE' ? 'failed' : 'not_started',
+        nsfw_review_message: err.code === 'NSFW_SERVICE_UNAVAILABLE' ? '审核服务异常' : '未完成'
+      });
     }
   }
   return results;
@@ -421,6 +505,7 @@ export default {
   prepareLocalUploadPath,
   processUploadedFile,
   processUploadedFiles,
+  getUserUploadPolicy,
   getUploadLogs,
   checkUserQuota
 };

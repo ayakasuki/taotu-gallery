@@ -51,7 +51,7 @@ router.get('/public', async (req, res, next) => {
       legalVersion: siteConfig.legalVersion || packageInfo.version || '0.0.0',
       publicDomain: siteConfig.publicDomain || '',
       recordNumber: siteConfig.recordNumber || '',
-      registration: siteConfig.registration || { enabled: false, emailVerification: false, requireReview: false, maxUsers: 0 },
+      registration: siteConfig.registration || { enabled: false, emailVerification: false, requireReview: false, privacyMode: false, maxUsers: 0 },
       background: withDefaultBackground(siteConfig.background),
       icon: siteConfig.icon || null,
       logo: null,

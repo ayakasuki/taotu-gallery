@@ -64,8 +64,8 @@
               <span>ID</span>
               <span>名称</span>
               <span>显示名</span>
-              <span>是否公共</span>
-              <span>是否可组合</span>
+              <span>公共</span>
+              <span>可组合</span>
               <span>操作</span>
             </div>
             <div class="tag-table-body pretty-scroll">
@@ -361,14 +361,14 @@
           </div>
         </label>
         <label class="modal-toggle">
-          <span>是否可组合</span>
+          <span>可组合</span>
           <label class="pink-switch">
             <input type="checkbox" v-model="tagForm.combinable" />
             <i></i>
           </label>
         </label>
         <label class="modal-toggle">
-          <span>是否公共</span>
+          <span>公共</span>
           <label class="pink-switch">
             <input type="checkbox" v-model="tagForm.is_public" />
             <i></i>
@@ -1614,11 +1614,15 @@ h3 {
 }
 
 .tag-table-head > span:nth-child(5),
-.tag-table-head > span:nth-child(6),
+.tag-table-head > span:nth-child(6) {
+  justify-self: start;
+  white-space: nowrap;
+}
+
 .tag-table-row > span:nth-child(5),
 .tag-table-row > span:nth-child(6) {
   justify-self: start;
-  width: 4em;
+  width: 3em;
   text-align: center;
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "taotu-gallery",
-  "version": "0.3.2-pre",
+  "version": "0.3.2",
   "description": "图库与智能索引集成系统",
   "main": "server/index.js",
   "scripts": {
