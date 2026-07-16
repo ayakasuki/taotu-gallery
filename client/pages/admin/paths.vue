@@ -38,7 +38,7 @@
             <small>系统默认路径，不可删除</small>
           </div>
           <span><i class="type-pill type-default">默认本地</i></span>
-          <span><i class="flag-pill yes">是</i></span>
+          <span class="bool-cell"><BoolStatusIcon :value="true" /></span>
           <span>公共图库</span>
           <span>无</span>
           <span>{{ formatDateTime(defaultPath.last_scanned_at) }}</span>
@@ -55,7 +55,7 @@
               <strong>{{ pathItem.path }}</strong>
             </div>
             <span><i class="type-pill" :class="`type-${pathType(pathItem)}`">{{ pathTypeLabel(pathItem) }}</i></span>
-            <span><i class="flag-pill" :class="pathItem.recursive !== false ? 'yes' : 'no'">{{ pathItem.recursive !== false ? '是' : '否' }}</i></span>
+            <span class="bool-cell"><BoolStatusIcon :value="pathItem.recursive !== false" /></span>
             <span>{{ albumLabel(pathItem) }}</span>
             <span class="tag-summary">
               <i v-for="tag in getPathTagNames(pathItem).slice(0, 2)" :key="tag"># {{ tag }}</i>
@@ -861,6 +861,8 @@ function maskToken(value) {
 .path-table { border: 1px solid rgba(226, 230, 241, 0.82); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.42); }
 .path-head, .path-row { display: grid; grid-template-columns: minmax(180px, 1.45fr) 82px 62px 110px minmax(116px, 0.95fr) 146px 70px 174px; align-items: center; gap: 10px; padding: 0 13px; }
 .path-head { min-height: 38px; color: #7d879c; font-size: 12px; font-weight: 900; background: rgba(255,255,255,0.5); border-bottom: 1px solid rgba(226, 230, 241, 0.76); }
+.path-head > span:nth-child(3),
+.path-row > span:nth-child(3) { justify-self: start; width: 2em; text-align: center; }
 .path-row { min-height: 58px; border-bottom: 1px solid rgba(226, 230, 241, 0.66); color: #5f6a82; font-size: 12px; font-weight: 800; }
 .path-row:last-child { border-bottom: none; }
 .path-cell-main { display: grid; gap: 5px; min-width: 0; }
@@ -869,9 +871,9 @@ function maskToken(value) {
 .path-cell-main em { color: #ff6f9d; font-style: normal; }
 .path-cell-main small { color: #9ba5b8; font-size: 12px; font-weight: 800; }
 .subsection-title { margin: 18px 0 9px; color: #59657c; font-size: 13px; font-weight: 900; }
-.type-pill, .flag-pill, .status-pill, .tag-summary i { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-style: normal; font-weight: 900; white-space: nowrap; }
+.type-pill, .status-pill, .tag-summary i { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-style: normal; font-weight: 900; white-space: nowrap; }
 .type-default { background: #ffe8f1; color: #ff6f9d; } .type-local { background: #f1eaff; color: #8c72e8; } .type-smb { background: #e7f2ff; color: #4d94df; } .type-s3 { background: #fff0e9; color: #d77b54; } .type-ftp { background: #e8f4ff; color: #4c91d9; }
-.flag-pill.yes { background: #e7f8ee; color: #44b875; } .flag-pill.no { background: #ffecef; color: #e87482; }
+.bool-cell { display: inline-flex; align-items: center; justify-content: center; }
 .status-pill.ok { background: #e7f8ee; color: #44b875; } .status-pill.warn { background: #fff3dc; color: #c78a2a; }
 .tag-summary { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .tag-summary i { background: #f2f4f8; color: #8b96aa; } .tag-summary em, .tag-summary b { color: #9aa4b7; font-style: normal; font-weight: 900; }

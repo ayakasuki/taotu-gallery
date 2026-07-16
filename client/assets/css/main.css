@@ -217,6 +217,17 @@ input:disabled + .taotu-checkbox-icon-pair {
   transition: color var(--taotu-transition), transform var(--taotu-transition), opacity var(--taotu-transition);
 }
 
+.taotu-svg-icon-spin {
+  animation: taotu-icon-spin 0.86s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes taotu-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .taotu-svg-icon-layer {
   position: absolute;
   inset: 0;

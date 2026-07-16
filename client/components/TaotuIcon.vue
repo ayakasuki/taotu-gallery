@@ -2,7 +2,7 @@
   <span
     class="taotu-svg-icon"
     aria-hidden="true"
-    :class="{ 'taotu-svg-icon-filled': filled }"
+    :class="{ 'taotu-svg-icon-filled': filled, 'taotu-svg-icon-spin': spinning }"
     :style="rootStyle"
   >
     <component
@@ -54,6 +54,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  CircleDashed,
   ClipboardCode,
   Clock,
   Cloud,
@@ -88,7 +89,6 @@ import {
   Key,
   Link,
   ListUl,
-  LoaderDots,
   Lock,
   LockKeyhole,
   MenuFilter,
@@ -272,7 +272,7 @@ const iconMap = {
   disabled: 'Lock',
   enabled: 'CheckCircle',
   failure: 'XCircle',
-  loading: 'LoaderDots',
+  loading: 'CircleDashed',
   locked: 'LockKeyhole',
   'mutual-exclusive': 'AlertOctagon',
   pending: 'Clock',
@@ -284,7 +284,7 @@ const iconMap = {
   'file-upload': 'FolderUpArrow',
   'github-host': 'Github',
   'imgbb-host': 'Image',
-  progress: 'LoaderDots',
+  progress: 'CircleDashed',
   'qiniu-host': 'Cloud',
   'smms-host': 'Cloud',
   'taotu-host': 'ImageSparkle',
@@ -322,6 +322,7 @@ const iconComponents = {
   ChevronLeft,
   ChevronRight,
   Circle,
+  CircleDashed,
   ClipboardCode,
   Clock,
   Cloud,
@@ -356,7 +357,6 @@ const iconComponents = {
   Key,
   Link,
   ListUl,
-  LoaderDots,
   Lock,
   LockKeyhole,
   MenuFilter,
@@ -395,6 +395,7 @@ const iconName = computed(() => iconMap[normalizedName.value] || iconMap[props.n
 const iconComponent = computed(() => iconComponents[iconName.value] || Image)
 const filled = computed(() => props.filled || props.pack === 'filled')
 const stateful = computed(() => props.stateful && !filled.value)
+const spinning = computed(() => ['loading', 'progress'].includes(normalizedName.value))
 const regularPack = computed(() => props.pack && props.pack !== 'filled' ? props.pack : 'regular')
 const normalizeSize = (value) => typeof value === 'number' ? `${value}px` : value
 const rootStyle = computed(() => {

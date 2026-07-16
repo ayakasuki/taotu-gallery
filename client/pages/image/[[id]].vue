@@ -188,7 +188,7 @@
     </div>
 
     <div v-else-if="loading" class="detail-loading-placeholder" aria-label="图片详情加载中">
-      <img src="/icons/image/detail-loading-placeholder.gif" alt="" />
+      <TaotuIcon name="loading" />
     </div>
     <div v-else class="state-card">图片不存在</div>
   </div>
@@ -1482,11 +1482,11 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.detail-loading-placeholder img {
-  width: 96px;
-  height: 96px;
-
-  opacity: 0.78;
+.detail-loading-placeholder .taotu-svg-icon {
+  width: 48px;
+  height: 48px;
+  color: rgba(255, 111, 157, 0.82);
+  opacity: 0.86;
 }
 
 @media (max-width: 1450px) {

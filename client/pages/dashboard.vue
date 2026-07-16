@@ -335,7 +335,7 @@
                     </label>
                     <span class="private-name">{{ tag.name }}</span>
                     <span class="private-display">{{ tag.display_name || tag.name }}</span>
-                    <span class="private-combinable">{{ tag.combinable ? '是' : '否' }}</span>
+                    <span class="private-combinable"><BoolStatusIcon :value="!!tag.combinable" /></span>
                     <span class="mutual-summary">{{ formatMutualNames(tag.mutually_exclusive_with) || '-' }}</span>
                     <span class="private-row-actions">
                       <button type="button" class="private-row-btn edit" @click="openTagEdit(tag)">
@@ -2867,6 +2867,13 @@ const buildPageItems = (current, total) => {
   font-size: 12px;
   font-weight: 900;
 }
+
+.private-tags-head > span:nth-child(4),
+.private-tags-row > span:nth-child(4) {
+  justify-self: start;
+  width: 5em;
+  text-align: center;
+}
 .head-with-info {
   display: inline-flex;
   align-items: center;
@@ -2902,7 +2909,9 @@ const buildPageItems = (current, total) => {
   text-overflow: ellipsis;
 }
 .private-combinable {
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .private-row-actions {
   display: flex;
@@ -3279,10 +3288,11 @@ const buildPageItems = (current, total) => {
   cursor: pointer;
 }
 .manual-check-box {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   position: relative;
   display: inline-flex;
+  flex: 0 0 20px;
 }
 .manual-check-box input {
   position: absolute;
@@ -3292,6 +3302,12 @@ const buildPageItems = (current, total) => {
   --checkbox-icon-size: 20px;
   --checkbox-icon-color: rgba(255, 126, 174, 0.82);
   --checkbox-checked-color: #ff78a5;
+}
+
+.manual-check-box .taotu-checkbox-icon-pair .taotu-svg-icon {
+  width: 100%;
+  height: 100%;
+  color: inherit;
 }
 .manual-run-card > p {
   margin: 7px 0 16px 24px;

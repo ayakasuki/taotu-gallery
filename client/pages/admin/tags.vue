@@ -88,8 +88,8 @@
                 <span class="tag-id">{{ tagKey(tag) }}</span>
                 <span>{{ tag.name }}</span>
                 <span>{{ tag.display_name || tag.name }}</span>
-                <span>{{ isTagPublic(tag) ? '是' : '否' }}</span>
-                <span>{{ tag.combinable === false ? '否' : '是' }}</span>
+                <span class="bool-cell"><BoolStatusIcon :value="isTagPublic(tag)" /></span>
+                <span class="bool-cell"><BoolStatusIcon :value="tag.combinable !== false" /></span>
                 <span class="row-actions">
                   <button type="button" class="text-action edit" @click="openEditTag(tag)">编辑</button>
                   <button type="button" class="text-action delete" :disabled="tag.isSystemTag" @click="deleteTag(tag)">删除</button>
@@ -1613,6 +1613,15 @@ h3 {
   border-bottom: 1px solid rgba(224, 229, 240, 0.72);
 }
 
+.tag-table-head > span:nth-child(5),
+.tag-table-head > span:nth-child(6),
+.tag-table-row > span:nth-child(5),
+.tag-table-row > span:nth-child(6) {
+  justify-self: start;
+  width: 4em;
+  text-align: center;
+}
+
 .tag-table-body {
   min-height: 0;
   overflow-y: auto;
@@ -1747,6 +1756,13 @@ h3 {
 
 .soft-checkbox.mini .taotu-checkbox-icon-pair {
   --checkbox-icon-size: 20px;
+}
+
+.bool-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
 }
 
 .group-card {
@@ -2207,6 +2223,12 @@ h3 {
   height: 14px;
   color: #9aa5b8;
   flex: 0 0 auto;
+}
+
+.execute-check > .taotu-checkbox-icon-pair .taotu-svg-icon {
+  width: 100%;
+  height: 100%;
+  color: inherit;
 }
 
 .manual-execute-card p,
