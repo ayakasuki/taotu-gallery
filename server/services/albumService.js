@@ -111,9 +111,9 @@ async function getAlbums(options = {}) {
 
   for (const album of albums) {
     const owner = album.user_id
-      ? await db('users').where({ id: album.user_id }).select('username', 'avatar').first()
+      ? await db('users').where({ id: album.user_id }).select('username', 'nickname', 'avatar').first()
       : null;
-    album.owner_name = owner?.username || '系统';
+    album.owner_name = owner?.nickname || owner?.username || '系统';
     album.owner_avatar = owner?.avatar || null;
 
     if (album.cover_image_id) {
@@ -144,9 +144,9 @@ async function getAlbumById(albumId) {
   if (!album) return null;
 
   const owner = album.user_id
-    ? await db('users').where({ id: album.user_id }).select('username', 'avatar').first()
+    ? await db('users').where({ id: album.user_id }).select('username', 'nickname', 'avatar').first()
     : null;
-  album.owner_name = owner?.username || '系统';
+  album.owner_name = owner?.nickname || owner?.username || '系统';
   album.owner_avatar = owner?.avatar || null;
 
   // 获取封面：优先使用手动/系统写入的封面，缺失时回退到相册内最新图片

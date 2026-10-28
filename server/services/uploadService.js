@@ -318,6 +318,7 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
   const [imageId] = await db('images').insert({
     filename: file.originalname,
     path: relativePath,
+    path_key: pathUtils.getPathKey(relativePath),
     hash_path: hashPath,
     original_path: file.path,
     width: meta.width,

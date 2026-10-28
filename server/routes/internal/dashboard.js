@@ -20,7 +20,7 @@ router.get('/overview', authMiddleware, async (req, res, next) => {
   try {
     const user = await db('users')
       .where({ id: req.user.id })
-      .select('id', 'username', 'role', 'email', 'avatar', 'storage_limit', 'last_login_at', 'created_at')
+      .select('id', 'username', 'nickname', 'role', 'email', 'avatar', 'storage_limit', 'last_login_at', 'created_at')
       .first();
 
     if (!user) return res.status(404).json({ error: '用户不存在' });
@@ -68,6 +68,15 @@ router.get('/overview', authMiddleware, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+router.patch('/profile', authMiddleware, async (req, res, next) => {
+  try {
+    const nickname = String(req.body?.nickname || '').trim();
+    if (!nickname || nickname.length > 100) return res.status(400).json({ error: '昵称需填写且不超过 100 个字符' });
+    await db('users').where({ id: req.user.id }).update({ nickname });
+    res.json({ nickname });
+  } catch (err) { next(err); }
 });
 
 export default router;

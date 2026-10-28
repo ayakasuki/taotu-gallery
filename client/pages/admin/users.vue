@@ -50,7 +50,8 @@
                 <span v-else class="user-avatar fallback">{{ user.username?.slice(0, 1)?.toUpperCase() || 'U' }}</span>
                 <div class="user-name-stack">
                   <div class="user-name-line">
-                    <b>{{ user.username }}</b>
+                    <b>{{ user.nickname || user.username }}</b>
+                    <small class="username-secondary">@{{ user.username }}</small>
                     <i v-if="user.role === 'admin'" class="inline-role admin">管理员</i>
                     <i v-if="isPendingReview(user)" class="inline-role pending">未审核</i>
                     <i v-else-if="user.is_disabled" class="inline-role disabled">禁用</i>
@@ -105,10 +106,10 @@
                   type="button"
                   class="row-btn"
                   :class="user.is_disabled ? 'enable' : 'disable'"
-                  :disabled="isSelf(user)"
+                  :disabled="isSelf(user) || isRootAdmin(user)"
                   @click="toggleUserStatus(user)"
                 >
-                  {{ user.is_disabled ? '启用' : '禁用' }}
+                  {{ isRootAdmin(user) ? '保底管理员' : (user.is_disabled ? '启用' : '禁用') }}
                 </button>
                 <button
                   v-if="canDelete(user)"
@@ -154,6 +155,11 @@
           <input v-model.trim="form.username" class="dialog-input" :disabled="!!editingUser" placeholder="请输入用户名" />
         </div>
 
+        <div class="form-field">
+          <label>昵称</label>
+          <input v-model.trim="form.nickname" class="dialog-input" maxlength="100" placeholder="对外展示的名称" />
+        </div>
+
         <div v-if="!editingUser" class="form-field">
           <label>密码</label>
           <div class="password-field">
@@ -172,6 +178,7 @@
         <div class="form-field">
           <label>角色</label>
           <TaotuSelect v-model="form.role" :options="roleOptions" />
+          <small v-if="isRootAdmin(editingUser)" class="root-admin-note">系统保底管理员 ID=1 必须保持管理员角色，不可禁用或删除。</small>
         </div>
 
         <div class="form-field">
@@ -266,6 +273,7 @@ const pagination = reactive({
 
 const form = reactive({
   username: '',
+  nickname: '',
   password: '',
   email: '',
   role: 'user',
@@ -273,10 +281,9 @@ const form = reactive({
   storageLimitMB: 5000
 })
 
-const roleOptions = [
-  { label: '普通用户', value: 'user' },
-  { label: '管理员', value: 'admin' }
-]
+const roleOptions = computed(() => isRootAdmin(editingUser.value)
+  ? [{ label: '管理员（系统保底）', value: 'admin' }]
+  : [{ label: '普通用户', value: 'user' }, { label: '管理员', value: 'admin' }])
 
 const roleFilterOptions = [
   { label: '全部角色', value: 'all' },
@@ -380,6 +387,7 @@ function goPage(page) {
 
 function resetForm() {
   form.username = ''
+  form.nickname = ''
   form.password = ''
   form.email = ''
   form.role = 'user'
@@ -397,6 +405,7 @@ function openAddDialog() {
 function openEditDialog(user) {
   editingUser.value = user
   form.username = user.username || ''
+  form.nickname = user.nickname || user.username || ''
   form.password = ''
   form.email = user.email || ''
   form.role = user.role || 'user'
@@ -429,10 +438,15 @@ async function saveUser() {
     showAdminToast('请输入密码', 'error')
     return
   }
+  if (isRootAdmin(editingUser.value) && form.role !== 'admin') {
+    showAdminToast('系统保底管理员 ID=1 必须保持管理员角色', 'error')
+    return
+  }
 
   saving.value = true
   try {
     const payload = {
+      nickname: form.nickname,
       email: form.email || null,
       role: form.role,
       user_group_id: form.userGroupId,
@@ -445,6 +459,7 @@ async function saveUser() {
       await api.post('/api/admin/users', {
         ...payload,
         username: form.username,
+        nickname: form.nickname,
         password: form.password
       })
       showAdminToast('用户已添加', 'success')
@@ -459,6 +474,10 @@ async function saveUser() {
 }
 
 async function toggleUserStatus(user) {
+  if (isRootAdmin(user)) {
+    showAdminToast('系统保底管理员 ID=1 不能禁用', 'error')
+    return
+  }
   if (isSelf(user)) {
     showAdminToast('不能禁用当前登录账号', 'error')
     return
@@ -531,7 +550,11 @@ function isSelf(user) {
 }
 
 function canDelete(user) {
-  return user.role !== 'admin' && !isSelf(user)
+  return !isRootAdmin(user) && user.role !== 'admin' && !isSelf(user)
+}
+
+function isRootAdmin(user) {
+  return Number(user?.id) === 1
 }
 
 function avatarSrc(user) {
@@ -1175,6 +1198,7 @@ function formatDateTime(value) {
   font-size: 13px;
   font-weight: 900;
 }
+.root-admin-note { color: #9a7182; font-size: 11px; font-weight: 800; line-height: 1.5; }
 
 .dialog-input {
   width: 100%;

@@ -93,8 +93,13 @@
               <TaotuIcon name="fullscreen" class="detail-icon icon-18" />
             </button>
             <span class="action-separator"></span>
-            <button class="action-btn heart" title="收藏">
-              <TaotuIcon name="favorite" class="detail-icon icon-18" />
+            <button class="action-btn heart" :class="{ active: liked }" title="点赞" @click="toggleLike">
+              <TaotuIcon name="heart" class="detail-icon icon-18" :filled="liked" />
+              <span v-if="likeCount">{{ likeCount }}</span>
+            </button>
+            <button class="action-btn star" :class="{ active: favorited }" title="收藏" @click="toggleFavorite">
+              <TaotuIcon name="star" class="detail-icon icon-18" :filled="favorited" />
+              <span v-if="favoriteCount">{{ favoriteCount }}</span>
             </button>
             <button class="action-btn mint" title="下载" @click="downloadImage">
               <TaotuIcon name="download" class="detail-icon icon-18" />
@@ -106,8 +111,8 @@
           <section class="detail-card info-card">
             <div class="title-row">
               <h1>{{ imageTitle }}</h1>
-              <button class="collect-btn" type="button">
-                <TaotuIcon name="favorite" class="detail-icon icon-16" />
+              <button class="collect-btn" type="button" :class="{ active: favorited }" @click="toggleFavorite">
+                <TaotuIcon name="star" class="detail-icon icon-16" :filled="favorited" />
                 收藏
               </button>
             </div>
@@ -118,7 +123,8 @@
                   <span class="uploader-inline">
                     <img v-if="uploaderAvatarUrl" :src="uploaderAvatarUrl" alt="" />
                     <i v-else>{{ uploaderInitial }}</i>
-                    <span>{{ image.uploader_name || '系统导入' }}</span>
+                    <UserProfileCard v-if="image.uploader_id" :user-id="image.uploader_id" :nickname="image.uploader_name" />
+                    <span v-else>{{ image.uploader_name || '系统导入' }}</span>
                   </span>
                 </dd>
               </div>
@@ -199,8 +205,15 @@ const route = useRoute()
 const router = useRouter()
 const config = useRuntimeConfig()
 const api = useApi()
+const { readAuthPayload } = useUiCache()
+const { showAdminToast } = useAdminToast()
 
 const image = ref(null)
+const liked = ref(false)
+const favorited = ref(false)
+const likeCount = ref(0)
+const favoriteCount = ref(0)
+const viewerLoggedIn = ref(false)
 const loading = ref(true)
 const viewerRef = ref(null)
 const imageRef = ref(null)
@@ -354,6 +367,12 @@ const selectImage = async (id, { updateUrl = true, align = 'visible' } = {}) => 
   try {
     const data = await api.get(`/api/internal/images/${id}`)
     image.value = data
+    const auth = readAuthPayload()
+    viewerLoggedIn.value = !!auth
+    liked.value = !!data.liked_by_me
+    favorited.value = !!data.favorited_by_me
+    likeCount.value = Number(data.like_count || 0)
+    favoriteCount.value = Number(data.favorite_count || 0)
     currentImageId.value = Number(data.id || id)
     await nextTick()
     const bgImage = document.querySelector('.detail-bg img')
@@ -369,6 +388,33 @@ const selectImage = async (id, { updateUrl = true, align = 'visible' } = {}) => 
   } finally {
     loading.value = false
   }
+}
+
+async function toggleLike() {
+  if (!image.value) return
+  if (!viewerLoggedIn.value) {
+    liked.value = !liked.value
+    likeCount.value = Math.max(0, likeCount.value + (liked.value ? 1 : -1))
+    return
+  }
+  try {
+    const result = await api.post(`/api/internal/images/${image.value.id}/like`, {})
+    liked.value = result.liked
+    likeCount.value = Number(result.like_count || 0)
+  } catch (error) { showAdminToast(error?.data?.error || '点赞失败', 'error') }
+}
+
+async function toggleFavorite() {
+  if (!viewerLoggedIn.value) {
+    showAdminToast('请登录后收藏图片', 'warning')
+    return
+  }
+  if (!image.value) return
+  try {
+    const result = await api.post(`/api/internal/images/${image.value.id}/favorite`, {})
+    favorited.value = result.favorited
+    favoriteCount.value = Number(result.favorite_count || 0)
+  } catch (error) { showAdminToast(error?.data?.error || '收藏失败', 'error') }
 }
 
 const loadThumbs = async ({ append = false } = {}) => {
@@ -1133,13 +1179,15 @@ onBeforeUnmount(() => {
 }
 
 .action-btn {
-  width: 31px;
+  min-width: 31px;
+  width: max-content;
   height: 31px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
   border-radius: 50%;
+  padding: 0 6px;
   background: transparent;
   cursor: pointer;
 }
@@ -1150,7 +1198,13 @@ onBeforeUnmount(() => {
 
 .action-btn.heart {
   color: var(--taotu-pink);
+  border-radius: 50vh;
 }
+.action-btn.heart.active { color: #ed426d; }
+.action-btn.star { color: #d6a52a; }
+.action-btn.star.active { color: #efb51f; }
+.action-btn > span { margin-left: 2px; color: currentColor; font-size: 11px; font-weight: 900; }
+.action-btn.heart.active .taotu-svg-icon { transform: translateX(-2px); fill: currentColor; }
 
 .action-btn.mint {
   color: var(--taotu-mint);
@@ -1216,6 +1270,7 @@ onBeforeUnmount(() => {
   font-weight: 900;
   white-space: nowrap;
 }
+.collect-btn.active { color: #d99f12; border-color: rgba(233,174,37,.45); background: rgba(255,246,218,.72); }
 
 .meta-list {
   display: flex;

@@ -290,6 +290,7 @@ async function getRecentActivities(limit = 7) {
         'i.upload_source',
         'i.created_at',
         'u.username',
+        'u.nickname',
         'u.avatar',
         'a.name as album_name'
       )
@@ -302,16 +303,17 @@ async function getRecentActivities(limit = 7) {
         'a.name',
         'a.created_at',
         'u.username',
+        'u.nickname',
         'u.avatar'
       )
       .orderBy('a.created_at', 'desc')
       .limit(5),
     db('users')
-      .select('id', 'username', 'avatar', 'created_at')
+      .select('id', 'username', 'nickname', 'avatar', 'created_at')
       .orderBy('created_at', 'desc')
       .limit(5),
     db('users')
-      .select('id', 'username', 'avatar', 'last_login_at')
+      .select('id', 'username', 'nickname', 'avatar', 'last_login_at')
       .whereNotNull('last_login_at')
       .orderBy('last_login_at', 'desc')
       .limit(5),
@@ -325,6 +327,7 @@ async function getRecentActivities(limit = 7) {
         'l.status_code',
         'l.created_at',
         'u.username',
+        'u.nickname',
         'u.avatar'
       )
       .orderBy('l.created_at', 'desc')
@@ -334,7 +337,7 @@ async function getRecentActivities(limit = 7) {
   const activities = [];
 
   for (const row of uploads) {
-    const actor = row.username || '系统导入';
+    const actor = row.nickname || row.username || '系统导入';
     activities.push({
       id: makeActivityId('image', row.id, row.created_at),
       kind: row.username ? 'user' : 'system',
@@ -352,7 +355,7 @@ async function getRecentActivities(limit = 7) {
     activities.push({
       id: makeActivityId('album', row.id, row.created_at),
       kind: row.username ? 'user' : 'system',
-      actor: row.username || '',
+      actor: row.nickname || row.username || '',
       message: `创建了相册「${row.name || `#${row.id}`}」`,
       avatar: row.avatar || null,
       icon: row.username ? null : 'album-management',
@@ -364,7 +367,7 @@ async function getRecentActivities(limit = 7) {
     activities.push({
       id: makeActivityId('register', row.id, row.created_at),
       kind: 'user',
-      actor: row.username || '用户',
+      actor: row.nickname || row.username || '用户',
       message: '注册了新账号',
       avatar: row.avatar || null,
       icon: null,
@@ -376,7 +379,7 @@ async function getRecentActivities(limit = 7) {
     activities.push({
       id: makeActivityId('login', row.id, row.last_login_at),
       kind: 'user',
-      actor: row.username || '用户',
+      actor: row.nickname || row.username || '用户',
       message: '登录了账号',
       avatar: row.avatar || null,
       icon: null,
@@ -389,7 +392,7 @@ async function getRecentActivities(limit = 7) {
     activities.push({
       id: makeActivityId('api', row.id, row.created_at),
       kind: isUserAction ? 'user' : 'system',
-      actor: row.username || '',
+      actor: row.nickname || row.username || '',
       message: `调用了 API ${row.method || 'GET'} ${stripQuery(row.endpoint)}，状态 ${row.status_code || '-'}`,
       avatar: row.avatar || null,
       icon: isUserAction ? null : 'api-settings',
@@ -598,15 +601,13 @@ async function getUserActivityStats(period = 'day') {
 // 获取热门图片（浏览最多）
 async function getTopImages(limit = 10) {
   const rows = await db('images')
-    .orderBy('view_count', 'desc')
+    .select('images.id', 'images.filename', 'images.hash_path', 'images.view_count')
+    .select(db.raw('((SELECT COUNT(*) FROM image_likes WHERE image_likes.image_id = images.id) + (SELECT COUNT(*) FROM image_guest_likes WHERE image_guest_likes.image_id = images.id)) AS like_count'))
+    .select(db.raw('(SELECT COUNT(*) FROM image_favorites WHERE image_favorites.image_id = images.id) AS favorite_count'))
+    .orderBy('images.view_count', 'desc')
     .limit(limit)
-    .select('id', 'filename', 'hash_path', 'view_count');
 
-  return rows.map((image) => ({
-    ...image,
-    ...imageService.buildImageUrls(image),
-    like_count: 0
-  }));
+  return rows.map(image => ({ ...image, ...imageService.buildImageUrls(image) }));
 }
 
 // 获取热门 API 端点

@@ -13,6 +13,9 @@
           <button v-if="isLoggedIn" class="source-row" :class="{ active: gallerySource === 'mine' }" @click="switchSource('mine')">
             <span>我的图库</span><b>{{ sourceCounts.mine }}</b>
           </button>
+          <button v-if="isLoggedIn" class="source-row" :class="{ active: gallerySource === 'favorites' }" @click="switchSource('favorites')">
+            <span>收藏图库</span><b>{{ sourceCounts.favorites }}</b>
+          </button>
           <button v-if="isAdmin" class="source-row" :class="{ active: gallerySource === 'user' }" @click="switchSource('user')">
             <span>用户图库</span><b>{{ sourceCounts.user }}</b>
           </button>
@@ -232,10 +235,12 @@ const users = ref([])
 const tagGroups = ref([])
 const openSections = reactive({ source: true, sort: true, mode: true, tags: true })
 const allGroupsExpanded = ref(false)
-const sourceCounts = reactive({ public: '-', mine: '-', user: '-' })
+const sourceCounts = reactive({ public: '-', mine: '-', favorites: '-', user: '-' })
 const sortOptions = [
   { label: '最新', value: 'created_at' },
   { label: '最热门', value: 'view_count' },
+  { label: '点赞最多', value: 'like_count' },
+  { label: '收藏最多', value: 'favorite_count' },
   { label: '文件名', value: 'filename' }
 ]
 
@@ -277,6 +282,7 @@ const moveAlbumOptions = computed(() => [
 
 const emptyText = computed(() => {
   if (gallerySource.value === 'mine') return '您还没有上传图片'
+  if (gallerySource.value === 'favorites') return '还没有收藏图片'
   if (gallerySource.value === 'user') return selectedUserId.value ? '该用户暂无图片' : '暂无图片'
   return '暂无公共图片'
 })
@@ -330,7 +336,8 @@ const loadUsers = async () => {
 const loadSourceCounts = async () => {
   const readTotal = async (params) => {
     try {
-      const data = await api.get('/api/internal/images', { page: 1, limit: 1, gallery: 'true', ...params })
+      const endpoint = params.favorites ? '/api/internal/images/favorites' : '/api/internal/images'
+      const data = await api.get(endpoint, { page: 1, limit: 1, gallery: 'true', ...params })
       return data.total || 0
     } catch {
       return '-'
@@ -338,6 +345,7 @@ const loadSourceCounts = async () => {
   }
   sourceCounts.public = await readTotal({ public: 'true' })
   if (isLoggedIn.value) sourceCounts.mine = await readTotal({ mine: 'true' })
+  if (isLoggedIn.value) sourceCounts.favorites = await readTotal({ favorites: true })
   if (isAdmin.value) sourceCounts.user = await readTotal({})
 }
 
@@ -404,7 +412,9 @@ const loadGallery = () => {
     limit: pageSize,
     gallery: 'true'
   }
-  if (gallerySource.value === 'mine') {
+  if (gallerySource.value === 'favorites') {
+    params.favorites = true
+  } else if (gallerySource.value === 'mine') {
     params.mine = 'true'
   } else if (gallerySource.value === 'user') {
     if (selectedUserId.value) params.userId = selectedUserId.value
@@ -428,7 +438,8 @@ const loadMore = async () => {
     tags: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined,
     gallery: 'true'
   }
-  if (gallerySource.value === 'mine') params.mine = 'true'
+  if (gallerySource.value === 'favorites') params.favorites = true
+  else if (gallerySource.value === 'mine') params.mine = 'true'
   else if (gallerySource.value === 'user') { if (selectedUserId.value) params.userId = selectedUserId.value }
   else params.public = 'true'
   await fetchImages(params)

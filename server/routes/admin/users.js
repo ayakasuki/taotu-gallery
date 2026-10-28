@@ -5,6 +5,7 @@ import db from '../../db/index.js';
 import logger from '../../config/logger.js';
 import mailService from '../../services/mailService.js';
 import storageDeleteService from '../../services/storageDeleteService.js';
+import { isHealthyRootAdmin, isProtectedRootAdmin, rootAdminRoleChangeError, rootAdminStartupError, ROOT_ADMIN_ID } from '../../utils/rootAdminPolicy.js';
 
 const router = express.Router();
 
@@ -52,6 +53,8 @@ async function requireAdminUser(req) {
 }
 
 async function cleanupUserData(userId, user) {
+  await db('image_likes').where({ user_id: userId }).del();
+  await db('image_favorites').where({ user_id: userId }).del();
   const tokenCount = await db('api_tokens').where({ user_id: userId }).del();
   logger.info(`删除用户 ${userId} 的 ${tokenCount} 个 Token`);
 
@@ -131,6 +134,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
       baseQuery.where((builder) => {
         builder
           .where('u.username', 'like', `%${search}%`)
+          .orWhere('u.nickname', 'like', `%${search}%`)
           .orWhere('u.email', 'like', `%${search}%`);
       });
     }
@@ -155,6 +159,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
       .select(
         'u.id',
         'u.username',
+        'u.nickname',
         'u.email',
         'u.avatar',
         'u.role',
@@ -252,7 +257,12 @@ router.post('/:id/tags', authMiddleware, async (req, res, next) => {
 router.post('/', authMiddleware, async (req, res, next) => {
   try {
     await requireAdminUser(req);
-    const { username, password, email, role, storage_limit, user_group_id } = req.body;
+    const rootAdmin = await db('users').where({ id: ROOT_ADMIN_ID }).first();
+    if (!isHealthyRootAdmin(rootAdmin)) {
+      const error = rootAdminStartupError();
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    const { username, nickname, password, email, role, storage_limit, user_group_id } = req.body;
     const normalizedUsername = String(username || '').trim();
     const normalizedEmail = String(email || '').trim() || null;
     if (!normalizedUsername || !password) return res.status(400).json({ error: '请填写用户名和密码' });
@@ -264,6 +274,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const [id] = await db('users').insert({
       username: normalizedUsername,
+      nickname: String(nickname || normalizedUsername).trim().slice(0, 100),
       password_hash: passwordHash,
       email: normalizedEmail,
       role: role || 'user',
@@ -286,8 +297,17 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
     const target = await db('users').where({ id: req.params.id }).first();
     if (!target) return res.status(404).json({ error: '用户不存在' });
 
-    const { email, role, storage_limit, user_group_id } = req.body;
+    const { nickname, email, role, storage_limit, user_group_id } = req.body;
     const updates = {};
+    if (isProtectedRootAdmin(target.id) && role === 'user') {
+      const error = rootAdminRoleChangeError();
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    if (nickname !== undefined) {
+      const normalizedNickname = String(nickname || '').trim();
+      if (!normalizedNickname || normalizedNickname.length > 100) return res.status(400).json({ error: '昵称需填写且不超过 100 个字符' });
+      updates.nickname = normalizedNickname;
+    }
     if (email !== undefined) updates.email = String(email || '').trim() || null;
     if (role !== undefined) {
       if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: '角色无效' });
@@ -308,6 +328,9 @@ router.patch('/:id/status', authMiddleware, async (req, res, next) => {
     await requireAdminUser(req);
     const userId = parseInt(req.params.id, 10);
     const disabled = !!req.body.disabled;
+    if (isProtectedRootAdmin(userId) && disabled) {
+      return res.status(400).json({ error: '系统保底管理员（ID=1）不能禁用', code: 'ROOT_ADMIN_PROTECTED' });
+    }
     if (userId === req.user.id && disabled) {
       return res.status(400).json({ error: '不能禁用当前登录账号' });
     }
@@ -348,6 +371,9 @@ router.patch('/:id/review/reject', authMiddleware, async (req, res, next) => {
   try {
     await requireAdminUser(req);
     const userId = parseInt(req.params.id, 10);
+    if (isProtectedRootAdmin(userId)) {
+      return res.status(400).json({ error: '系统保底管理员（ID=1）不能拒绝或删除', code: 'ROOT_ADMIN_PROTECTED' });
+    }
     if (userId === req.user.id) return res.status(400).json({ error: '不能拒绝当前登录账号' });
     const target = await db('users').where({ id: userId }).first();
     if (!target) return res.status(404).json({ error: '用户不存在' });
@@ -380,6 +406,9 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
     await requireAdminUser(req);
     const userId = parseInt(req.params.id);
+    if (isProtectedRootAdmin(userId)) {
+      return res.status(400).json({ error: '系统保底管理员（ID=1）不能删除', code: 'ROOT_ADMIN_PROTECTED' });
+    }
     if (userId === req.user.id) return res.status(400).json({ error: '不能删除当前登录账号' });
     const user = await db('users').where({ id: userId }).first();
     if (!user) return res.status(404).json({ error: '用户不存在' });

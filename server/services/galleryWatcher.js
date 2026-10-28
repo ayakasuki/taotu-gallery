@@ -1,9 +1,7 @@
 /**
  * 图库路径监听服务
- * 使用 chokidar 监听本地图库和自定义路径变化
+ * 使用目录级 fs.watch 监听本地图库和自定义路径变化
  */
-import chokidar from 'chokidar';
-
 import path from 'path';
 import fs from 'fs';
 import config from '../config/index.js';
@@ -15,17 +13,36 @@ import db from '../db/index.js';
 import pathUtils from '../utils/pathUtils.js';
 import conditionTagService from './conditionTagService.js';
 
-let watcher = null;
-const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+const directoryWatchers = new Map();
+const watchDebounceTimers = new Map();
+const pendingWatchFiles = new Set();
+let watchQueueRunning = false;
+const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.ico', '.avif'];
+const activeScanPaths = new Set();
+const indexingPathKeys = new Set();
 
 function isDerivedGalleryAsset(filePath) {
   const relative = path.relative(config.galleryDir, filePath).replace(/\\/g, '/');
   return relative === '.derived' || relative.startsWith('.derived/');
 }
 
+function shouldIgnoreFilename(filePath, ignoreFilenameParts = []) {
+  const filename = path.basename(filePath).toLowerCase();
+  return ignoreFilenameParts.some((part) => {
+    const value = String(part || '').trim().toLowerCase();
+    return value && filename.includes(value);
+  });
+}
+
+function belongsToConfiguredPath(filePath, configuredPath) {
+  const fileKey = pathUtils.toCanonicalRelativePath(filePath);
+  const rootKey = pathUtils.toCanonicalRelativePath(configuredPath).replace(/\/$/, '');
+  return fileKey === rootKey || fileKey.startsWith(`${rootKey}/`);
+}
+
 // 启动监听
 async function startWatching() {
-  if (watcher) {
+  if (directoryWatchers.size) {
     logger.warn('图库路径监听已在运行');
     return;
   }
@@ -42,47 +59,139 @@ async function startWatching() {
     }
   }
 
-  logger.info(`开始监听图库路径: ${watchPaths.join(', ')}`);
+  logger.info(`开始监听图库目录（目录级监听）: ${watchPaths.join(', ')}`);
+  for (const watchPath of watchPaths) await watchDirectoryTree(watchPath);
+}
 
-  watcher = chokidar.watch(watchPaths, {
-    persistent: true,
-    ignoreInitial: false,
-    depth: 3, // 默认递归 3 层
-    ignored: /(^|[\/\\])\.|node_modules/,
-    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 }
+async function watchDirectoryTree(directoryPath) {
+  let directory;
+  try {
+    directory = await fs.promises.realpath(directoryPath);
+  } catch {
+    return;
+  }
+  const key = path.resolve(directory);
+  if (directoryWatchers.has(key)) return;
+
+  let watcher;
+  try {
+    watcher = fs.watch(directory, { persistent: true }, (eventType, filename) => {
+      if (filename) queueWatchEvent(directory, String(filename), eventType);
+    });
+  } catch (error) {
+    logger.warn(`目录监听失败: ${directory} - ${error.message}`);
+    return;
+  }
+  directoryWatchers.set(key, watcher);
+  watcher.on('error', error => {
+    logger.warn(`目录监听异常: ${directory} - ${error.message}`);
+    watcher.close();
+    directoryWatchers.delete(key);
   });
 
-  watcher.on('add', async (filePath) => {
-    const ext = path.extname(filePath).toLowerCase();
-    if (!imageExts.includes(ext)) return;
-    if (isDerivedGalleryAsset(filePath)) return;
+  let entries;
+  try {
+    entries = await fs.promises.readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    logger.warn(`读取监听目录失败: ${directory} - ${error.message}`);
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory() && !entry.name.startsWith('.')) {
+      await watchDirectoryTree(path.join(directory, entry.name));
+    }
+  }
+}
 
-    logger.info(`检测到新图片: ${filePath}`);
-    await handleNewImage(filePath);
-  });
+function queueWatchEvent(directory, filename, eventType) {
+  const filePath = path.join(directory, filename);
+  const previousTimer = watchDebounceTimers.get(filePath);
+  if (previousTimer) clearTimeout(previousTimer);
+  const timer = setTimeout(() => {
+    watchDebounceTimers.delete(filePath);
+    pendingWatchFiles.add(filePath);
+    if (eventType === 'rename') {
+      fs.promises.stat(filePath).then(stat => {
+        if (stat.isDirectory()) return watchDirectoryTree(filePath);
+      }).catch(() => closeDirectoryWatchersUnder(filePath));
+    }
+    drainWatchQueue();
+  }, 250);
+  watchDebounceTimers.set(filePath, timer);
+}
 
-  watcher.on('unlink', async (filePath) => {
-    const ext = path.extname(filePath).toLowerCase();
-    if (!imageExts.includes(ext)) return;
+async function drainWatchQueue() {
+  if (watchQueueRunning) return;
+  watchQueueRunning = true;
+  try {
+    while (pendingWatchFiles.size) {
+      const [filePath] = pendingWatchFiles;
+      pendingWatchFiles.delete(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      if (!imageExts.includes(ext) || isDerivedGalleryAsset(filePath)) continue;
 
-    logger.info(`图片已删除: ${filePath}`);
-    await handleDeletedImage(filePath);
-  });
+      try {
+        const stat = await waitForStableFile(filePath);
+        if (!stat) {
+          await handleDeletedImage(filePath);
+          continue;
+        }
+        const currentPathsConfig = await configService.readPaths();
+        const pathEntry = (currentPathsConfig.customPaths || []).find(entry => belongsToConfiguredPath(filePath, entry.path));
+        if (pathEntry && shouldIgnoreFilename(filePath, pathEntry.ignoreFilenameParts || [])) continue;
+        logger.info(`检测到新图片: ${filePath}`);
+        await handleNewImage(filePath);
+      } catch (error) {
+        logger.warn(`处理监听文件失败: ${filePath} - ${error.message}`);
+      }
+    }
+  } finally {
+    watchQueueRunning = false;
+    if (pendingWatchFiles.size) drainWatchQueue();
+  }
+}
 
-  watcher.on('error', (error) => {
-    logger.error(`图库路径监听错误: ${error.message}`);
-  });
+async function waitForStableFile(filePath) {
+  let previousSize = -1;
+  let stableChecks = 0;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile()) return null;
+      if (stat.size > 0 && stat.size === previousSize) stableChecks++;
+      else stableChecks = 0;
+      if (stableChecks >= 2) return stat;
+      previousSize = stat.size;
+    } catch {
+      return null;
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  return fs.promises.stat(filePath).catch(() => null);
+}
+
+function closeDirectoryWatchersUnder(targetPath) {
+  const root = path.resolve(targetPath);
+  for (const [directory, watcher] of directoryWatchers) {
+    if (directory === root || directory.startsWith(`${root}${path.sep}`)) {
+      watcher.close();
+      directoryWatchers.delete(directory);
+    }
+  }
 }
 
 // 处理新图片
 async function handleNewImage(filePath) {
-
+  const pathKey = pathUtils.getPathKey(filePath);
+  if (indexingPathKeys.has(pathKey)) return false;
+  indexingPathKeys.add(pathKey);
   try {
-    const relativePath = pathUtils.toRelativePath(filePath);
+    const relativePath = pathUtils.toCanonicalRelativePath(filePath);
+    const pathKey = pathUtils.getPathKey(filePath);
     const filename = path.basename(filePath);
 
     // 检查是否已存在
-    const existing = await db('images').where({ path: relativePath }).first();
+    const existing = await db('images').where({ path_key: pathKey }).first();
     if (existing) return;
 
     // 获取图片元信息
@@ -95,6 +204,7 @@ async function handleNewImage(filePath) {
     await db('images').insert({
       filename,
       path: relativePath,
+      path_key: pathKey,
       hash_path: hashPath,
       width: meta.width,
       height: meta.height,
@@ -124,6 +234,8 @@ async function handleNewImage(filePath) {
     }
   } catch (err) {
     logger.error(`图片索引失败: ${filePath} - ${err.message}`);
+  } finally {
+    indexingPathKeys.delete(pathKey);
   }
 }
 
@@ -141,11 +253,12 @@ async function handleDeletedImage(filePath) {
 
 // 停止监听
 function stopWatching() {
-  if (watcher) {
-    watcher.close();
-    watcher = null;
-    logger.info('图库路径监听已停止');
-  }
+  for (const watcher of directoryWatchers.values()) watcher.close();
+  directoryWatchers.clear();
+  for (const timer of watchDebounceTimers.values()) clearTimeout(timer);
+  watchDebounceTimers.clear();
+  pendingWatchFiles.clear();
+  logger.info('图库路径监听已停止');
 }
 
 function isLocalPath(scanPath) {
@@ -221,13 +334,22 @@ async function resolveAlbumId({ albumId, albumName, userId }) {
 }
 
 async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = null, makePublic = false }) {
-
-  const relativePath = pathUtils.toRelativePath(filePath);
-  const existing = await db('images').where({ path: relativePath }).first();
+  const relativePath = pathUtils.toCanonicalRelativePath(filePath);
+  const pathKey = pathUtils.getPathKey(filePath);
+  if (indexingPathKeys.has(pathKey)) return false;
+  indexingPathKeys.add(pathKey);
+  try {
+  const existing = await db('images').where({ path_key: pathKey }).first();
   if (existing) {
-    await imageProcessor.generateDerivedThumbnails(filePath).catch(err => {
-      logger.warn(`补生成缩略图失败: ${filePath} - ${err.message}`);
-    });
+    const thumbPaths = imageProcessor.getExistingThumbnailPath(filePath, 'thumb');
+    const mediumPaths = imageProcessor.getExistingThumbnailPath(filePath, 'medium');
+    const hasThumb = thumbPaths.some(thumbnailPath => fs.existsSync(thumbnailPath));
+    const hasMedium = mediumPaths.some(thumbnailPath => fs.existsSync(thumbnailPath));
+    if (!hasThumb || !hasMedium) {
+      await imageProcessor.generateDerivedThumbnails(filePath).catch(err => {
+        logger.warn(`补生成缩略图失败: ${filePath} - ${err.message}`);
+      });
+    }
     if (makePublic && !existing.is_public) {
       await db('images').where({ id: existing.id }).update({ is_public: 1, updated_at: db.fn.now() });
     }
@@ -251,6 +373,7 @@ async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = 
   const [imageId] = await db('images').insert({
     filename: path.basename(filePath),
     path: relativePath,
+    path_key: pathKey,
     hash_path: hashPath,
     width: meta.width,
     height: meta.height,
@@ -275,43 +398,92 @@ async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = 
   }
 
   return true;
+  } finally {
+    indexingPathKeys.delete(pathKey);
+  }
 }
 
-async function scanPathEntry({ scanPath, recursive = true, albumId = null, tagIds = [], userId = null, makePublic = false }) {
+function createScanControlError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+async function collectImageFiles(scanPath, recursive, shouldStop = null) {
+  const files = [];
+  const visit = async (directory) => {
+    if (await shouldStop?.()) throw createScanControlError('SCAN_CANCELLED', '扫描已终止');
+    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory() && recursive && !entry.name.startsWith('.')) {
+        await visit(fullPath);
+      } else if (entry.isFile() && imageExts.includes(path.extname(entry.name).toLowerCase())) {
+        files.push(fullPath);
+      }
+    }
+  };
+  await visit(scanPath);
+  return files;
+}
+
+async function scanPathEntry({
+  scanPath,
+  recursive = true,
+  albumId = null,
+  tagIds = [],
+  userId = null,
+  makePublic = false,
+  ignoreFilenameParts = [],
+  onProgress = null,
+  shouldStop = null,
+  waitIfPaused = null
+}) {
+  const scanKey = pathUtils.toCanonicalRelativePath(scanPath);
+  if (activeScanPaths.has(scanKey)) return { added: 0, skipped: 0, alreadyRunning: true };
+  activeScanPaths.add(scanKey);
   let added = 0;
   let skipped = 0;
 
-  const scanFn = async (filePath) => {
-    if (isDerivedGalleryAsset(filePath)) return;
-    try {
-      const inserted = await indexImageFile({ filePath, albumId, tagIds, userId, makePublic });
-      if (inserted) added++;
-      else skipped++;
-    } catch (err) {
-      logger.error(`索引失败: ${filePath} - ${err.message}`);
-    }
-  };
+  try {
+    const files = await collectImageFiles(scanPath, recursive !== false, shouldStop);
+    const candidates = files.filter(filePath => !isDerivedGalleryAsset(filePath));
+    const total = candidates.length;
+    await onProgress?.({ total, processed: 0, added, skipped });
 
-  if (recursive !== false) {
-    await scanDirectory(scanPath, scanFn);
-  } else {
-    const entries = fs.readdirSync(scanPath, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile()) {
-        const ext = path.extname(entry.name).toLowerCase();
-        if (imageExts.includes(ext)) {
-          await scanFn(path.join(scanPath, entry.name));
+    for (const filePath of candidates) {
+      if (await shouldStop?.()) {
+        throw createScanControlError('SCAN_CANCELLED', '扫描已终止');
+      }
+      await waitIfPaused?.();
+      if (await shouldStop?.()) {
+        throw createScanControlError('SCAN_CANCELLED', '扫描已终止');
+      }
+
+      if (shouldIgnoreFilename(filePath, ignoreFilenameParts)) {
+        skipped++;
+      } else {
+        try {
+          const inserted = await indexImageFile({ filePath, albumId, tagIds, userId, makePublic });
+          if (inserted) added++;
+          else skipped++;
+        } catch (err) {
+          logger.error(`索引失败: ${filePath} - ${err.message}`);
+          skipped++;
         }
       }
+      await onProgress?.({ total, processed: added + skipped, added, skipped });
     }
-  }
 
-  if (albumId) {
-    const [{ cnt }] = await db('images').where({ album_id: albumId }).count('* as cnt');
-    await db('albums').where({ id: albumId }).update({ image_count: cnt });
-  }
+    if (albumId) {
+      const [{ cnt }] = await db('images').where({ album_id: albumId }).count('* as cnt');
+      await db('albums').where({ id: albumId }).update({ image_count: cnt });
+    }
 
-  return { added, skipped };
+    return { added, skipped, total, processed: added + skipped };
+  } finally {
+    activeScanPaths.delete(scanKey);
+  }
 }
 
 // 扫描并索引所有图片
@@ -359,12 +531,17 @@ async function scanAndIndexAll(options = {}) {
         albumId: finalAlbumId,
         tagIds: [...new Set([...(entry.tagIds || []), ...newTagIds].map(id => Number(id)).filter(Number.isInteger))],
         userId: options.userId || null,
-        makePublic: !!entry.makePublic
+        makePublic: !!entry.makePublic,
+        ignoreFilenameParts: entry.ignoreFilenameParts || [],
+        onProgress: options.onProgress,
+        shouldStop: options.shouldStop,
+        waitIfPaused: options.waitIfPaused
       });
       added += result.added;
       skipped += result.skipped;
     } catch (err) {
       logger.error(`路径扫描失败: ${entry.path} - ${err.message}`);
+      if (['SCAN_CANCELLED', 'SCAN_PATH_DELETED'].includes(err.code)) throw err;
       errors.push({ path: entry.path, message: err.message });
     }
   }
@@ -386,7 +563,7 @@ async function scanAndIndexAll(options = {}) {
 }
 
 // 扫描指定路径（支持相册和标签）
-async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags, userId, makePublic = false }) {
+async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags, userId, makePublic = false, ignoreFilenameParts = [], onProgress = null, shouldStop = null, waitIfPaused = null }) {
   if (!isLocalPath(targetPath)) {
     throw new Error('远程路径暂不支持直接扫描');
   }
@@ -405,7 +582,11 @@ async function scanSinglePath({ targetPath, recursive, albumId, tagIds, newTags,
     albumId: finalAlbumId,
     tagIds: allTagIds,
     userId,
-    makePublic
+    makePublic,
+    ignoreFilenameParts,
+    onProgress,
+    shouldStop,
+    waitIfPaused
   });
 
   logger.info(`路径扫描完成: ${targetPath}, 新增 ${result.added}, 跳过 ${result.skipped}`);

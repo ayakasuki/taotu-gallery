@@ -14,6 +14,7 @@ import imageProcessor from '../../utils/imageProcessor.js';
 import db from '../../db/index.js';
 import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js';
 import configService from '../../services/configService.js';
+import { getPermissions } from '../../middleware/apiTokenAccess.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,7 @@ async function resolveUser(req) {
       // 不是 JWT，尝试 API Token
       const tokenRecord = await db('api_tokens').where({ token }).first();
       if (tokenRecord) {
+        if (!getPermissions(tokenRecord).includes('images:read') && !getPermissions(tokenRecord).includes('admin:manage')) return null;
         await db('api_tokens').where({ id: tokenRecord.id }).update({ last_used_at: db.fn.now() });
         if (!tokenRecord.user_id) return null;
         const user = await db('users').where({ id: tokenRecord.user_id }).select('id', 'username', 'role', 'is_disabled', 'review_status').first();
@@ -50,6 +52,7 @@ async function resolveUser(req) {
   if (req.query.tk) {
     const tokenRecord = await db('api_tokens').where({ token: req.query.tk }).first();
     if (tokenRecord) {
+      if (!getPermissions(tokenRecord).includes('images:read') && !getPermissions(tokenRecord).includes('admin:manage')) return null;
       await db('api_tokens').where({ id: tokenRecord.id }).update({ last_used_at: db.fn.now() });
       if (!tokenRecord.user_id) return null;
       const user = await db('users').where({ id: tokenRecord.user_id }).select('id', 'username', 'role', 'is_disabled', 'review_status').first();

@@ -13,6 +13,8 @@ import db from './db/index.js';
 import imageService from './services/imageService.js';
 import imageProcessor from './utils/imageProcessor.js';
 import apiLogger from './middleware/apiLogger.js';
+import apiTokenAccess from './middleware/apiTokenAccess.js';
+import { getPermissions } from './middleware/apiTokenAccess.js';
 import authMiddleware from './middleware/auth.js';
 import requireAdmin from './middleware/requireAdmin.js';
 import requirePrivacyAccess, { isPrivacyModeEnabled, resolvePrivacyUser } from './middleware/privacyMode.js';
@@ -57,6 +59,8 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
+const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || '0', 10);
+if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) app.set('trust proxy', trustProxyHops);
 
 // 基础中间件
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -111,7 +115,7 @@ async function resolveMediaUser(req) {
 
   if (req.query.tk) {
     const tokenRecord = await db('api_tokens').where({ token: req.query.tk }).first();
-    if (tokenRecord?.user_id) {
+    if (tokenRecord?.user_id && (getPermissions(tokenRecord).includes('images:read') || getPermissions(tokenRecord).includes('admin:manage'))) {
       await db('api_tokens').where({ id: tokenRecord.id }).update({ last_used_at: db.fn.now() });
       const user = await db('users')
         .where({ id: tokenRecord.user_id })
@@ -251,17 +255,18 @@ app.use('/api/internal/albums', requirePrivacyAccess, internalAlbumsRouter);
 app.use('/api/internal/dashboard', internalDashboardRouter);
 
 // 对外 API
-app.use('/api/tags', apiLogger, requirePrivacyAccess, apiTagsRouter);
-app.use('/api/tag-groups', requirePrivacyAccess, apiTagGroupsRouter);
+app.use('/api/tags', apiTokenAccess, apiLogger, requirePrivacyAccess, apiTagsRouter);
+app.use('/api/tag-groups', apiTokenAccess, requirePrivacyAccess, apiTagGroupsRouter);
 app.use('/api/user-tags', apiUserTagsRouter);
-app.use('/api/images', apiLogger, requirePrivacyAccess, apiImagesRouter);
-app.use('/api/albums', apiLogger, requirePrivacyAccess, apiAlbumsRouter);
-app.use('/api/embed', apiLogger, requirePrivacyAccess, apiEmbedRouter);
-app.use('/api/upload', apiUploadRouter);
+app.use('/api/images', apiTokenAccess, apiLogger, requirePrivacyAccess, apiImagesRouter);
+app.use('/api/albums', apiTokenAccess, apiLogger, requirePrivacyAccess, apiAlbumsRouter);
+app.use('/api/embed', apiTokenAccess, apiLogger, requirePrivacyAccess, apiEmbedRouter);
+app.use('/api/upload', apiTokenAccess, apiUploadRouter);
 app.use('/api/upload/url', apiUrlUploadRouter);
 app.use('/api/announcements', apiAnnouncementsRouter);
 
 // 管理 API 路由
+app.use('/api/admin', apiTokenAccess);
 app.use('/api/admin/auth', adminAuthRouter);
 app.use('/api/admin/tags', authMiddleware, requireAdmin, adminTagsRouter);
 app.use('/api/admin/tag-convert', authMiddleware, requireAdmin, adminTagConvertRouter);

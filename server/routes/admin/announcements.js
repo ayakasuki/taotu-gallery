@@ -41,6 +41,7 @@ function normalizeAnnouncement(row) {
       ? {
           id: row.author_id,
           username: row.author_name || '管理员',
+          nickname: row.author_nickname || row.author_name || '管理员',
           role: row.author_role || 'admin',
           avatar: row.author_avatar || ''
         }
@@ -104,6 +105,7 @@ router.get('/', async (req, res, next) => {
       .select(
         'a.*',
         'u.username as author_name',
+        'u.nickname as author_nickname',
         'u.role as author_role',
         'u.avatar as author_avatar'
       )
@@ -133,7 +135,7 @@ router.post('/', async (req, res, next) => {
     const [id] = await db('announcements').insert(payload);
     const saved = await db('announcements as a')
       .leftJoin('users as u', 'a.author_id', 'u.id')
-      .select('a.*', 'u.username as author_name', 'u.role as author_role', 'u.avatar as author_avatar')
+      .select('a.*', 'u.username as author_name', 'u.nickname as author_nickname', 'u.role as author_role', 'u.avatar as author_avatar')
       .where('a.id', id)
       .first();
     res.json({ message: payload.status === 'published' ? '公告已发布' : '公告已存为草稿', announcement: normalizeAnnouncement(saved) });
@@ -152,7 +154,7 @@ router.put('/:id', async (req, res, next) => {
     await db('announcements').where({ id }).update(payload);
     const saved = await db('announcements as a')
       .leftJoin('users as u', 'a.author_id', 'u.id')
-      .select('a.*', 'u.username as author_name', 'u.role as author_role', 'u.avatar as author_avatar')
+      .select('a.*', 'u.username as author_name', 'u.nickname as author_nickname', 'u.role as author_role', 'u.avatar as author_avatar')
       .where('a.id', id)
       .first();
     res.json({ message: payload.status === 'published' ? '公告已发布' : '公告已存为草稿', announcement: normalizeAnnouncement(saved) });

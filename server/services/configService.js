@@ -282,6 +282,7 @@ async function readPaths() {
         albumName: cp.album_name,
         makePublic: !!cp.make_public,
         allowDelete: !!cp.allow_delete,
+        ignoreFilenameParts: parseJsonField(cp.ignore_filename_parts, []),
         tagIds: parseJsonField(cp.tag_ids, []),
         newTagNames: parseJsonField(cp.new_tag_names, [])
       }))
@@ -305,6 +306,7 @@ async function writePaths(pathsData) {
         album_name: cp.albumName || null,
         make_public: !!cp.makePublic,
         allow_delete: !!cp.allowDelete,
+        ignore_filename_parts: cp.ignoreFilenameParts ? JSON.stringify(cp.ignoreFilenameParts) : null,
         tag_ids: cp.tagIds ? JSON.stringify(cp.tagIds) : null,
         new_tag_names: cp.newTagNames ? JSON.stringify(cp.newTagNames) : null
       });

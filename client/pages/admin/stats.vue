@@ -43,24 +43,18 @@
       <article class="ops-card hot-card">
         <h2>热门图片 Top 10</h2>
         <div class="hot-list">
-          <div v-for="img in topImages" :key="img.id" class="hot-row">
+          <div v-for="img in visibleTopImages" :key="img.id" class="hot-row">
             <img :src="assetUrl(img.thumb_url || img.medium_url || img.url)" :alt="img.filename" />
             <span>{{ img.filename }}</span>
             <em class="views"><TaotuIcon name="views" filled /> {{ formatCompact(img.view_count) }}</em>
-            <em class="likes">♡ {{ formatCompact(img.like_count) }}</em>
+            <em class="likes"><TaotuIcon name="heart" filled /> {{ formatCompact(img.like_count) }}</em>
+            <em class="favorites"><TaotuIcon name="star" filled /> {{ formatCompact(img.favorite_count) }}</em>
           </div>
           <div v-if="!topImages.length" class="mini-empty">暂无热门图片</div>
         </div>
-        <NuxtLink to="/admin/images" class="rank-link">查看全部排行 →</NuxtLink>
-      </article>
-
-      <article class="ops-card empty-card">
-        <div class="empty-illustration">
-          <div class="folder-icon"></div>
-        </div>
-        <strong>暂无数据</strong>
-        <span>当前条件下暂无相关数据</span>
-        <button class="ghost-btn" @click="refreshAll">刷新</button>
+        <button class="rank-link" type="button" @click="showAllTopImages = !showAllTopImages">
+          {{ showAllTopImages ? '收起排行' : '查看更多' }} <TaotuIcon :name="showAllTopImages ? 'chevron-up' : 'chevron-down'" />
+        </button>
       </article>
     </section>
 
@@ -280,6 +274,8 @@ const statDefinitions = [
 
 const statCards = computed(() => statDefinitions.map((item) => ({ ...item, ...(opsData.value.cards?.[item.key] || { value: 0, change: 0 }) })))
 const topImages = computed(() => opsData.value.topImages || [])
+const visibleTopImages = computed(() => showAllTopImages.value ? topImages.value.slice(0, 10) : topImages.value.slice(0, 5))
+const showAllTopImages = ref(false)
 const visibleBackups = computed(() => showAllBackups.value ? backups.value : backups.value.slice(0, 3))
 const chartLabels = computed(() => {
   const labels = opsData.value.apiTrend?.labels || []
@@ -498,22 +494,22 @@ onMounted(refreshAll)
 .stat-icon { width: 58px; height: 58px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: var(--soft); color: color-mix(in srgb, var(--tone) 62%, #ffffff); }
 .stat-icon .taotu-svg-icon { width: 34px; height: 34px; }
 .ops-stat-card.pink { --soft: #ffe8f1; --tone: #ff74a5; } .ops-stat-card.blue { --soft: #edf4ff; --tone: #6fa0ff; } .ops-stat-card.green { --soft: #e5f8f2; --tone: #3dc49c; } .ops-stat-card.purple { --soft: #f3e9ff; --tone: #9b7cf4; } .ops-stat-card.rose { --soft: #ffe8f1; --tone: #ff74a5; }
-.monitor-grid { display: grid; grid-template-columns: 2fr 1fr 2.1fr; gap: 18px; }
+.monitor-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.85fr); gap: 18px; }
 .ops-card { border-radius: 13px; padding: 18px; }
 .card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 h2 { margin: 0; color: #3d4860; font-size: 18px; line-height: 1.2; font-weight: 900; } h3 { margin: 0 0 14px; color: #56627a; font-size: 14px; font-weight: 900; }
 .range-select { height: 34px; padding: 0 12px; border: 1px solid rgba(220, 226, 238, 0.9); border-radius: 8px; background: rgba(255,255,255,0.72); color: #7c879c; font-weight: 800; }
-.chart-card, .hot-card, .empty-card { min-height: 256px; }
+.chart-card, .hot-card { min-height: 256px; }
 .line-chart { position: relative; min-height: 218px; margin-top: 12px; padding: 4px 0 22px 34px; }
 .line-chart svg { width: 100%; height: 190px; display: block; overflow: visible; }
 .grid-lines line { stroke: rgba(220, 226, 238, 0.88); stroke-width: 1; } .area-path { fill: url(#opsAreaGradient); } .line-path { fill: none; stroke: #ff78a7; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .y-axis { position: absolute; left: 0; top: 2px; height: 198px; display: flex; flex-direction: column; justify-content: space-between; color: #a0aabc; font-size: 12px; font-weight: 800; }
 .x-axis { display: flex; justify-content: space-between; padding-top: 5px; color: #98a2b5; font-size: 12px; font-weight: 800; }
 .hot-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-.hot-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px 42px; align-items: center; gap: 8px; min-height: 30px; }
+.hot-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 56px 48px 54px; align-items: center; gap: 8px; min-height: 30px; }
 .hot-row img { width: 42px; height: 28px; border-radius: 5px; object-fit: cover; background: #f4f6fb; }
 .hot-row span { overflow: hidden; color: #5d6880; font-size: 12px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
-.hot-row em { display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; color: #8d98ad; font-size: 11px; font-style: normal; font-weight: 800; text-align: right; white-space: nowrap; } .hot-row .views .taotu-svg-icon { width: 14px; height: 14px; color: #8d98ad; } .hot-row .likes { color: #ff77a5; }
+.hot-row em { display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; color: #8d98ad; font-size: 11px; font-style: normal; font-weight: 800; text-align: right; white-space: nowrap; } .hot-row em .taotu-svg-icon { width: 14px; height: 14px; } .hot-row .views .taotu-svg-icon { color: #8d98ad; } .hot-row .likes { color: #ff77a5; } .hot-row .favorites { color: #e9ae25; }
 .rank-link, .all-link { min-height: 36px; display: flex; align-items: center; justify-content: center; width: 100%; margin-top: 12px; border: 1px solid rgba(224, 229, 240, 0.78); border-radius: 8px; background: rgba(255,255,255,0.48); color: #9b7cf4; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; }
 .empty-card { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .empty-illustration { position: relative; width: 118px; height: 86px; margin-bottom: 14px; opacity: 0.82; }
@@ -577,6 +573,6 @@ h2 { margin: 0; color: #3d4860; font-size: 18px; line-height: 1.2; font-weight: 
 .sync-log-row { display: grid; grid-template-columns: 82px 48px 148px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 42px; padding: 10px 12px; border: 1px solid rgba(224, 229, 240, 0.74); border-radius: 8px; background: rgba(255,255,255,0.58); color: #6a758e; font-size: 12px; font-weight: 900; }
 .sync-log-row.success b { color: #34b88c; } .sync-log-row.error b { color: #df5f78; }
 .sync-log-row em { color: #98a3b7; font-style: normal; } .sync-log-row small { overflow: hidden; color: #7c879d; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 1380px) { .ops-stats-row { gap: 12px; } .ops-stat-card { padding: 16px 14px; } .ops-stat-card strong { font-size: 23px; } .monitor-grid { grid-template-columns: 1.7fr 0.95fr 1.6fr; } .backup-head, .backup-row { grid-template-columns: minmax(0, 1.35fr) 100px 150px 104px; } }
+@media (max-width: 1380px) { .ops-stats-row { gap: 12px; } .ops-stat-card { padding: 16px 14px; } .ops-stat-card strong { font-size: 23px; } .monitor-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.85fr); } .backup-head, .backup-row { grid-template-columns: minmax(0, 1.35fr) 100px 150px 104px; } }
 @media (max-width: 1180px) { .ops-stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .monitor-grid, .bottom-ops-grid, .webdav-main { grid-template-columns: 1fr; } }
 </style>

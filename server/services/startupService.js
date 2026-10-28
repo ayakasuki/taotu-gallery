@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import db from '../db/index.js';
 import logger from '../config/logger.js';
+import { isHealthyRootAdmin, rootAdminStartupError, ROOT_ADMIN_ID } from '../utils/rootAdminPolicy.js';
 
 const REQUIRED_ENV = ['DB_HOST', 'DB_USER', 'DB_NAME', 'JWT_SECRET'];
 const DEFAULT_JWT_SECRET = 'change_this_to_a_random_string';
@@ -88,29 +89,75 @@ function randomInitialPassword() {
 async function ensureDefaultAdmin() {
   const row = await db('users').count({ count: '*' }).first();
   const userCount = Number(row && row.count ? row.count : 0);
-  if (userCount > 0) return;
+  if (userCount === 0) {
+    const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+    const generated = !hasEnv('DEFAULT_ADMIN_PASSWORD');
+    const password = generated ? randomInitialPassword() : process.env.DEFAULT_ADMIN_PASSWORD;
+    const email = process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com';
+    const passwordHash = await bcrypt.hash(password, 10);
+    const defaultGroup = await db('user_groups').where({ is_default: true }).first().catch(() => null);
 
-  const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+    await db('users').insert({
+      id: ROOT_ADMIN_ID,
+      username,
+      password_hash: passwordHash,
+      email,
+      role: 'admin',
+      is_disabled: false,
+      review_status: 'approved',
+      user_group_id: defaultGroup?.id || null
+    });
+
+    logger.warn('检测到空用户表，已创建系统保底管理员 ID=1: ' + username);
+    if (generated) {
+      logger.warn('首个管理员随机密码: ' + password + '。请立即登录修改密码；也可在 .env 设置 DEFAULT_ADMIN_PASSWORD 指定初始密码。');
+    } else {
+      logger.warn('首个管理员使用 .env 中的 DEFAULT_ADMIN_PASSWORD。请首次登录后修改密码。');
+    }
+  }
+
+  const rootAdmin = await db('users').where({ id: ROOT_ADMIN_ID }).first();
+  if (!isHealthyRootAdmin(rootAdmin)) throw rootAdminStartupError();
+}
+
+async function repairRootAdmin() {
+  validateRequiredEnv();
+  await ensureDatabaseExists();
+  await runMigrations();
+
+  const existing = await db('users').where({ id: ROOT_ADMIN_ID }).first();
+  if (existing) {
+    await db('users').where({ id: ROOT_ADMIN_ID }).update({
+      role: 'admin',
+      is_disabled: false,
+      review_status: 'approved'
+    });
+    logger.warn('已修复 ID=1 保底管理员角色和启用状态；密码、用户名和其他用户数据未修改。');
+    return;
+  }
+
+  let username = String(process.env.DEFAULT_ADMIN_USERNAME || 'admin').trim().slice(0, 100) || 'admin';
+  const nameTaken = await db('users').whereRaw('LOWER(username) = LOWER(?)', [username]).first();
+  if (nameTaken) username = `admin-root-${crypto.randomBytes(4).toString('hex')}`;
   const generated = !hasEnv('DEFAULT_ADMIN_PASSWORD');
   const password = generated ? randomInitialPassword() : process.env.DEFAULT_ADMIN_PASSWORD;
-  const email = process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com';
   const passwordHash = await bcrypt.hash(password, 10);
   const defaultGroup = await db('user_groups').where({ is_default: true }).first().catch(() => null);
-
+  const rootEmail = String(process.env.DEFAULT_ADMIN_EMAIL || '').trim()
+    || `root-${crypto.randomBytes(4).toString('hex')}@localhost.invalid`;
+  const emailTaken = await db('users').whereRaw('LOWER(email) = LOWER(?)', [rootEmail]).first();
   await db('users').insert({
+    id: ROOT_ADMIN_ID,
     username,
     password_hash: passwordHash,
-    email,
+    email: emailTaken ? `root-${crypto.randomBytes(8).toString('hex')}@localhost.invalid` : rootEmail,
     role: 'admin',
+    is_disabled: false,
+    review_status: 'approved',
     user_group_id: defaultGroup?.id || null
   });
-
-  logger.warn('检测到空用户表，已创建首个管理员账号: ' + username);
-  if (generated) {
-    logger.warn('首个管理员随机密码: ' + password + '。请立即登录修改密码；也可在 .env 设置 DEFAULT_ADMIN_PASSWORD 指定初始密码。');
-  } else {
-    logger.warn('首个管理员使用 .env 中的 DEFAULT_ADMIN_PASSWORD。请首次登录后修改密码。');
-  }
+  logger.warn('已创建系统保底管理员 ID=1: ' + username + '；其他 UID 用户未修改。');
+  if (generated) logger.warn('ID=1 管理员一次性随机密码: ' + password + '。请立即登录修改。');
 }
 
 async function bootstrap() {
@@ -120,6 +167,6 @@ async function bootstrap() {
   await ensureDefaultAdmin();
 }
 
-export { bootstrap, validateRequiredEnv };
+export { bootstrap, repairRootAdmin, validateRequiredEnv };
 
-export default { bootstrap, validateRequiredEnv };
+export default { bootstrap, repairRootAdmin, validateRequiredEnv };

@@ -11,6 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import db from '../../db/index.js';
+import { isHealthyRootAdmin, rootAdminStartupError, ROOT_ADMIN_ID } from '../../utils/rootAdminPolicy.js';
 import authMiddleware from '../../middleware/auth.js';
 import configService from '../../services/configService.js';
 import redisService from '../../services/redisService.js';
@@ -198,7 +199,7 @@ router.post('/login', async (req, res, next) => {
 
     res.json({
       token,
-      user: { id: user.id, username: user.username, role: user.role, email: user.email, avatar: user.avatar || null }
+      user: { id: user.id, username: user.username, nickname: user.nickname || user.username, role: user.role, email: user.email, avatar: user.avatar || null }
     });
   } catch (err) {
     next(err);
@@ -278,6 +279,12 @@ router.post('/register', async (req, res, next) => {
       return res.status(403).json({ error: '注册用户数已达到上限' });
     }
 
+    const rootAdmin = await db('users').where({ id: ROOT_ADMIN_ID }).first();
+    if (!isHealthyRootAdmin(rootAdmin)) {
+      const error = rootAdminStartupError();
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+
     await verifyCaptcha(captchaId, captchaCode);
 
     if (normalizedEmail && !isValidEmail(normalizedEmail)) {
@@ -308,6 +315,7 @@ router.post('/register', async (req, res, next) => {
     const defaultGroup = await db('user_groups').where({ is_default: true }).first().catch(() => null);
     const [id] = await db('users').insert({
       username,
+      nickname: username,
       password_hash: passwordHash,
       email: normalizedEmail || null,
       role: 'user',
@@ -326,7 +334,7 @@ router.post('/register', async (req, res, next) => {
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id, username, role: 'user', email: normalizedEmail || null, avatar: null } });
+    res.json({ token, user: { id, username, nickname: username, role: 'user', email: normalizedEmail || null, avatar: null } });
   } catch (err) {
     next(err);
   }
@@ -459,7 +467,7 @@ router.post('/upload-avatar', authMiddleware, multer({ dest: tmpUploadDir }).sin
 router.get('/me', authMiddleware, async (req, res, next) => {
   try {
     const user = await db('users').where({ id: req.user.id })
-      .select('id', 'username', 'role', 'email', 'avatar', 'gallery_path', 'created_at')
+      .select('id', 'username', 'nickname', 'role', 'email', 'avatar', 'gallery_path', 'created_at')
       .first();
     res.json(user);
   } catch (err) {

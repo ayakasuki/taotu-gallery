@@ -9,6 +9,7 @@ import express from 'express';
 import albumService from '../../services/albumService.js';
 import db from '../../db/index.js';
 import jwt from 'jsonwebtoken';
+import { getPermissions } from '../../middleware/apiTokenAccess.js';
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ async function resolveUserAsync(req) {
   }
   if (req.query.tk) {
     const tokenRecord = await db('api_tokens').where({ token: req.query.tk }).first();
+    if (tokenRecord && !getPermissions(tokenRecord).includes('albums:read') && !getPermissions(tokenRecord).includes('admin:manage')) return null;
     if (tokenRecord?.user_id) {
       const user = await db('users').where({ id: tokenRecord.user_id }).select('id', 'role', 'is_disabled', 'review_status').first();
       if (user && !user.is_disabled && user.review_status !== 'pending') return user;

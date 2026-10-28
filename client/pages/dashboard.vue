@@ -10,7 +10,7 @@
           </div>
           <div class="profile-copy">
             <div class="profile-name-row">
-              <h1>{{ user?.username || '用户' }}</h1>
+              <h1>{{ user?.nickname || user?.username || '用户' }}</h1>
               <span class="role-badge">{{ user?.role === 'admin' ? '管理员' : '普通用户' }}</span>
             </div>
             <div class="profile-meta" v-if="user">
@@ -130,7 +130,7 @@
                 <h3>账号摘要</h3>
                 <div class="summary-row">
                   <span>用户名</span>
-                  <strong class="summary-user">{{ user?.username || '-' }}<span class="summary-avatar"><img v-if="userAvatarUrl" :src="userAvatarUrl" alt="" /><span v-else>{{ userInitial }}</span></span></strong>
+                  <strong class="summary-user">{{ user?.nickname || user?.username || '-' }}<span class="summary-avatar"><img v-if="userAvatarUrl" :src="userAvatarUrl" alt="" /><span v-else>{{ userInitial }}</span></span></strong>
                 </div>
                 <div class="summary-row"><span>用户等级</span><strong class="pink-text">{{ user?.role === 'admin' ? '管理员' : '普通用户' }}</strong></div>
                 <div class="summary-row"><span>注册时间</span><strong>{{ formatDateOnly(user?.created_at) }}</strong></div>
@@ -538,11 +538,16 @@
                 </button>
                 <input ref="avatarInputRef" type="file" accept="image/*" class="hidden-file" @change="uploadAvatar" />
                 <div class="account-profile-copy">
-                  <h3>{{ user.username }}</h3>
+                  <h3>{{ user.nickname || user.username }}</h3>
                   <p>{{ user.email || '未绑定邮箱' }}</p>
                   <span>{{ userRoleLabel }}</span>
                 </div>
               </div>
+              <label class="nickname-field">
+                <span>昵称</span>
+                <input v-model.trim="nicknameDraft" maxlength="100" placeholder="设置对外展示的昵称" />
+                <button type="button" :disabled="nicknameSaving" @click="saveNickname">{{ nicknameSaving ? '保存中' : '保存昵称' }}</button>
+              </label>
               <div class="account-stat-grid">
                 <div class="account-stat-box">
                   <span>用户角色</span>
@@ -640,6 +645,7 @@
               <div class="token-table-head">
                 <span>Token 名称</span>
                 <span>Token（部分隐藏）</span>
+                  <span>权限</span>
                 <span>创建时间</span>
                 <span>最后使用</span>
                 <span>状态</span>
@@ -648,11 +654,13 @@
               <div class="token-table-body">
                 <div v-for="token in pagedTokens" :key="token.id" class="token-table-row">
                   <span class="token-name">{{ token.label || '未命名 Token' }}</span>
-                  <span class="token-masked">{{ maskToken(token.token) }}</span>
+                  <span class="token-masked">{{ token.token_hint || '••••••••' }}</span>
+                  <span class="token-permission-summary">{{ tokenPermissionSummary(token.permissions) }}</span>
                   <span>{{ formatDateTime(token.created_at) }}</span>
                   <span>{{ token.last_used_at ? formatDateTime(token.last_used_at) : '从未使用' }}</span>
                   <span><i class="token-status">已启用</i></span>
                   <span class="token-actions">
+                    <button type="button" class="token-edit-action" @click="openTokenEdit(token)">编辑</button>
                     <button type="button" @click="deleteToken(token.id)">删除</button>
                   </span>
                 </div>
@@ -689,18 +697,61 @@
     <div v-if="showTokenModal" class="modal-overlay" @click.self="closeTokenModal">
       <div class="token-create-modal">
         <button type="button" class="token-modal-close" @click="closeTokenModal">×</button>
-        <h3>新建 Token</h3>
+        <h3>{{ editingToken ? '编辑 Token 权限' : '新建 Token' }}</h3>
         <div class="token-modal-field">
           <label>Token 名称</label>
           <div class="token-modal-input">
-            <input v-model="tokenLabel" maxlength="50" placeholder="请输入 Token 名称（如：我的应用）" @keyup.enter="createToken" />
+            <input v-model="tokenLabel" maxlength="50" placeholder="请输入 Token 名称（如：我的应用）" />
             <em>{{ tokenLabel.length }}/50</em>
           </div>
         </div>
+        <div class="token-modal-field">
+          <label>权限预设</label>
+          <div class="token-preset-row">
+            <button type="button" :class="{ active: tokenPreset === 'all' }" @click="applyTokenPreset('all')">全部权限</button>
+            <button type="button" :class="{ active: tokenPreset === 'random' }" @click="applyTokenPreset('random')">随机图展示</button>
+            <button v-if="user?.role === 'admin'" type="button" :class="{ active: tokenPreset === 'admin' }" @click="applyTokenPreset('admin')">管理面板</button>
+          </div>
+        </div>
+        <div class="token-public-warning">
+          <strong>公开使用的 Token 请遵循最小权限原则。</strong>
+          <span>密钥一旦公开或写入网页源代码，任何人都能复制使用。随机图展示建议只授权随机图；“全部权限”包含上传和管理操作。</span>
+        </div>
+        <div class="token-modal-field">
+          <label>允许的 API 权限</label>
+          <div class="token-permission-grid">
+            <div v-for="permission in tokenPermissionOptions" :key="permission.key" class="token-permission-option">
+              <button type="button" class="token-permission-check" :aria-pressed="tokenPermissions.includes(permission.key)" :disabled="permission.key === 'admin:manage' && user?.role !== 'admin'" @click="toggleTokenPermission(permission.key)">
+                <TaotuIcon :name="tokenPermissions.includes(permission.key) ? 'checkbox-checked' : 'checkbox'" />
+              </button>
+              <span><strong>{{ permission.label }}</strong><small>{{ permission.description }}</small></span>
+            </div>
+          </div>
+        </div>
+        <template v-if="tokenPermissions.includes('images:random') || tokenPermissions.includes('albums:random')">
+          <div class="token-modal-field">
+            <label>来源白名单</label>
+            <div class="token-list-tabs">
+              <button type="button" :class="{ active: tokenAllowlistTab === 'referer' }" @click="tokenAllowlistTab = 'referer'">Referer 域名</button>
+              <button type="button" :class="{ active: tokenAllowlistTab === 'ip' }" @click="tokenAllowlistTab = 'ip'">IP 地址</button>
+            </div>
+            <textarea v-if="tokenAllowlistTab === 'referer'" v-model="tokenRefererList" rows="2" placeholder="blog.example.com, *.example.org, example.net:8080" />
+            <textarea v-else v-model="tokenIpList" rows="2" placeholder="203.0.113.10, 203.0.113.0/24" />
+            <small class="token-field-hint">留空表示不限制；配置 IP 或 Referer 任意一项匹配即可放行。Referer 仅用于浏览器来源限制，不是身份凭据。</small>
+          </div>
+          <div class="token-modal-field">
+            <label>调用额度（0 表示不限制）</label>
+            <div class="token-quota-grid">
+              <label>每日<input v-model.number="tokenQuota.daily" type="number" min="0" step="1" /></label>
+              <label>每月<input v-model.number="tokenQuota.monthly" type="number" min="0" step="1" /></label>
+              <label>每年<input v-model.number="tokenQuota.yearly" type="number" min="0" step="1" /></label>
+            </div>
+          </div>
+        </template>
         <div class="token-modal-divider"></div>
         <div class="token-modal-actions">
           <button type="button" class="token-cancel-btn" @click="closeTokenModal">取消</button>
-          <button type="button" class="token-save-btn" @click="createToken">生成 Token</button>
+          <button type="button" class="token-save-btn" @click="saveToken">{{ editingToken ? '保存权限' : '生成 Token' }}</button>
         </div>
       </div>
     </div>
@@ -806,6 +857,7 @@
 import TagSelector from '~/components/tags/TagSelector.vue'
 
 const api = useApi()
+const { showAdminToast } = useAdminToast()
 const config = useRuntimeConfig()
 const router = useRouter()
 const { readCurrentUserCache, writeCurrentUserCache, clearAuthSession, readAuthPayload, isAuthFailure } = useUiCache()
@@ -813,6 +865,8 @@ const { readCurrentUserCache, writeCurrentUserCache, clearAuthSession, readAuthP
 const activeSection = ref('overview')
 const siteName = ref('桃图智库')
 const user = ref(null)
+const nicknameDraft = ref('')
+const nicknameSaving = ref(false)
 const loading = ref(true)
 const myImages = ref([])
 const myTotal = ref(0)
@@ -830,6 +884,23 @@ const myAlbums = ref([])
 const myTokens = ref([])
 const showTokenModal = ref(false)
 const tokenLabel = ref('')
+const editingToken = ref(null)
+const tokenPermissions = ref(['images:read', 'images:random', 'albums:read', 'albums:random', 'embed', 'upload', 'tags:read'])
+const tokenPreset = ref('all')
+const tokenAllowlistTab = ref('referer')
+const tokenRefererList = ref('')
+const tokenIpList = ref('')
+const tokenQuota = reactive({ daily: 0, monthly: 0, yearly: 0 })
+const tokenPermissionOptions = [
+  { key: 'images:read', label: '读取图片', description: '查询图片列表和详情' },
+  { key: 'images:random', label: '随机图片', description: '调用随机图片接口' },
+  { key: 'albums:read', label: '读取相册', description: '查询相册列表和详情' },
+  { key: 'albums:random', label: '随机相册', description: '调用随机相册接口' },
+  { key: 'embed', label: '图片/相册嵌入', description: '生成图片或相册嵌入内容' },
+  { key: 'tags:read', label: '读取标签', description: '读取公开标签和标签分组' },
+  { key: 'upload', label: '上传图片', description: '使用账户权限上传图片' },
+  { key: 'admin:manage', label: '管理后台 API', description: '仅管理员 Token 可用，拥有管理接口权限' }
+]
 const newTokenValue = ref('')
 const tokenPage = ref(1)
 const tokenPageSize = 3
@@ -920,7 +991,7 @@ const navItems = [
   { key: 'security', label: '账户与安全', icon: 'account-security' }
 ]
 
-const userInitial = computed(() => (user.value?.username || 'U').slice(0, 1).toUpperCase())
+const userInitial = computed(() => (user.value?.nickname || user.value?.username || 'U').slice(0, 1).toUpperCase())
 const userAvatarUrl = computed(() => normalizeAssetUrl(user.value?.avatar))
 const userRoleLabel = computed(() => user.value?.role === 'admin' ? '管理员' : '普通用户')
 const storagePercent = computed(() => Math.max(0, Math.min(Number(dashboardStats.storagePercent || 0), 100)))
@@ -1035,6 +1106,7 @@ const loadDashboardOverview = async () => {
     const data = await api.get('/api/internal/dashboard/overview')
     if (data.user) {
       user.value = data.user
+      nicknameDraft.value = data.user.nickname || data.user.username || ''
       writeCurrentUserCache(data.user)
     }
     Object.assign(dashboardStats, {
@@ -1048,6 +1120,19 @@ const loadDashboardOverview = async () => {
     })
     recentUploads.value = data.recentUploads || []
   } catch {}
+}
+
+async function saveNickname() {
+  const nickname = nicknameDraft.value.trim()
+  if (!nickname) return showAdminToast('昵称不能为空', 'error')
+  nicknameSaving.value = true
+  try {
+    await api.request('/api/internal/dashboard/profile', { method: 'PATCH', body: { nickname } })
+    user.value = { ...user.value, nickname }
+    writeCurrentUserCache(user.value)
+    showAdminToast('昵称已更新', 'success')
+  } catch (error) { showAdminToast(error?.data?.error || '昵称保存失败', 'error') }
+  finally { nicknameSaving.value = false }
 }
 
 const loadMyImages = async (p = 1) => {
@@ -1383,21 +1468,75 @@ const maskToken = (value) => {
   return `${token.slice(0, 7)}••••${token.slice(-4)}`
 }
 const openTokenModal = () => {
+  editingToken.value = null
   tokenLabel.value = ''
+  tokenPreset.value = 'all'
+  tokenPermissions.value = [...tokenPermissionOptions.filter(item => item.key !== 'admin:manage' || user.value?.role === 'admin').map(item => item.key)]
+  tokenRefererList.value = ''
+  tokenIpList.value = ''
+  tokenQuota.daily = tokenQuota.monthly = tokenQuota.yearly = 0
   showTokenModal.value = true
+}
+const openTokenEdit = (token) => {
+  editingToken.value = token
+  tokenLabel.value = token.label || ''
+  tokenPermissions.value = parseTokenPermissions(token.permissions)
+  tokenPreset.value = tokenPermissions.value.includes('admin:manage') ? 'admin' : tokenPermissions.value.includes('upload') ? 'all' : 'custom'
+  tokenRefererList.value = parseTokenList(token.referer_allowlist).join(', ')
+  tokenIpList.value = parseTokenList(token.ip_allowlist).join(', ')
+  tokenQuota.daily = Number(token.daily_limit || 0)
+  tokenQuota.monthly = Number(token.monthly_limit || 0)
+  tokenQuota.yearly = Number(token.yearly_limit || 0)
+  showTokenModal.value = true
+}
+const parseTokenPermissions = (value) => { try { const result = Array.isArray(value) ? value : JSON.parse(value || '[]'); return Array.isArray(result) ? result : [] } catch { return [] } }
+const parseTokenList = (value) => { try { const result = Array.isArray(value) ? value : JSON.parse(value || '[]'); return Array.isArray(result) ? result : [] } catch { return [] } }
+const tokenPermissionSummary = (value) => {
+  const permissions = parseTokenPermissions(value)
+  if (permissions.includes('admin:manage')) return '管理面板'
+  if (permissions.includes('upload')) return '全部权限'
+  if (permissions.includes('images:random') || permissions.includes('albums:random')) return '随机展示'
+  return `${permissions.length} 项权限`
+}
+const applyTokenPreset = (preset) => {
+  tokenPreset.value = preset
+  if (preset === 'random') tokenPermissions.value = ['images:random', 'albums:random']
+  if (preset === 'all') tokenPermissions.value = tokenPermissionOptions.filter(item => item.key !== 'admin:manage' || user.value?.role === 'admin').map(item => item.key)
+  if (preset === 'admin') tokenPermissions.value = ['admin:manage', 'upload', 'images:read', 'images:random', 'albums:read', 'albums:random', 'embed', 'tags:read']
+}
+const toggleTokenPermission = (permission) => {
+  if (user.value?.role !== 'admin' && permission === 'admin:manage') return
+  tokenPermissions.value = tokenPermissions.value.includes(permission)
+    ? tokenPermissions.value.filter(item => item !== permission)
+    : [...tokenPermissions.value, permission]
+  tokenPreset.value = 'custom'
 }
 const closeTokenModal = () => {
   showTokenModal.value = false
   tokenLabel.value = ''
 }
 const createToken = async () => {
+  await saveToken()
+}
+const saveToken = async () => {
   try {
-    const data = await api.post('/api/admin/api/tokens', { label: tokenLabel.value.trim(), user_id: user.value?.id })
-    newTokenValue.value = data.token
+    const payload = {
+      label: tokenLabel.value.trim(), permissions: tokenPermissions.value,
+      referer_allowlist: tokenRefererList.value.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean),
+      ip_allowlist: tokenIpList.value.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean),
+      daily_limit: tokenQuota.daily, monthly_limit: tokenQuota.monthly, yearly_limit: tokenQuota.yearly
+    }
+    if (!payload.permissions.length) return alert('至少选择一项权限')
+    if (editingToken.value) {
+      await api.put('/api/admin/api/tokens/' + editingToken.value.id, payload)
+    } else {
+      const data = await api.post('/api/admin/api/tokens', payload)
+      newTokenValue.value = data.token
+    }
     closeTokenModal()
     await loadTokens()
     tokenPage.value = 1
-  } catch (err) { alert('创建失败: ' + (err.data?.error || err.message)) }
+  } catch (err) { alert((editingToken.value ? '保存失败: ' : '创建失败: ') + (err.data?.error || err.message)) }
 }
 const deleteToken = async (id) => {
   openDeleteDialog({
@@ -3703,6 +3842,11 @@ const buildPageItems = (current, total) => {
   font-size: 12px;
   font-weight: 900;
 }
+.nickname-field { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-top: 16px; }
+.nickname-field > span { color: #778198; font-size: 13px; font-weight: 900; }
+.nickname-field input { min-width: 0; height: 38px; padding: 0 11px; border: 1px solid rgba(220,226,238,.9); border-radius: 8px; background: rgba(255,255,255,.8); color: #4d5870; font: inherit; font-size: 13px; font-weight: 800; }
+.nickname-field button { height: 38px; padding: 0 12px; border: 0; border-radius: 8px; background: #ff78a7; color: white; font-size: 12px; font-weight: 900; cursor: pointer; }
+.nickname-field button:disabled { opacity: .6; cursor: wait; }
 .account-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4034,7 +4178,7 @@ const buildPageItems = (current, total) => {
 .token-table-head,
 .token-table-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.1fr) minmax(170px, 1.12fr) minmax(160px, 1fr) minmax(150px, 1fr) 90px 82px;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) minmax(110px, .8fr) minmax(140px, 1fr) minmax(130px, 1fr) 80px 96px;
   align-items: center;
   column-gap: 12px;
 }
@@ -4085,7 +4229,9 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
 }
 .token-actions {
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
 }
 .token-actions button {
   height: 24px;
@@ -4098,6 +4244,12 @@ const buildPageItems = (current, total) => {
   font-weight: 900;
   cursor: pointer;
 }
+.token-actions .token-edit-action {
+  border-color: rgba(183, 163, 255, 0.52);
+  background: rgba(245, 241, 255, 0.82);
+  color: #9273ed;
+}
+.token-permission-summary { color: #7c6ac1; }
 .token-empty {
   min-height: 118px;
   display: flex;
@@ -4125,13 +4277,115 @@ const buildPageItems = (current, total) => {
 }
 .token-create-modal {
   position: relative;
-  width: 326px;
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(84vh, 820px);
+  overflow-y: auto;
   padding: 28px 28px 31px;
   border: 1px solid rgba(226, 231, 242, 0.78);
   border-radius: 10px;
   background: rgba(255,255,255,0.93);
   box-shadow: 0 24px 64px rgba(91, 82, 118, 0.18);
   backdrop-filter: blur(24px);
+}
+.token-preset-row,
+.token-list-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.token-preset-row button,
+.token-list-tabs button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(216, 222, 238, .9);
+  border-radius: 7px;
+  background: #fff;
+  color: #70798e;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.token-preset-row button.active,
+.token-list-tabs button.active {
+  border-color: #f6a1bd;
+  background: #fff0f5;
+  color: #ed6792;
+}
+.token-public-warning {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 178, 38, .45);
+  border-radius: 7px;
+  background: rgba(255, 248, 231, .72);
+  color: #9d6f17;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.token-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.token-permission-option {
+  min-width: 0;
+  display: flex !important;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 !important;
+  padding: 10px;
+  border: 1px solid rgba(226, 231, 242, .9);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .65);
+  cursor: pointer;
+}
+.token-permission-check {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #858da0;
+  cursor: pointer;
+}
+.token-permission-check[aria-pressed="true"] { color: #ed789d; }
+.token-permission-check:disabled { opacity: .45; cursor: not-allowed; }
+.token-permission-check .taotu-svg-icon { width: 20px; height: 20px; }
+.token-permission-option span { display: grid; gap: 3px; }
+.token-permission-option strong { color: #566075; font-size: 11px; }
+.token-permission-option small,
+.token-field-hint { color: #9299a9; font-size: 10px; line-height: 1.45; }
+.token-create-modal textarea {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 10px;
+  resize: vertical;
+  border: 1px solid rgba(216, 222, 238, .9);
+  border-radius: 7px;
+  outline-color: #f2a0bb;
+  color: #4f586d;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.token-field-hint { display: block; margin-top: 6px; }
+.token-quota-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.token-quota-grid label { display: grid; gap: 6px; color: #70798e; font-size: 11px; }
+.token-quota-grid input {
+  width: 100%; height: 32px; padding: 0 9px; border: 1px solid rgba(216, 222, 238, .9);
+  border-radius: 7px; outline-color: #f2a0bb; color: #4f586d; font-weight: 800;
+}
+@media (max-width: 760px) {
+  .token-permission-grid { grid-template-columns: 1fr; }
+  .token-quota-grid { grid-template-columns: 1fr; }
+  .token-table { overflow-x: auto; }
+  .token-table-head, .token-table-row { min-width: 900px; }
 }
 .token-modal-close {
   position: absolute;

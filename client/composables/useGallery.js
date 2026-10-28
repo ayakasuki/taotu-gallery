@@ -14,7 +14,7 @@ export function useGallery() {
     loading.value = true
     try {
       const api = useApi()
-      const data = await api.get('/api/internal/images', {
+      const data = await api.get(params.favorites ? '/api/internal/images/favorites' : '/api/internal/images', {
         page: params.page || page.value,
         limit: params.limit || 20,
         sort: params.sort || sort.value,

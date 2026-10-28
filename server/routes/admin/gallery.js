@@ -8,8 +8,162 @@ import config from '../../config/index.js';
 import pathUtils from '../../utils/pathUtils.js';
 import albumService from '../../services/albumService.js';
 import imageProcessor from '../../utils/imageProcessor.js';
+import crypto from 'crypto';
 
 const router = express.Router();
+const scanState = globalThis.__taotuScanState || { jobs: new Map(), activeJobId: null };
+globalThis.__taotuScanState = scanState;
+const scanJobs = scanState.jobs;
+const SCAN_JOB_TTL_MS = 30 * 60 * 1000;
+
+function serializeScanJob(job) {
+  return {
+    jobId: job.id,
+    path: job.path,
+    status: job.status,
+    total: job.total,
+    processed: job.processed,
+    added: job.added,
+    skipped: job.skipped,
+    percent: job.percent,
+    startedAt: job.startedAt,
+    lastHeartbeatAt: job.lastHeartbeatAt,
+    lastClientHeartbeatAt: job.lastClientHeartbeatAt,
+    pauseRequested: job.pauseRequested,
+    cancelRequested: job.cancelRequested,
+    result: job.result,
+    error: job.error
+  };
+}
+
+function createScanJob({ path: targetPath = null, task }) {
+  const activeJob = scanState.activeJobId ? scanJobs.get(scanState.activeJobId) : null;
+  if (activeJob && isActiveScanJob(activeJob)) return { job: activeJob, created: false };
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const job = {
+    id,
+    path: targetPath,
+    status: 'queued',
+    total: 0,
+    processed: 0,
+    added: 0,
+    skipped: 0,
+    percent: 0,
+    startedAt: null,
+    lastHeartbeatAt: now,
+    lastClientHeartbeatAt: null,
+    pauseRequested: false,
+    cancelRequested: false,
+    pathDeleted: false,
+    result: null,
+    error: null
+  };
+  scanJobs.set(id, job);
+  scanState.activeJobId = id;
+  Promise.resolve().then(async () => {
+    job.status = 'running';
+    job.startedAt = new Date().toISOString();
+    try {
+      job.result = await task(job);
+      if (job.cancelRequested) {
+        const error = new Error(job.pathDeleted ? '路径已被删除，扫描已中断' : '扫描已终止');
+        error.code = job.pathDeleted ? 'SCAN_PATH_DELETED' : 'SCAN_CANCELLED';
+        throw error;
+      }
+      job.status = 'completed';
+      job.percent = 100;
+    } catch (error) {
+      job.error = error.message || '扫描失败';
+      job.status = error.code === 'SCAN_CANCELLED' ? 'cancelled' : 'failed';
+      if (error.code === 'SCAN_PATH_DELETED' || job.pathDeleted) {
+        job.status = 'failed';
+        job.error = '路径已被删除，扫描已中断';
+      }
+    }
+    job.lastHeartbeatAt = new Date().toISOString();
+    if (scanState.activeJobId === id) scanState.activeJobId = null;
+    setTimeout(() => scanJobs.delete(id), SCAN_JOB_TTL_MS);
+  });
+  return { job, created: true };
+}
+
+function updateScanJobProgress(job, progress = {}) {
+  job.total = Number(progress.total ?? job.total ?? 0);
+  job.processed = Number(progress.processed ?? job.processed ?? 0);
+  job.added = Number(progress.added ?? job.added ?? 0);
+  job.skipped = Number(progress.skipped ?? job.skipped ?? 0);
+  job.percent = job.total > 0 ? Math.min(100, Math.round((job.processed / job.total) * 100)) : 0;
+  job.lastHeartbeatAt = new Date().toISOString();
+}
+
+function isActiveScanJob(job) {
+  return ['queued', 'running', 'paused'].includes(job.status);
+}
+
+function normalizedScanPath(value) {
+  return pathUtils.toCanonicalRelativePath(value).replace(/\/$/, '');
+}
+
+function findActiveScanForPath(targetPath) {
+  const key = normalizedScanPath(targetPath);
+  for (const job of scanJobs.values()) {
+    if (isActiveScanJob(job) && job.path && normalizedScanPath(job.path) === key) {
+      return serializeScanJob(job);
+    }
+  }
+  return null;
+}
+
+function cancelScanJobsForPath(targetPath) {
+  const key = normalizedScanPath(targetPath);
+  for (const job of scanJobs.values()) {
+    if (!job.path || normalizedScanPath(job.path) !== key || !isActiveScanJob(job)) continue;
+    job.cancelRequested = true;
+    job.pathDeleted = true;
+    job.lastHeartbeatAt = new Date().toISOString();
+  }
+}
+
+function createJobControl(job, targetPath, { checkConfiguredPath = false } = {}) {
+  let lastPathCheck = 0;
+  let pathExists = true;
+  return {
+    onProgress: progress => updateScanJobProgress(job, progress),
+    shouldStop: async () => {
+      if (job.cancelRequested) {
+        if (job.pathDeleted) {
+          const error = new Error('路径已被删除，扫描已中断');
+          error.code = 'SCAN_PATH_DELETED';
+          throw error;
+        }
+        return true;
+      }
+      const now = Date.now();
+      if (checkConfiguredPath && now - lastPathCheck >= 10000) {
+        lastPathCheck = now;
+        pathExists = Boolean(await db('custom_paths').where({ path: targetPath }).first());
+        if (!pathExists) {
+          job.cancelRequested = true;
+          job.pathDeleted = true;
+          const error = new Error('路径已被删除，扫描已中断');
+          error.code = 'SCAN_PATH_DELETED';
+          throw error;
+        }
+      }
+      return false;
+    },
+    waitIfPaused: async () => {
+      while (job.pauseRequested && !job.cancelRequested) {
+        job.status = 'paused';
+        job.lastHeartbeatAt = new Date().toISOString();
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      if (!job.cancelRequested) job.status = 'running';
+    }
+  };
+}
 
 const normalizeDisplayMode = (mode) => mode === 'waterfall' ? 'waterfall' : 'grid';
 
@@ -164,7 +318,8 @@ async function enrichPath(pathEntry, options = {}) {
     status: exists ? 'normal' : 'warning',
     statusText: exists ? '正常' : '警告',
     last_scanned_at: pathEntry.last_scanned_at || scanMeta.last_scanned_at,
-    image_count: scanMeta.image_count
+    image_count: scanMeta.image_count,
+    activeScan: isDefault ? null : findActiveScanForPath(filePath)
   };
 }
 
@@ -204,6 +359,11 @@ router.put('/config', authMiddleware, async (req, res, next) => {
 
     // 更新自定义路径
     if (req.body.customPaths) {
+      const currentPaths = await configService.readPaths();
+      const nextPathKeys = new Set((req.body.customPaths || []).map(pathEntry => normalizedScanPath(pathEntry.path)));
+      for (const pathEntry of currentPaths.customPaths || []) {
+        if (!nextPathKeys.has(normalizedScanPath(pathEntry.path))) cancelScanJobsForPath(pathEntry.path);
+      }
       await configService.writePaths({ galleryPaths: [], customPaths: req.body.customPaths });
     }
 
@@ -216,11 +376,61 @@ router.put('/config', authMiddleware, async (req, res, next) => {
 // 立即扫描所有路径
 router.post('/scan', authMiddleware, async (req, res, next) => {
   try {
-    const result = await galleryWatcher.scanAndIndexAll();
-    res.json({ ...result, pathCount: result.pathCount || 0 });
+    const { job, created } = createScanJob({
+      path: null,
+      task: job => galleryWatcher.scanAndIndexAll({ ...createJobControl(job, null) })
+    });
+    res.status(created ? 202 : 200).json({ ...serializeScanJob(job), attached: !created });
   } catch (err) {
     next(err);
   }
+});
+
+router.get('/scan-jobs', authMiddleware, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const jobs = [...scanJobs.values()]
+    .filter(job => req.query.active === '1' ? isActiveScanJob(job) : true)
+    .map(serializeScanJob);
+  res.json({ jobs });
+});
+
+router.get('/scan-jobs/:id', authMiddleware, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const job = scanJobs.get(req.params.id);
+  if (!job) {
+    return res.json({
+      jobId: req.params.id,
+      status: 'failed',
+      error: '后台扫描任务因服务进程重启而丢失，请重新发起扫描'
+    });
+  }
+  res.json(serializeScanJob(job));
+});
+
+router.post('/scan-jobs/:id/heartbeat', authMiddleware, async (req, res) => {
+  const job = scanJobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: '扫描任务不存在或已过期' });
+  job.lastClientHeartbeatAt = new Date().toISOString();
+  res.json(serializeScanJob(job));
+});
+
+router.patch('/scan-jobs/:id', authMiddleware, async (req, res) => {
+  const job = scanJobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: '扫描任务不存在或已过期' });
+  const action = String(req.body?.action || '').toLowerCase();
+  if (!isActiveScanJob(job)) return res.status(409).json({ error: '扫描任务已结束', ...serializeScanJob(job) });
+  if (action === 'pause') {
+    job.pauseRequested = true;
+  } else if (action === 'resume') {
+    job.pauseRequested = false;
+    if (job.status === 'paused') job.status = 'running';
+  } else if (action === 'cancel') {
+    job.cancelRequested = true;
+  } else {
+    return res.status(400).json({ error: '不支持的扫描操作' });
+  }
+  job.lastClientHeartbeatAt = new Date().toISOString();
+  res.json(serializeScanJob(job));
 });
 
 // 扫描指定路径（支持指定相册和标签）
@@ -228,6 +438,11 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
   try {
     const { path: targetPath, recursive, albumId, albumName, tagIds, newTags, makePublic, allowDelete } = req.body;
     if (!targetPath) return res.status(400).json({ error: '请提供路径' });
+
+    const currentJob = scanState.activeJobId ? scanJobs.get(scanState.activeJobId) : null;
+    if (currentJob && isActiveScanJob(currentJob)) {
+      return res.status(200).json({ ...serializeScanJob(currentJob), attached: true });
+    }
 
     let finalAlbumId = albumId || null;
 
@@ -241,20 +456,11 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
       finalAlbumId = album.id;
     }
 
-    const result = await galleryWatcher.scanSinglePath({
-      targetPath,
-      recursive: recursive !== false,
-      albumId: finalAlbumId,
-      tagIds: tagIds || [],
-      newTags: newTags || [],
-      userId: req.user.id,
-      makePublic: !!makePublic
-    });
-
-    const pathsConfig = await configService.readPaths();
-    const existingPaths = pathsConfig.customPaths || [];
-    const existingIndex = existingPaths.findIndex(cp => cp.path === targetPath);
-    const savedPath = {
+    const ignoreFilenameParts = Array.isArray(req.body.ignoreFilenameParts) ? req.body.ignoreFilenameParts : [];
+    const initialPathsConfig = await configService.readPaths();
+    const initialPaths = initialPathsConfig.customPaths || [];
+    const existingPath = initialPaths.some(cp => cp.path === targetPath);
+    const initialSavedPath = {
       path: targetPath,
       recursive: recursive !== false,
       albumMode: albumName ? 'new' : (finalAlbumId ? 'existing' : 'none'),
@@ -262,14 +468,55 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
       albumName: albumName || null,
       makePublic: !!makePublic,
       allowDelete: !!allowDelete,
-      tagIds: result.tagIds || tagIds || [],
-      newTagNames: result.newTagNames || []
+      ignoreFilenameParts,
+      tagIds: tagIds || [],
+      newTagNames: newTags || []
     };
-    if (existingIndex >= 0) existingPaths[existingIndex] = { ...existingPaths[existingIndex], ...savedPath };
-    else existingPaths.push(savedPath);
-    await configService.writePaths({ galleryPaths: [], customPaths: existingPaths });
+    if (existingPath) {
+      const index = initialPaths.findIndex(cp => cp.path === targetPath);
+      initialPaths[index] = { ...initialPaths[index], ...initialSavedPath };
+    } else {
+      initialPaths.push(initialSavedPath);
+    }
+    await configService.writePaths({ galleryPaths: [], customPaths: initialPaths });
+    const { job, created } = createScanJob({ path: targetPath, task: async (job) => {
+      const control = createJobControl(job, targetPath, { checkConfiguredPath: true });
+      const result = await galleryWatcher.scanSinglePath({
+        targetPath,
+        recursive: recursive !== false,
+        albumId: finalAlbumId,
+        tagIds: tagIds || [],
+        newTags: newTags || [],
+        userId: req.user.id,
+        makePublic: !!makePublic,
+        ignoreFilenameParts,
+        onProgress: control.onProgress,
+        shouldStop: control.shouldStop,
+        waitIfPaused: control.waitIfPaused
+      });
 
-    res.json({ ...result, pathCount: 1 });
+      await control.shouldStop();
+      const savedPath = {
+        recursive: recursive !== false,
+        album_mode: albumName ? 'new' : (finalAlbumId ? 'existing' : 'none'),
+        album_id: finalAlbumId,
+        album_name: albumName || null,
+        make_public: !!makePublic,
+        allow_delete: !!allowDelete,
+        ignore_filename_parts: JSON.stringify(ignoreFilenameParts),
+        tag_ids: JSON.stringify(result.tagIds || tagIds || []),
+        new_tag_names: JSON.stringify(result.newTagNames || [])
+      };
+      const updatedCount = await db('custom_paths').where({ path: targetPath }).update(savedPath);
+      if (!updatedCount) {
+        const error = new Error('路径已被删除，扫描已中断');
+        error.code = 'SCAN_PATH_DELETED';
+        throw error;
+      }
+      return { ...result, pathCount: 1 };
+    }});
+
+    res.status(created ? 202 : 200).json({ ...serializeScanJob(job), attached: !created });
   } catch (err) { next(err); }
 });
 
@@ -293,6 +540,7 @@ router.post('/update-path', authMiddleware, async (req, res, next) => {
       albumName: req.body.albumMode === 'new' ? String(req.body.albumName || '').trim() : null,
       makePublic: !!req.body.makePublic,
       allowDelete: !!req.body.allowDelete,
+      ignoreFilenameParts: Array.isArray(req.body.ignoreFilenameParts) ? req.body.ignoreFilenameParts : [],
       tagIds: req.body.tagIds || [],
       newTagNames: req.body.newTagNames || req.body.newTags || []
     };
@@ -316,6 +564,8 @@ router.post('/delete-path', authMiddleware, async (req, res, next) => {
   try {
     const { path: targetPath } = req.body || {};
     if (!targetPath) return res.status(400).json({ error: '请提供路径' });
+
+    cancelScanJobsForPath(targetPath);
 
     const normalized = normalizePathForLike(targetPath);
     const prefix = withTrailingSlash(targetPath);

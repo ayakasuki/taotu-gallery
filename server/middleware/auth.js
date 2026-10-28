@@ -3,8 +3,18 @@ import db from '../db/index.js';
 
 // JWT 认证中间件（管理后台用）
 async function authMiddleware(req, res, next) {
+  if (req.user) return next();
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (req.apiTokenUserId) {
+      const tokenUser = await db('users').where({ id: req.apiTokenUserId })
+        .select('id', 'username', 'role', 'is_disabled', 'review_status').first();
+      if (tokenUser && !tokenUser.is_disabled && tokenUser.review_status !== 'pending') {
+        req.user = tokenUser;
+        return next();
+      }
+      return res.status(403).json({ error: 'API Token 所属用户不可用' });
+    }
     return res.status(401).json({ error: '未提供认证令牌' });
   }
 
@@ -27,6 +37,14 @@ async function authMiddleware(req, res, next) {
     req.user = { ...decoded, id: user.id, username: user.username, role: user.role };
     next();
   } catch (err) {
+    if (req.apiTokenUserId) {
+      const tokenUser = await db('users').where({ id: req.apiTokenUserId })
+        .select('id', 'username', 'role', 'is_disabled', 'review_status').first();
+      if (tokenUser && !tokenUser.is_disabled && tokenUser.review_status !== 'pending') {
+        req.user = tokenUser;
+        return next();
+      }
+    }
     res.status(401).json({ error: '认证令牌无效或已过期' });
   }
 }

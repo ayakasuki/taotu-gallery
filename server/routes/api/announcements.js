@@ -14,6 +14,7 @@ function normalizeAnnouncement(row) {
     ? {
         id: row.author_id,
         username: row.author_name || '管理员',
+        nickname: row.author_nickname || row.author_name || '管理员',
         role: row.author_role || 'admin',
         avatar: row.author_avatar || ''
       }
@@ -33,7 +34,7 @@ function normalizeAnnouncement(row) {
     is_read: isRead,
     author,
     notifier: author
-      ? { type: author.role === 'admin' ? 'admin' : 'user', name: author.username, avatar: author.avatar }
+      ? { type: author.role === 'admin' ? 'admin' : 'user', name: author.nickname, username: author.username, avatar: author.avatar }
       : { type: 'system', name: '系统消息', avatar: '' }
   };
 }
@@ -54,6 +55,7 @@ router.get('/notifications', authMiddleware, async (req, res, next) => {
         'a.*',
         'r.read_at',
         'u.username as author_name',
+        'u.nickname as author_nickname',
         'u.role as author_role',
         'u.avatar as author_avatar'
       )

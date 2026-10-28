@@ -1,4 +1,6 @@
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import config from '../config/index.js';
 
 // 将绝对路径转为相对路径（基准：项目根目录）
@@ -7,6 +9,23 @@ function toRelativePath(absolutePath) {
   // 已经是相对路径则直接返回
   if (!path.isAbsolute(absolutePath)) return absolutePath;
   return path.relative(config.projectRoot, absolutePath);
+}
+
+function toCanonicalRelativePath(filePath) {
+  if (!filePath) return filePath;
+  const input = String(filePath).replace(/\\/g, '/');
+  const absolute = path.isAbsolute(input) ? input : path.resolve(config.projectRoot, input);
+  let resolved = absolute;
+  try {
+    resolved = fs.realpathSync.native(absolute);
+  } catch {
+    resolved = path.resolve(absolute);
+  }
+  return normalizePath(path.relative(config.projectRoot, resolved));
+}
+
+function getPathKey(filePath) {
+  return crypto.createHash('sha256').update(toCanonicalRelativePath(filePath)).digest('hex');
 }
 
 // 将相对路径转为绝对路径
@@ -35,6 +54,8 @@ function normalizePath(filePath) {
 
 export default {
   toRelativePath,
+  toCanonicalRelativePath,
+  getPathKey,
   toAbsolutePath,
   isPathSafe,
   relativeToGallery,

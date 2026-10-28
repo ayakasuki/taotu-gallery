@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import db from '../db/index.js';
 import config from '../config/index.js';
 import logger from '../config/logger.js';
+import { createNsfwJpeg } from '../utils/nsfwImage.js';
 
 const DEFAULT_NSFW_CONFIG = {
   nsfwjs: { endpoint: '', thresholds: { Drawing: 100, Hentai: 60, Neutral: 100, Porn: 40, Sexy: 70 } },
@@ -195,8 +196,9 @@ async function callNsfwjsBuffer(buffer, mimeType, filename, groupConfig) {
     throw new Error('nsfw.js 接口地址格式无效');
   }
 
+  const detectionBuffer = await createNsfwJpeg(buffer);
   const formData = new FormData();
-  formData.append('image', new Blob([buffer], { type: mimeType || 'application/octet-stream' }), filename || 'image');
+  formData.append('image', new Blob([detectionBuffer], { type: 'image/jpeg' }), `${path.parse(filename || 'image').name}.jpg`);
   const response = await fetchWithTimeout(endpoint, { method: 'POST', body: formData });
   const payload = await readJsonResponse(response, 'nsfw.js 接口');
   return evaluateNsfwjs(payload, groupConfig?.nsfwjs?.thresholds || DEFAULT_NSFW_CONFIG.nsfwjs.thresholds);
@@ -223,7 +225,8 @@ async function callTencentImsBuffer(buffer, groupConfig) {
   const version = '2020-12-29';
   const timestamp = Math.floor(Date.now() / 1000);
   const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
-  const payload = JSON.stringify({ FileContent: buffer.toString('base64') });
+  const detectionBuffer = await createNsfwJpeg(buffer);
+  const payload = JSON.stringify({ FileContent: detectionBuffer.toString('base64') });
   const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${endpoint}\nx-tc-action:${action.toLowerCase()}\n`;
   const signedHeaders = 'content-type;host;x-tc-action';
   const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${sha256(payload)}`;

@@ -114,7 +114,7 @@ let noticeCloseTimer = null
 let userCloseTimer = null
 let menuResizeObserver = null
 
-const displayName = computed(() => props.user?.username || props.user?.name || props.usernameFallback || '用户')
+const displayName = computed(() => props.user?.nickname || props.user?.username || props.user?.name || props.usernameFallback || '用户')
 const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase())
 const unreadCount = computed(() => notifications.value.filter(item => !item.is_read).length)
 const badgeText = computed(() => unreadCount.value > 99 ? '99' : String(unreadCount.value))

@@ -166,6 +166,9 @@ async function deleteImageRecord(image, options = {}) {
   const physical = options.skipPhysical ? { skippedOriginal: true, reason: 'skip_physical' } : await deletePhysicalObject(image);
   await db.transaction(async trx => {
     await trx('image_tags').where({ image_id: image.id }).del();
+    await trx('image_likes').where({ image_id: image.id }).del();
+    await trx('image_guest_likes').where({ image_id: image.id }).del();
+    await trx('image_favorites').where({ image_id: image.id }).del();
     await trx('images').where({ id: image.id }).del();
   });
   logger.info(`图片已删除: ${image.filename} (ID:${image.id}, 策略:${image.storage_strategy_id || 'local'}, 删原图:${!!physical.deletedOriginal})`);

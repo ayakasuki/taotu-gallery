@@ -147,7 +147,7 @@ async function getImages(options = {}) {
     sort = 'created_at', order = 'desc',
     tagIds, albumId, orientation, search,
     userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, userGalleryOnly = false,
-    internal = false, excludeHiddenFromGallery = false
+    internal = false, excludeHiddenFromGallery = false, favoriteUserId = null
   } = options;
 
   const offset = (page - 1) * limit;
@@ -183,11 +183,13 @@ async function getImages(options = {}) {
     } else if (userId) {
       query = query.where(function() {
         this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
+        if (favoriteUserId) this.orWhereIn('album_id', db('albums').select('id').where({ is_public: true }));
       });
     } else {
       query = query.where({ is_public: true });
     }
   }
+  if (favoriteUserId) query = query.whereIn('images.id', db('image_favorites').select('image_id').where({ user_id: favoriteUserId }));
   if (albumId) {
     if (ownOnly && userId) query = query.where({ uploader_id: userId });
     else if (filterUserId) query = query.where({ uploader_id: filterUserId });
@@ -200,11 +202,34 @@ async function getImages(options = {}) {
 
   query = applyTagFilters(query, tagIds);
 
-  const validSorts = ['created_at', 'filename', 'view_count', 'width', 'height'];
+  const validSorts = ['created_at', 'filename', 'view_count', 'width', 'height', 'like_count', 'favorite_count'];
   const sortField = validSorts.includes(sort) ? sort : 'created_at';
   const sortOrder = order === 'asc' ? 'asc' : 'desc';
-
-  const images = await query.orderBy(sortField, sortOrder).offset(offset).limit(limit);
+  query = query
+    .select('images.*')
+    .select(db.raw('((SELECT COUNT(*) FROM image_likes WHERE image_likes.image_id = images.id) + (SELECT COUNT(*) FROM image_guest_likes WHERE image_guest_likes.image_id = images.id)) AS like_count'))
+    .select(db.raw('(SELECT COUNT(*) FROM image_favorites WHERE image_favorites.image_id = images.id) AS favorite_count'));
+  if (userId) {
+    query = query
+      .select(db.raw('(SELECT COUNT(*) FROM image_likes WHERE image_likes.image_id = images.id AND image_likes.user_id = ?) AS liked_by_me', [userId]))
+      .select(db.raw('(SELECT COUNT(*) FROM image_favorites WHERE image_favorites.image_id = images.id AND image_favorites.user_id = ?) AS favorited_by_me', [userId]));
+  }
+  if (sort === 'like_count' || sort === 'favorite_count') {
+    if (sort === 'like_count') {
+      query = query
+        .orderByRaw(`((SELECT COUNT(*) FROM image_likes WHERE image_likes.image_id = images.id) + (SELECT COUNT(*) FROM image_guest_likes WHERE image_guest_likes.image_id = images.id)) ${sortOrder}`)
+        .orderBy('images.view_count', 'desc')
+        .orderBy('images.created_at', 'desc');
+    } else {
+      query = query
+        .orderByRaw(`(SELECT COUNT(*) FROM image_favorites WHERE image_favorites.image_id = images.id) ${sortOrder}`)
+        .orderBy('images.view_count', 'desc')
+        .orderBy('images.created_at', 'desc');
+    }
+  } else {
+    query = query.orderBy(`images.${sortField}`, sortOrder);
+  }
+  const images = await query.offset(offset).limit(limit);
 
   let countQuery = db('images').count('* as count');
   // 复制相同的权限过滤逻辑（含相册上下文）
@@ -233,11 +258,13 @@ async function getImages(options = {}) {
     } else if (userId) {
       countQuery = countQuery.where(function() {
         this.where({ uploader_id: userId }).orWhere({ is_public: true }).orWhereNull('uploader_id');
+        if (favoriteUserId) this.orWhereIn('album_id', db('albums').select('id').where({ is_public: true }));
       });
     } else {
       countQuery = countQuery.where({ is_public: true });
     }
   }
+  if (favoriteUserId) countQuery = countQuery.whereIn('images.id', db('image_favorites').select('image_id').where({ user_id: favoriteUserId }));
   if (albumId) {
     if (ownOnly && userId) countQuery = countQuery.where({ uploader_id: userId });
     else if (filterUserId) countQuery = countQuery.where({ uploader_id: filterUserId });
@@ -251,8 +278,10 @@ async function getImages(options = {}) {
   for (const image of images) {
     await attachAlbumName(image);
     if (image.uploader_id) {
-      const uploader = await db('users').where({ id: image.uploader_id }).select('username', 'avatar').first();
-      image.uploader_name = uploader?.username || `用户 ${image.uploader_id}`;
+      const uploader = await db('users').where({ id: image.uploader_id }).select('username', 'nickname', 'avatar').first();
+      image.uploader_name = uploader?.nickname || uploader?.username || `用户 ${image.uploader_id}`;
+      image.uploader_nickname = uploader?.nickname || uploader?.username || `用户 ${image.uploader_id}`;
+      image.uploader_username = uploader?.username || '';
       image.uploader_avatar = uploader?.avatar || null;
     } else {
       image.uploader_name = '系统导入';
@@ -293,13 +322,23 @@ async function getImageById(imageId, internal = false) {
     .select('tags.*', 'image_tags.source', 'image_tags.source_detail');
 
   if (image.uploader_id) {
-    const uploader = await db('users').where({ id: image.uploader_id }).select('username', 'avatar').first();
-    image.uploader_name = uploader?.username || '未知';
+    const uploader = await db('users').where({ id: image.uploader_id }).select('username', 'nickname', 'avatar').first();
+    image.uploader_name = uploader?.nickname || uploader?.username || '未知';
+    image.uploader_nickname = uploader?.nickname || uploader?.username || '未知';
+    image.uploader_username = uploader?.username || '';
     image.uploader_avatar = uploader?.avatar || null;
   } else {
     image.uploader_name = '系统导入';
     image.uploader_avatar = null;
   }
+
+  const [likeRow, guestLikeRow, favoriteRow] = await Promise.all([
+    db('image_likes').where({ image_id: imageId }).count('* as count').first(),
+    db('image_guest_likes').where({ image_id: imageId }).count('* as count').first(),
+    db('image_favorites').where({ image_id: imageId }).count('* as count').first()
+  ]);
+  image.like_count = Number(likeRow?.count || 0) + Number(guestLikeRow?.count || 0);
+  image.favorite_count = Number(favoriteRow?.count || 0);
 
   const urls = buildImageUrls(image);
   Object.assign(image, urls);

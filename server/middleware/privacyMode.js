@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import db from '../db/index.js';
 import configService from '../services/configService.js';
+import { getPermissions } from './apiTokenAccess.js';
 
 let privacyModeCache = {
   expiresAt: 0,
@@ -33,10 +34,12 @@ async function findActiveUser(userId) {
   return user;
 }
 
-async function resolveApiToken(token) {
+async function resolveApiToken(token, requiredScope = 'images:read') {
   if (!token) return null;
   const tokenRecord = await db('api_tokens').where({ token }).first();
   if (!tokenRecord?.user_id) return null;
+  const permissions = getPermissions(tokenRecord);
+  if (!permissions.includes(requiredScope) && !permissions.includes('admin:manage')) return null;
   await db('api_tokens').where({ id: tokenRecord.id }).update({ last_used_at: db.fn.now() });
   return findActiveUser(tokenRecord.user_id);
 }
@@ -53,6 +56,12 @@ export async function isPrivacyModeEnabled() {
 }
 
 export async function resolvePrivacyUser(req) {
+  const requestPath = String(req.originalUrl || `${req.baseUrl || ''}${req.path}`).split(/[?#]/, 1)[0];
+  const requiredScope = requestPath.startsWith('/api/albums')
+    ? (requestPath.includes('/random') ? 'albums:random' : 'albums:read')
+    : requestPath.startsWith('/api/images')
+      ? (requestPath.includes('/random') ? 'images:random' : 'images:read')
+      : requestPath.startsWith('/api/embed') ? 'embed' : 'images:read';
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : '';
   const cookies = parseCookies(req);
@@ -64,12 +73,12 @@ export async function resolvePrivacyUser(req) {
       const user = await findActiveUser(decoded.id);
       if (user) return user;
     } catch {
-      const apiTokenUser = await resolveApiToken(jwtToken);
+      const apiTokenUser = await resolveApiToken(jwtToken, requiredScope);
       if (apiTokenUser) return apiTokenUser;
     }
   }
 
-  return resolveApiToken(req.query.tk);
+  return resolveApiToken(req.query.tk, requiredScope);
 }
 
 export async function requirePrivacyAccess(req, res, next) {
