@@ -71,6 +71,7 @@ const infoActive = ref(false)
 const config = useRuntimeConfig()
 const api = useApi()
 const { readAuthPayload } = useUiCache()
+const { getGuestLikeToken, isGuestLiked, saveGuestLike } = useGuestLikes()
 const { showAdminToast } = useAdminToast()
 let observer = null
 let cancelled = false
@@ -78,6 +79,7 @@ let pulseTimer = null
 const isLoggedIn = ref(false)
 const liked = ref(false)
 const likeCount = ref(Number(props.image.like_count) || 0)
+const likePending = ref(false)
 const pulseLike = ref(false)
 const likeCountRef = ref(null)
 const likeCountTextWidth = ref(0)
@@ -86,10 +88,7 @@ watch(() => [props.image.id, props.image.like_count, props.image.liked_by_me], (
   if (isLoggedIn.value) {
     liked.value = props.image.liked_by_me === true || Number(props.image.liked_by_me) > 0
   } else if (import.meta.client) {
-    try {
-      const likedImages = JSON.parse(localStorage.getItem('taotu_guest_likes') || '{}')
-      liked.value = !!likedImages[props.image.id]
-    } catch { liked.value = false }
+    liked.value = isGuestLiked(props.image.id)
   }
   likeCount.value = Number(props.image.like_count) || 0
 }, { immediate: true })
@@ -213,10 +212,7 @@ watch(imageUrl, () => {
 onMounted(async () => {
   isLoggedIn.value = !!readAuthPayload()
   if (!isLoggedIn.value) {
-    try {
-      const likedImages = JSON.parse(localStorage.getItem('taotu_guest_likes') || '{}')
-      liked.value = !!likedImages[props.image.id]
-    } catch {}
+    liked.value = isGuestLiked(props.image.id)
   }
   await nextTick()
   measureLikeCount()
@@ -231,54 +227,20 @@ onBeforeUnmount(() => {
 })
 
 async function toggleLike() {
-  const wasLiked = liked.value
-  if (!isLoggedIn.value) {
-    const visitorToken = getGuestLikeToken()
-    try {
-      const result = await api.post(`/api/internal/images/${props.image.id}/like`, { visitor_token: visitorToken })
-      liked.value = !!result.liked
-      likeCount.value = Number(result.like_count || 0)
-      saveGuestLike(props.image.id, liked.value)
-      if (liked.value) animateLike()
-    } catch (error) {
-      showAdminToast(error?.data?.error || '点赞失败', 'error')
-    }
-    return
-  }
+  if (likePending.value) return
+  likePending.value = true
   try {
-    const result = await api.post(`/api/internal/images/${props.image.id}/like`, {})
+    const result = await api.post(`/api/internal/images/${props.image.id}/like`,
+      isLoggedIn.value ? {} : { visitor_token: getGuestLikeToken() })
     liked.value = !!result.liked
     likeCount.value = Number(result.like_count || 0)
+    if (!isLoggedIn.value) saveGuestLike(props.image.id, liked.value)
     if (liked.value) animateLike()
   } catch (error) {
     showAdminToast(error?.data?.error || '点赞失败', 'error')
+  } finally {
+    likePending.value = false
   }
-}
-
-function getGuestLikeToken() {
-  const key = 'taotu_guest_like_token'
-  try {
-    let token = localStorage.getItem(key)
-    if (!token) {
-      token = typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID().replaceAll('-', '')
-        : Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('')
-      localStorage.setItem(key, token)
-    }
-    return token
-  } catch {
-    return window.__taotuGuestLikeToken ||= Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('')
-  }
-}
-
-function saveGuestLike(imageId, active) {
-  const key = 'taotu_guest_likes'
-  try {
-    const likedImages = JSON.parse(localStorage.getItem(key) || '{}')
-    if (active) likedImages[imageId] = true
-    else delete likedImages[imageId]
-    localStorage.setItem(key, JSON.stringify(likedImages))
-  } catch {}
 }
 
 function animateLike() {

@@ -35,6 +35,9 @@ export default defineNuxtConfig({
 
   // 静态生成模式
   nitro: {
-    preset: 'static'
+    preset: 'static',
+    prerender: {
+      routes: ['/image']
+    }
   }
 })

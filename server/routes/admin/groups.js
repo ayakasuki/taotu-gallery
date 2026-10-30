@@ -78,6 +78,10 @@ function reviewSettingsChanged(existing, payload) {
   return previousConfig !== nextConfig;
 }
 
+function hasManualClearRequest(body = {}) {
+  return toBool(body.clear_manual_marks);
+}
+
 async function validateReviewSettings(payload, shouldValidate) {
   if (!shouldValidate) return;
   await nsfwService.validateConfiguration({
@@ -138,15 +142,24 @@ router.put('/:id', async (req, res, next) => {
     const payload = normalizePayload(req.body);
     if (!payload.name) return res.status(400).json({ error: '用户组名称不能为空' });
     const shouldQueueReview = reviewSettingsChanged(existing, payload);
+    const clearManualMarks = hasManualClearRequest(req.body);
     await validateReviewSettings(payload, shouldQueueReview);
     const saved = await db.transaction(async trx => {
       if (payload.is_default) await trx('user_groups').whereNot({ id: existing.id }).update({ is_default: 0 });
       await trx('user_groups').where({ id: existing.id }).update({ ...payload, updated_at: trx.fn.now() });
       return trx('user_groups').where({ id: existing.id }).first();
     });
-    const reviewQueue = shouldQueueReview
-      ? await nsfwService.queueGroupImagesForReview(saved.id)
-      : { queued: 0 };
+    let reviewQueue = { queued: 0, cleared_manual: 0 };
+    if (payload.image_review_enabled && clearManualMarks) {
+      reviewQueue = await nsfwService.clearManualMarksForGroup(saved.id);
+    }
+    if (shouldQueueReview) {
+      const queued = await nsfwService.queueGroupImagesForReview(saved.id, { clearManual: clearManualMarks });
+      reviewQueue = { ...reviewQueue, ...queued };
+    } else if (payload.image_review_enabled && clearManualMarks && reviewQueue.cleared_manual > 0) {
+      const checked = await nsfwService.reviewClearedImages(reviewQueue.imageIds || [], saved.id);
+      reviewQueue = { ...reviewQueue, queued: checked.queued };
+    }
     res.json({ ...serializeGroup(saved), review_queue: reviewQueue });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: '用户组名称已存在' });

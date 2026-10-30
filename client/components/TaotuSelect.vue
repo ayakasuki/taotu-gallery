@@ -10,7 +10,17 @@
       @keydown.enter.prevent="toggle"
       @keydown.space.prevent="toggle"
     >
-      <span class="taotu-select-value" :class="{ placeholder: !hasSelection }">{{ selectedLabel }}</span>
+      <span class="taotu-select-value-wrap">
+        <TaotuIcon
+          v-if="!multiple && selectedOption?.icon"
+          class="selected-option-icon"
+          :class="selectedOption.iconTone ? `tone-${selectedOption.iconTone}` : ''"
+          :name="selectedOption.icon"
+          :filled="selectedOption.iconFilled"
+          :stateful="false"
+        />
+        <span class="taotu-select-value" :class="{ placeholder: !hasSelection }">{{ selectedLabel }}</span>
+      </span>
       <TaotuIcon name="chevron-down" class="taotu-select-caret" :class="{ open }" />
     </button>
 
@@ -31,11 +41,18 @@
           :key="option.key"
           type="button"
           class="taotu-select-option"
-          :class="{ selected: isSelected(option.value), disabled: option.disabled }"
+          :class="{ selected: isSelected(option.value), disabled: option.disabled, 'has-icon': option.icon }"
           :disabled="option.disabled"
           :title="option.title"
           @click="selectOption(option)"
         >
+          <span
+            v-if="option.icon"
+            class="option-status-icon"
+            :class="option.iconTone ? `tone-${option.iconTone}` : ''"
+          >
+            <TaotuIcon :name="option.icon" :filled="option.iconFilled" :stateful="false" />
+          </span>
           <span class="option-copy">
             <span class="option-label">{{ option.label }}</span>
             <span v-if="option.description" class="option-description">{{ option.description }}</span>
@@ -89,8 +106,11 @@ const normalizedOptions = computed(() => props.options.map((option, index) => {
     value: option.value,
     description,
     title: [label, description].filter(Boolean).join(String.fromCharCode(10)),
-    count: option.count,
-    disabled: !!option.disabled
+        count: option.count,
+        icon: option.icon || '',
+        iconFilled: option.iconFilled !== false,
+        iconTone: option.iconTone || '',
+        disabled: !!option.disabled
   }
 }))
 
@@ -299,6 +319,50 @@ watch(open, (value) => {
   text-align: left;
 }
 
+.taotu-select-value-wrap {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.option-status-icon {
+  position: absolute;
+  left: 9px;
+}
+
+.selected-option-icon,
+.option-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.selected-option-icon .taotu-svg-icon,
+.option-status-icon .taotu-svg-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.selected-option-icon.tone-pending,
+.option-status-icon.tone-pending {
+  color: #ffb226;
+}
+
+.selected-option-icon.tone-safe,
+.option-status-icon.tone-safe {
+  color: #34b88c;
+}
+
+.selected-option-icon.tone-unsafe,
+.option-status-icon.tone-unsafe {
+  color: #f06f93;
+}
+
 .taotu-select-value.placeholder {
   color: var(--taotu-text-muted);
 }
@@ -355,6 +419,7 @@ watch(open, (value) => {
 }
 
 .taotu-select-option {
+  position: relative;
   width: 100%;
   min-height: 34px;
   display: grid;
@@ -372,10 +437,18 @@ watch(open, (value) => {
   transition: border-color var(--taotu-transition), background var(--taotu-transition), color var(--taotu-transition), transform var(--taotu-transition), box-shadow var(--taotu-transition);
 }
 
+.taotu-select-option.has-icon {
+  padding-left: 32px;
+}
+
 .taotu-select-menu.has-description .taotu-select-option {
   min-height: 48px;
   align-items: center;
   padding: 6px 9px;
+}
+
+.taotu-select-menu.has-description .taotu-select-option.has-icon {
+  padding-left: 32px;
 }
 
 .taotu-select-option:last-child {

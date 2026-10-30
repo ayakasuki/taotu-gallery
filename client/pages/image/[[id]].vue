@@ -205,11 +205,13 @@ const route = useRoute()
 const router = useRouter()
 const config = useRuntimeConfig()
 const api = useApi()
-const { readAuthPayload } = useUiCache()
+const { readAuthPayload, syncAuthCookie } = useUiCache()
+const { getGuestLikeToken, saveGuestLike } = useGuestLikes()
 const { showAdminToast } = useAdminToast()
 
 const image = ref(null)
 const liked = ref(false)
+const likePending = ref(false)
 const favorited = ref(false)
 const likeCount = ref(0)
 const favoriteCount = ref(0)
@@ -365,11 +367,17 @@ const selectImage = async (id, { updateUrl = true, align = 'visible' } = {}) => 
   resetZoom()
   if (!image.value) loading.value = true
   try {
-    const data = await api.get(`/api/internal/images/${id}`)
-    image.value = data
     const auth = readAuthPayload()
+    const data = auth
+      ? await api.get(`/api/internal/images/${id}`)
+      : await api.request(`/api/internal/images/${id}`, {
+          method: 'GET',
+          headers: { 'X-Taotu-Visitor-Token': getGuestLikeToken() }
+        })
+    image.value = data
     viewerLoggedIn.value = !!auth
     liked.value = !!data.liked_by_me
+    if (!auth) saveGuestLike(data.id, liked.value)
     favorited.value = !!data.favorited_by_me
     likeCount.value = Number(data.like_count || 0)
     favoriteCount.value = Number(data.favorite_count || 0)
@@ -391,17 +399,19 @@ const selectImage = async (id, { updateUrl = true, align = 'visible' } = {}) => 
 }
 
 async function toggleLike() {
-  if (!image.value) return
-  if (!viewerLoggedIn.value) {
-    liked.value = !liked.value
-    likeCount.value = Math.max(0, likeCount.value + (liked.value ? 1 : -1))
-    return
-  }
+  if (!image.value || likePending.value) return
+  likePending.value = true
   try {
-    const result = await api.post(`/api/internal/images/${image.value.id}/like`, {})
+    const result = await api.post(`/api/internal/images/${image.value.id}/like`,
+      viewerLoggedIn.value ? {} : { visitor_token: getGuestLikeToken() })
     liked.value = result.liked
     likeCount.value = Number(result.like_count || 0)
-  } catch (error) { showAdminToast(error?.data?.error || '点赞失败', 'error') }
+    if (!viewerLoggedIn.value) saveGuestLike(image.value.id, liked.value)
+  } catch (error) {
+    showAdminToast(error?.data?.error || '点赞失败', 'error')
+  } finally {
+    likePending.value = false
+  }
 }
 
 async function toggleFavorite() {
@@ -800,6 +810,7 @@ watch(() => image.value?.id, () => {
 watch(railImages, () => nextTick(updateRailVisibleCount), { deep: true })
 
 onMounted(async () => {
+  syncAuthCookie()
   await redirectLegacyPath()
   await reloadThumbRail()
   window.addEventListener('resize', updateRailVisibleCount)
@@ -1201,7 +1212,7 @@ onBeforeUnmount(() => {
   border-radius: 50vh;
 }
 .action-btn.heart.active { color: #ed426d; }
-.action-btn.star { color: #d6a52a; }
+.action-btn.star { color: #d6a52a; border-radius: 50vh; }
 .action-btn.star.active { color: #efb51f; }
 .action-btn > span { margin-left: 2px; color: currentColor; font-size: 11px; font-weight: 900; }
 .action-btn.heart.active .taotu-svg-icon { transform: translateX(-2px); fill: currentColor; }

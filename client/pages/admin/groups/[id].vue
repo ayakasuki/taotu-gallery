@@ -61,6 +61,10 @@
           <div><strong>不健康内容展示</strong><span>关闭时不展示该用户组的不健康图片。</span></div>
           <button type="button" class="pink-switch" :class="{ active: form.nsfw_visible }" @click="form.nsfw_visible = !form.nsfw_visible"><i /></button>
         </div>
+        <div class="setting-row full">
+          <div><strong>清除手工标记内容</strong><span>保存审核配置时清除人工健康标记，并将这些图片重置为“？”等待重新审核；关闭时保留人工标记，只重审自动标记结果。</span></div>
+          <button type="button" class="pink-switch" :class="{ active: form.clear_manual_marks }" @click="form.clear_manual_marks = !form.clear_manual_marks"><i /></button>
+        </div>
         <label class="field full"><span>内容合规引擎</span><TaotuSelect v-model="form.nsfw_engine" :options="engineOptions" /></label>
         <div v-if="form.nsfw_engine === 'nsfwjs'" class="engine-card full">
           <label class="field full">
@@ -130,6 +134,7 @@ function defaultForm() {
     allowed_formats: [...formatOptions],
     image_review_enabled: false,
     nsfw_visible: false,
+    clear_manual_marks: false,
     nsfw_engine: 'nsfwjs',
     nsfw_config: {
       nsfwjs: { endpoint: '', thresholds: { Drawing: 100, Hentai: 60, Neutral: 100, Porn: 40, Sexy: 70 } },

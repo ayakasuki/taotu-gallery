@@ -45,7 +45,12 @@ useHead({
       innerHTML: `
 (function(){
   try {
-    var token = localStorage.getItem('jwt_token') || '';
+    var token = '';
+    try { token = localStorage.getItem('jwt_token') || ''; } catch (e) {}
+    if (!token) {
+      var match = document.cookie.match(/(?:^|;\\s*)taotu_token=([^;]*)/);
+      if (match) token = decodeURIComponent(match[1]);
+    }
     var clear = function(){
       document.cookie = 'taotu_token=; Max-Age=0; Path=/; SameSite=Lax';
       document.cookie = 'taotu_token=; Max-Age=0; Path=/; SameSite=Lax; Secure';

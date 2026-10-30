@@ -4,7 +4,7 @@
  */
 export function useApi() {
   const config = useRuntimeConfig()
-  const { clearAuthSession } = useUiCache()
+  const { clearAuthSession, readAuthToken } = useUiCache()
 
   const getApiBase = () => config.public.apiBase || ''
 
@@ -29,7 +29,7 @@ export function useApi() {
     const apiBase = getApiBase()
     const headers = { ...options.headers }
 
-    const jwt = import.meta.client ? localStorage.getItem('jwt_token') : null
+    const jwt = import.meta.client ? readAuthToken() : null
     const apiToken = getToken()
 
     if (jwt) {

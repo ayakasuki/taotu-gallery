@@ -3,6 +3,22 @@ const CURRENT_USER_CACHE_KEY = 'taotu_current_user'
 const AUTH_TOKEN_KEY = 'jwt_token'
 const AUTH_COOKIE_NAME = 'taotu_token'
 
+function readAuthToken() {
+  if (!import.meta.client) return ''
+  let localToken = ''
+  try { localToken = localStorage.getItem(AUTH_TOKEN_KEY) || '' } catch {}
+  if (localToken) return localToken
+  try {
+    const cookie = document.cookie
+      .split(';')
+      .map(item => item.trim())
+      .find(item => item.startsWith(`${AUTH_COOKIE_NAME}=`))
+    return cookie ? decodeURIComponent(cookie.slice(AUTH_COOKIE_NAME.length + 1)) : ''
+  } catch {
+    return ''
+  }
+}
+
 function isAuthFailure(err) {
   const status = Number(err?.status || err?.statusCode || err?.response?.status || err?.data?.statusCode || 0)
   return status === 401 || status === 403
@@ -11,7 +27,7 @@ function isAuthFailure(err) {
 function readAuthPayload() {
   if (!import.meta.client) return null
   try {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY)
+    const token = readAuthToken()
     if (!token) return null
     const payload = JSON.parse(atob(token.split('.')[1]))
     if (payload.exp && payload.exp * 1000 <= Date.now()) return null
@@ -49,7 +65,7 @@ export function useUiCache() {
   const syncAuthCookie = () => {
     if (!import.meta.client) return ''
     try {
-      const token = localStorage.getItem(AUTH_TOKEN_KEY) || ''
+      const token = readAuthToken()
       if (!token) {
         clearAuthCookie()
         return ''
@@ -104,6 +120,7 @@ export function useUiCache() {
     readCurrentUserCache: () => readJsonCache(CURRENT_USER_CACHE_KEY),
     writeCurrentUserCache: (value) => writeJsonCache(CURRENT_USER_CACHE_KEY, value, 'taotu:current-user-updated'),
     clearCurrentUserCache: () => removeJsonCache(CURRENT_USER_CACHE_KEY, 'taotu:current-user-updated'),
+    readAuthToken,
     readAuthPayload,
     writeAuthToken,
     syncAuthCookie,

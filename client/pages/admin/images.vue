@@ -1,5 +1,6 @@
 <template>
   <div class="admin-image-page">
+    <ImageQuickPreview :image="imagePreview" @close="closeImagePreview" />
     <section class="image-panel">
       <header class="image-title-row">
         <div class="image-title">
@@ -94,9 +95,14 @@
                   <TaotuIcon :name="selectedIds.includes(img.id) ? 'checkbox-checked' : 'checkbox'" :filled="selectedIds.includes(img.id)" :stateful="false" />
                 </button>
               </span>
-              <span class="thumb-col">
+              <button
+                type="button"
+                class="thumb-col thumb-preview-button"
+                :aria-label="`预览 ${img.filename || '图片'}`"
+                @click="openImagePreview(img)"
+              >
                 <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
-              </span>
+              </button>
               <span class="file-col">
                 <strong>{{ img.filename }}</strong>
                 <small>{{ formatDateTime(img.created_at) }}</small>
@@ -262,6 +268,12 @@
               </div>
             </div>
 
+            <div class="edit-field health-field">
+              <label>健康内容 <span>（手动审查）</span></label>
+              <TaotuSelect v-model="editHealthStatus" class="health-select" :options="healthOptions" />
+              <p class="health-help">选择“？”会清除人工标记；若该图片所属用户组已开启 NSFW 审核，后台会重新排队检测。</p>
+            </div>
+
             <div class="private-warning">
               <TaotuIcon name="warning" />
               <p><strong>不会影响或删除其他用户的私有标签</strong>此处仅管理该图片所属用户名下的私有标签，不会影响其他用户的同名标签。</p>
@@ -324,6 +336,7 @@ const batchPopoverOpen = ref(false)
 const deleteDialog = reactive({ show: false, target: null, targets: [], mode: 'single', message: '', previewIcon: '', loading: false, effects: [] })
 
 const editingImage = ref(null)
+const imagePreview = ref(null)
 const editTagIds = ref([])
 const editUserTagIds = ref([])
 const editUserTagOwnerId = ref(null)
@@ -331,7 +344,13 @@ const editUserTagOwnerName = ref('系统导入')
 const editUserTagOptions = ref({ combinable: [], nonCombinable: [] })
 const editPlatformTagDraft = ref('')
 const editPrivateTagDraft = ref('')
+const editHealthStatus = ref('none')
 const openEditDropdown = ref('')
+const healthOptions = [
+  { label: '未检测', value: 'none', icon: 'help-circle', iconTone: 'pending', iconFilled: true, description: '等待 NSFW 审核或用户组未开启审核' },
+  { label: '健康内容', value: 'safe', icon: 'success', iconTone: 'safe', iconFilled: true, description: '人工标记为健康内容' },
+  { label: '不健康内容', value: 'unsafe', icon: 'failure', iconTone: 'unsafe', iconFilled: true, description: '人工标记为不健康内容' }
+]
 
 const filterableTags = computed(() => {
   const keepSelectable = tag => !tag.isSystemTag
@@ -453,6 +472,14 @@ function getThumbUrl(img) {
   return url ? `${config.public.apiBase || ''}${url}` : ''
 }
 
+function openImagePreview(img) {
+  imagePreview.value = img
+}
+
+function closeImagePreview() {
+  imagePreview.value = null
+}
+
 function getPreviewUrl(img) {
   const url = img.medium_url || img.url || img.thumb_url
   return url ? `${config.public.apiBase || ''}${url}` : ''
@@ -504,6 +531,7 @@ async function openEdit(img) {
   openEditDropdown.value = ''
   editPlatformTagDraft.value = ''
   editPrivateTagDraft.value = ''
+  editHealthStatus.value = healthStatus(img).status
   editTagIds.value = platformTags(img).map(tag => tag.id).filter(id => typeof id === 'number')
   const appliedPrivateTags = privateTags(img)
   editUserTagIds.value = appliedPrivateTags.map(toUserTagId)
@@ -522,6 +550,7 @@ function closeEdit() {
   editUserTagOptions.value = { combinable: [], nonCombinable: [] }
   editPlatformTagDraft.value = ''
   editPrivateTagDraft.value = ''
+  editHealthStatus.value = 'none'
   openEditDropdown.value = ''
 }
 
@@ -541,6 +570,8 @@ async function saveEdit() {
         overwrite: true
       })
     }
+    const nsfwStatus = { none: null, safe: false, unsafe: true }[editHealthStatus.value]
+    await api.put(`/api/admin/images/${editingImage.value.id}`, { nsfw_status: nsfwStatus })
     closeEdit()
     await loadImages(page.value)
     showAdminToast('图片信息已保存', 'success')
@@ -1248,6 +1279,21 @@ function healthStatus(img) {
   background: #eef2f8;
 }
 
+.thumb-preview-button {
+  width: 82px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.thumb-preview-button:focus-visible {
+  outline: 2px solid rgba(248, 95, 154, 0.68);
+  outline-offset: 2px;
+}
+
 .file-col {
   display: grid;
   gap: 5px;
@@ -1634,6 +1680,22 @@ function healthStatus(img) {
 .edit-field {
   position: relative;
   margin-bottom: 16px;
+}
+
+.health-field {
+  margin-top: 2px;
+}
+
+.health-select {
+  width: min(100%, 360px);
+}
+
+.health-help {
+  margin: 7px 0 0;
+  color: #9aa5b8;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.5;
 }
 
 .edit-label-row {

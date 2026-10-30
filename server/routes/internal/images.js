@@ -13,12 +13,29 @@ import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js
 
 const router = express.Router();
 
+function parseCookies(req) {
+  return String(req.headers.cookie || '').split(';').reduce((cookies, item) => {
+    const index = item.indexOf('=');
+    if (index <= 0) return cookies;
+    const key = item.slice(0, index).trim();
+    if (!key) return cookies;
+    try {
+      cookies[key] = decodeURIComponent(item.slice(index + 1).trim());
+    } catch {
+      cookies[key] = item.slice(index + 1).trim();
+    }
+    return cookies;
+  }, {});
+}
+
 // 可选认证（公共图库不需要登录，但登录后可看自己的）
 async function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : '';
+  const token = bearerToken || req.query.auth || parseCookies(req).taotu_token;
+  if (token) {
     try {
-      const decoded = jwt.verify(authHeader.substring(7), process.env.JWT_SECRET);
+      const decoded = jwt.verify(String(token), process.env.JWT_SECRET);
       const user = await db('users')
         .where({ id: decoded.id })
         .select('id', 'username', 'role', 'is_disabled', 'review_status')
@@ -189,7 +206,7 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
     if (!isAdmin && !isOwner && !isPublicAlbum && !image.is_public && image.uploader_id !== null) {
       return res.status(403).json({ error: '无权访问此图片' });
     }
-    if (!isAdmin && (image.nsfw_status === true || image.nsfw_status === 1)) {
+    if (!isAdmin && !isOwner && (image.nsfw_status === true || image.nsfw_status === 1)) {
       return res.status(403).json({ error: '图片已标记为不健康内容' });
     }
     if (req.user?.id) {
@@ -200,7 +217,13 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
       image.liked_by_me = !!liked;
       image.favorited_by_me = !!favorited;
     } else {
-      image.liked_by_me = false;
+      const visitorToken = String(req.get('X-Taotu-Visitor-Token') || '');
+      image.liked_by_me = /^[a-f0-9]{32,128}$/i.test(visitorToken)
+        ? !!(await db('image_guest_likes').where({
+          image_id: image.id,
+          visitor_hash: createHash('sha256').update(visitorToken).digest('hex')
+        }).first())
+        : false;
       image.favorited_by_me = false;
     }
     res.json(image);

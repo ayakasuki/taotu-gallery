@@ -1,6 +1,7 @@
 <template>
   <div class="dashboard-page page-container">
     <ManualImageHoverPreview ref="manualPreviewRef" />
+    <ImageQuickPreview :image="imagePreview" @close="closeImagePreview" />
     <div class="dashboard-shell">
       <aside class="dashboard-sidebar">
         <div class="profile-block">
@@ -227,7 +228,14 @@
                     <TaotuIcon name="checkbox-checked" class="checkbox-checked-icon" filled :stateful="false" />
                   </span>
                 </label>
-                <div class="table-thumb"><img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" /></div>
+                <button
+                  type="button"
+                  class="table-thumb table-thumb-button"
+                  :aria-label="`预览 ${img.filename || '图片'}`"
+                  @click="openImagePreview(img)"
+                >
+                  <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
+                </button>
                 <div class="table-file">
                   <strong>{{ img.filename }}</strong>
                   <small>{{ formatViewCount(img.view_count) }} 浏览</small>
@@ -1272,6 +1280,9 @@ const openImageEdit = (img) => {
     .filter(tag => tag.source === 'user' || tag.user_tag_id)
     .map(tag => typeof tag.id === 'string' && tag.id.startsWith('u') ? tag.id : 'u' + (tag.user_tag_id || tag.id))
 }
+const imagePreview = ref(null)
+const openImagePreview = (img) => { imagePreview.value = img }
+const closeImagePreview = () => { imagePreview.value = null }
 const closeImageEdit = () => { editingImage.value = null; editTagIds.value = []; showEditTagPicker.value = false }
 const saveImageTags = async () => {
   if (!editingImage.value) return
@@ -2555,6 +2566,16 @@ const buildPageItems = (current, total) => {
   overflow: hidden;
   border-radius: 5px;
   background: rgba(239, 243, 250, 0.9);
+}
+.table-thumb-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.table-thumb-button:focus-visible {
+  outline: 2px solid rgba(248, 95, 154, 0.68);
+  outline-offset: 2px;
 }
 .table-thumb img {
   width: 100%;

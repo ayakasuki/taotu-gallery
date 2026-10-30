@@ -293,6 +293,11 @@ const clientDist = fs.existsSync(path.resolve(__dirname, '../client/.output/publ
   ? path.resolve(__dirname, '../client/.output/public')
   : path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(clientDist)) {
+  const imagePagePath = path.join(clientDist, 'image', 'index.html');
+  if (fs.existsSync(imagePagePath)) {
+    app.get('/image', (req, res) => res.sendFile(imagePagePath));
+    app.get('/image/*', (req, res) => res.sendFile(imagePagePath));
+  }
   app.use(express.static(clientDist));
   // SPA 回退：非 API 路由全部返回 index.html
   app.get('*', (req, res, next) => {

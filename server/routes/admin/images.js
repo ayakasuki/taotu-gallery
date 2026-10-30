@@ -20,10 +20,34 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
       return res.status(403).json({ error: '无权修改此图片' });
     }
 
-    const { is_public, album_id } = req.body;
+    const { is_public, album_id, nsfw_status } = req.body;
     const updates = {};
     if (is_public !== undefined) updates.is_public = is_public;
     if (album_id !== undefined) updates.album_id = album_id;
+
+    if (nsfw_status !== undefined) {
+      if (user.role !== 'admin') return res.status(403).json({ error: '只有管理员可以手动审查健康内容' });
+      const allowedValues = [null, true, false, 0, 1, '0', '1', 'safe', 'unsafe', 'none'];
+      if (!allowedValues.includes(nsfw_status)) {
+        return res.status(400).json({ error: '健康内容状态无效' });
+      }
+
+      const normalizedStatus = nsfw_status === null || nsfw_status === 'none'
+        ? null
+        : ['unsafe', true, 1, '1'].includes(nsfw_status);
+      updates.nsfw_status = normalizedStatus;
+      if (normalizedStatus === null) {
+        updates.nsfw_checked_at = null;
+        updates.nsfw_engine = null;
+        updates.nsfw_manual_marked = false;
+        updates.nsfw_detail = JSON.stringify({ queued: true, reason: 'admin_manual_review_pending' });
+      } else {
+        updates.nsfw_checked_at = db.fn.now();
+        updates.nsfw_engine = 'manual';
+        updates.nsfw_manual_marked = true;
+        updates.nsfw_detail = JSON.stringify({ manual: true, reason: 'admin_manual_review' });
+      }
+    }
 
     await db('images').where({ id: req.params.id }).update(updates);
     res.json({ message: '已更新' });

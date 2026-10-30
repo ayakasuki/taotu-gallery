@@ -349,10 +349,10 @@ async function reviewImage(imageId, options = {}) {
   return reviewPromise;
 }
 
-async function getGroupPendingImageIds(groupId) {
+async function getGroupPendingImageIds(groupId, { includeManual = false } = {}) {
   const group = await db('user_groups').where({ id: groupId }).select('id', 'is_default').first();
   if (!group) return [];
-  return db('images as i')
+  const query = db('images as i')
     .leftJoin('users as u', 'u.id', 'i.uploader_id')
     .where((builder) => {
       builder.where('u.user_group_id', group.id);
@@ -362,6 +362,10 @@ async function getGroupPendingImageIds(groupId) {
     .select('i.id')
     .groupBy('i.id')
     .orderBy('i.id', 'asc');
+  if (!includeManual) {
+    query.where(builder => builder.where('i.nsfw_manual_marked', false).orWhereNull('i.nsfw_manual_marked'));
+  }
+  return query;
 }
 
 async function reviewQueuedImages(imageIds, groupId) {
@@ -380,22 +384,56 @@ async function reviewQueuedImages(imageIds, groupId) {
   return { checked, failed };
 }
 
-async function queueGroupImagesForReview(groupId) {
-  const imageIds = await getGroupPendingImageIds(groupId);
+async function queueGroupImagesForReview(groupId, { clearManual = false } = {}) {
+  const imageIds = await getGroupPendingImageIds(groupId, { includeManual: clearManual });
   if (imageIds.length === 0) return { queued: 0 };
   const ids = imageIds.map(image => image.id);
-  await db('images').whereIn('id', ids).update({
+  const updateQuery = db('images').whereIn('id', ids);
+  if (!clearManual) {
+    updateQuery.where(builder => builder.where('nsfw_manual_marked', false).orWhereNull('nsfw_manual_marked'));
+  }
+  const updates = {
     nsfw_status: null,
     nsfw_checked_at: null,
     nsfw_engine: null,
     nsfw_detail: JSON.stringify({ queued: true, reason: 'group_review_enabled_or_changed' })
-  });
+  };
+  if (clearManual) updates.nsfw_manual_marked = false;
+  await updateQuery.update(updates);
   setTimeout(() => {
     reviewQueuedImages(imageIds, groupId).catch(error => {
       logger.warn(`用户组 ${groupId} NSFW 补审任务异常: ${error.message}`);
     });
   }, 0);
   return { queued: ids.length };
+}
+
+async function clearManualMarksForGroup(groupId) {
+  const imageRows = await getGroupPendingImageIds(groupId, { includeManual: true });
+  const ids = imageRows.map(image => image.id);
+  if (ids.length === 0) return { queued: 0, cleared_manual: 0, imageIds: [] };
+  const manualRows = await db('images').whereIn('id', ids).where('nsfw_manual_marked', true).select('id');
+  const manualIds = manualRows.map(image => image.id);
+  if (manualIds.length > 0) {
+    await db('images').whereIn('id', manualIds).update({
+      nsfw_status: null,
+      nsfw_manual_marked: false,
+      nsfw_checked_at: null,
+      nsfw_engine: null,
+      nsfw_detail: JSON.stringify({ queued: true, reason: 'manual_review_cleared' })
+    });
+  }
+  return { queued: 0, cleared_manual: manualIds.length, imageIds: manualIds };
+}
+
+async function reviewClearedImages(imageIds, groupId) {
+  if (!imageIds?.length) return { queued: 0 };
+  setTimeout(() => {
+    reviewQueuedImages(imageIds.map(id => ({ id })), groupId).catch(error => {
+      logger.warn(`用户组 ${groupId} 清除人工标记后的 NSFW 补审异常: ${error.message}`);
+    });
+  }, 0);
+  return { queued: imageIds.length };
 }
 
 async function scanPendingImages(limit = 20) {
@@ -447,6 +485,8 @@ export default {
   validateConfiguration,
   reviewImage,
   queueGroupImagesForReview,
+  clearManualMarksForGroup,
+  reviewClearedImages,
   scanPendingImages,
   startScheduler
 };
