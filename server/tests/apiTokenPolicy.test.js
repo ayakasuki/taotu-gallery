@@ -31,6 +31,17 @@ test('source allowlist accepts either IP or Referer and same-origin without Refe
   assert.equal(isSourceAllowed({ ip: '127.0.0.1', fetchSite: 'cross-site', host: 'taotu.ayakasuki.com', protocol: 'https' }, [], ['taotu.ayakasuki.com']), false);
 });
 
+test('referer-bound tokens reject contradictory browser origin and fetch metadata', () => {
+  const allowed = ['blog.example.com'];
+  const base = { ip: '198.51.100.2', host: 'gallery.example.net', protocol: 'https' };
+  assert.equal(isSourceAllowed({ ...base, referer: 'https://blog.example.com/page', origin: 'https://blog.example.com', fetchSite: 'cross-site' }, [], allowed), true);
+  assert.equal(isSourceAllowed({ ...base, referer: 'https://blog.example.com/page', origin: 'https://other.example.com', fetchSite: 'cross-site' }, [], allowed), false);
+  assert.equal(isSourceAllowed({ ...base, referer: 'https://blog.example.com/page', fetchSite: 'same-origin' }, [], allowed), false);
+  assert.equal(isSourceAllowed({ ...base, origin: 'https://blog.example.com', fetchSite: 'same-origin' }, [], allowed), false);
+  assert.equal(isSourceAllowed({ ...base, referer: 'not-a-url', origin: 'null' }, [], allowed), false);
+  assert.equal(isSourceAllowed({ ...base, referer: 'https://blocked.example', fetchSite: 'cross-site' }, ['198.51.100.2'], allowed), true);
+});
+
 test('IPv4 CIDR checks reject malformed addresses', () => {
   assert.equal(ipCidrMatch('203.0.113.9', '203.0.113.0/24'), true);
   assert.equal(ipCidrMatch('203.0.114.9', '203.0.113.0/24'), false);

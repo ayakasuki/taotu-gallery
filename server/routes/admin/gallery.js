@@ -9,6 +9,7 @@ import pathUtils from '../../utils/pathUtils.js';
 import albumService from '../../services/albumService.js';
 import imageProcessor from '../../utils/imageProcessor.js';
 import crypto from 'crypto';
+import { albumPolicyError } from '../../utils/albumPrivacy.js';
 
 const router = express.Router();
 const scanState = globalThis.__taotuScanState || { jobs: new Map(), activeJobId: null };
@@ -247,6 +248,10 @@ async function applyPathImageSettings({ oldPathEntry = {}, nextPathEntry = {}, u
     albumName: nextPathEntry.albumMode === 'new' ? nextPathEntry.albumName : null,
     userId
   });
+  if (finalAlbumId && nextPathEntry.makePublic) {
+    const album = await db('albums').where({ id: finalAlbumId }).first();
+    if (album?.is_private) throw albumPolicyError('非法请求：绑定私密相册的扫描路径不能批量公开图片');
+  }
 
   if (imageIds.length > 0) {
     await db('images').whereIn('id', imageIds).update({
@@ -457,6 +462,10 @@ router.post('/scan-path', authMiddleware, async (req, res, next) => {
     }
 
     const ignoreFilenameParts = Array.isArray(req.body.ignoreFilenameParts) ? req.body.ignoreFilenameParts : [];
+    if (finalAlbumId && makePublic) {
+      const album = await db('albums').where({ id: finalAlbumId }).first();
+      if (album?.is_private) throw albumPolicyError('非法请求：绑定私密相册的扫描路径不能批量公开图片');
+    }
     const initialPathsConfig = await configService.readPaths();
     const initialPaths = initialPathsConfig.customPaths || [];
     const existingPath = initialPaths.some(cp => cp.path === targetPath);

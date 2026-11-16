@@ -324,6 +324,7 @@ async function performReview(imageId, options = {}) {
       nsfw_engine: engine,
       nsfw_detail: JSON.stringify(result.detail)
     });
+    if (result.nsfw) await db('albums').where({ cover_image_id: image.id }).update({ cover_image_id: null });
     return {
       ok: true,
       status: result.nsfw ? 'unsafe' : 'safe',

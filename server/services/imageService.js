@@ -9,6 +9,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import logger from '../config/logger.js';
 import configService from './configService.js';
+import { filterAlbumImagesForViewer, filterPrivateAlbumImages } from '../utils/albumPrivacy.js';
 
 const SYSTEM_TAG_IDS = {
   untagged: '__untagged',
@@ -91,7 +92,7 @@ function splitTagFilters(tagIds) {
   return { systemTagIds, normalTagIds };
 }
 
-function applyTagFilters(query, tagIds) {
+function applyTagFilters(query, tagIds, privateTagUserId = null) {
   const { systemTagIds, normalTagIds } = splitTagFilters(tagIds);
 
   if (systemTagIds.includes(SYSTEM_TAG_IDS.untagged)) {
@@ -106,20 +107,33 @@ function applyTagFilters(query, tagIds) {
     });
   }
 
-  if (normalTagIds.length > 0) {
+  if (normalTagIds.length > 0 || privateTagUserId) {
     const publicTagIds = normalTagIds.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
     const userTagIds = normalTagIds.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
 
-    query = query.whereIn('id', function() {
-      if (publicTagIds.length > 0 && userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').where(function() {
-          this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
-            .orWhereIn('user_tag_id', userTagIds);
+    query = query.where(function() {
+      if (publicTagIds.length > 0 || userTagIds.length > 0) {
+        this.whereIn('images.id', function() {
+          if (publicTagIds.length > 0 && userTagIds.length > 0) {
+            this.select('image_id').from('image_tags').where(function() {
+              this.whereIn('tag_id', publicTagIds).andWhereNull('user_tag_id')
+                .orWhereIn('user_tag_id', userTagIds);
+            });
+          } else if (publicTagIds.length > 0) {
+            this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
+          } else {
+            this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
+          }
         });
-      } else if (publicTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('tag_id', publicTagIds);
-      } else if (userTagIds.length > 0) {
-        this.select('image_id').from('image_tags').whereIn('user_tag_id', userTagIds);
+      }
+      if (privateTagUserId) {
+        this.orWhereExists(function() {
+          this.select(db.raw('1')).from('image_tags')
+            .join('user_tags', 'user_tags.id', 'image_tags.user_tag_id')
+            .whereRaw('image_tags.image_id = images.id')
+            .where('user_tags.user_id', privateTagUserId)
+            .where('user_tags.is_public', false);
+        });
       }
     });
   }
@@ -147,7 +161,8 @@ async function getImages(options = {}) {
     sort = 'created_at', order = 'desc',
     tagIds, albumId, orientation, search,
     userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, userGalleryOnly = false,
-    internal = false, excludeHiddenFromGallery = false, favoriteUserId = null
+    internal = false, excludeHiddenFromGallery = false, favoriteUserId = null, excludePrivateAlbums = false,
+    privateTagUserId = null
   } = options;
 
   const offset = (page - 1) * limit;
@@ -198,9 +213,11 @@ async function getImages(options = {}) {
   if (orientation) query = query.where({ orientation });
   if (search) query = query.where('filename', 'like', `%${search}%`);
   if (!albumId && excludeHiddenFromGallery) query = applyGalleryHiddenFilter(query);
-  if (!isAdmin && (albumId || publicOnly || userGalleryOnly || filterUserId || excludeHiddenFromGallery || !ownOnly)) query = applyNsfwVisibilityFilter(query);
+  query = filterPrivateAlbumImages(query, { userId, isAdmin, external: excludePrivateAlbums }, db);
+  if (albumId) query = filterAlbumImagesForViewer(query, { userId, isAdmin });
+  else if (!isAdmin && (publicOnly || userGalleryOnly || filterUserId || excludeHiddenFromGallery || !ownOnly)) query = applyNsfwVisibilityFilter(query);
 
-  query = applyTagFilters(query, tagIds);
+  query = applyTagFilters(query, tagIds, privateTagUserId);
 
   const validSorts = ['created_at', 'filename', 'view_count', 'width', 'height', 'like_count', 'favorite_count'];
   const sortField = validSorts.includes(sort) ? sort : 'created_at';
@@ -271,8 +288,10 @@ async function getImages(options = {}) {
     else if (userGalleryOnly) countQuery = countQuery.whereNotNull('uploader_id');
   }
   if (!albumId && excludeHiddenFromGallery) countQuery = applyGalleryHiddenFilter(countQuery);
-  if (!isAdmin && (albumId || publicOnly || userGalleryOnly || filterUserId || excludeHiddenFromGallery || !ownOnly)) countQuery = applyNsfwVisibilityFilter(countQuery);
-  countQuery = applyTagFilters(countQuery, tagIds);
+  countQuery = filterPrivateAlbumImages(countQuery, { userId, isAdmin, external: excludePrivateAlbums }, db);
+  if (albumId) countQuery = filterAlbumImagesForViewer(countQuery, { userId, isAdmin });
+  else if (!isAdmin && (publicOnly || userGalleryOnly || filterUserId || excludeHiddenFromGallery || !ownOnly)) countQuery = applyNsfwVisibilityFilter(countQuery);
+  countQuery = applyTagFilters(countQuery, tagIds, privateTagUserId);
   const [{ count }] = await countQuery;
 
   for (const image of images) {
@@ -357,7 +376,7 @@ async function getImageById(imageId, internal = false) {
 
 // 随机获取图片
 async function getRandomImages(options = {}) {
-  const { count = 1, tagIds, albumId, orientation, userId, publicOnly = false, isAdmin = false } = options;
+  const { count = 1, tagIds, albumId, orientation, userId, publicOnly = false, isAdmin = false, excludeIds = [], strictAccess = false, includeTags = true, excludePrivateAlbums = true, healthyOnly = true, privateTagUserId = null } = options;
 
   let query = db('images');
 
@@ -384,24 +403,42 @@ async function getRandomImages(options = {}) {
       query = query.where({ is_public: true });
     }
   }
-  query = applyTagFilters(query, tagIds);
+  query = applyTagFilters(query, tagIds, privateTagUserId);
+  if (excludeIds.length) query = query.whereNotIn('images.id', excludeIds);
+  if (strictAccess && !isAdmin) {
+    query = query.where(function() {
+      this.where({ uploader_id: userId }).orWhere({ is_public: true })
+        .orWhereIn('album_id', db('albums').select('id').where({ is_public: true }));
+    });
+  }
   if (albumId) query = query.where({ album_id: albumId });
   if (orientation) query = query.where({ orientation });
-  if (!isAdmin) query = applyNsfwVisibilityFilter(query);
+  query = filterPrivateAlbumImages(query, { userId, isAdmin, external: excludePrivateAlbums }, db);
+  if (healthyOnly || !isAdmin) query = applyNsfwVisibilityFilter(query);
 
   const images = await query.orderByRaw('RAND()').limit(count);
 
-  for (const image of images) {
-    const publicTags = await db('image_tags')
+  if (!includeTags || !images.length) return images;
+  const imageIds = images.map(image => image.id);
+  const [publicTags, userTags] = await Promise.all([
+    db('image_tags')
       .join('tags', 'image_tags.tag_id', 'tags.id')
-      .where('image_tags.image_id', image.id)
+      .whereIn('image_tags.image_id', imageIds)
       .whereNull('image_tags.user_tag_id')
-      .select('tags.*', 'image_tags.source');
-    const userTags = await db('image_tags')
+      .select('tags.*', 'image_tags.source', 'image_tags.image_id as tagged_image_id'),
+    db('image_tags')
       .join('user_tags', 'image_tags.user_tag_id', 'user_tags.id')
-      .where('image_tags.image_id', image.id)
-      .select('user_tags.*', db.raw("'user' as source"));
-    image.tags = [...publicTags, ...userTags];
+      .whereIn('image_tags.image_id', imageIds)
+      .select('user_tags.*', db.raw("'user' as source"), 'image_tags.image_id as tagged_image_id')
+  ]);
+  const tagsByImage = new Map();
+  for (const { tagged_image_id, ...tag } of [...publicTags, ...userTags]) {
+    const key = String(tagged_image_id);
+    if (!tagsByImage.has(key)) tagsByImage.set(key, []);
+    tagsByImage.get(key).push(tag);
+  }
+  for (const image of images) {
+    image.tags = tagsByImage.get(String(image.id)) || [];
     const urls = buildImageUrls(image);
     Object.assign(image, urls);
   }

@@ -70,6 +70,7 @@ const emit = defineEmits([
 
 const api = useApi()
 const groups = ref([])
+const myTagGroupId = '__my_tags__'
 
 const allTags = computed(() => [...(props.tags.combinable || []), ...(props.tags.nonCombinable || [])])
 
@@ -142,7 +143,7 @@ const hasSelection = computed(() => {
 })
 
 // 主分组切换
-const isGroupDisabled = (id) => !props.selectedGroupIds.includes(id) && wouldConflictWithSelection(collectGroupTagIds(id))
+const isGroupDisabled = (id) => id !== myTagGroupId && !props.selectedGroupIds.includes(id) && wouldConflictWithSelection(collectGroupTagIds(id))
 
 const toggleGroup = (id) => {
   if (isGroupDisabled(id)) return

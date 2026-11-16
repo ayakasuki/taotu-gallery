@@ -10,6 +10,8 @@ import authMiddleware from '../../middleware/auth.js';
 import db from '../../db/index.js';
 import imageService from '../../services/imageService.js';
 import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js';
+import { filterPrivateAlbumImages } from '../../utils/albumPrivacy.js';
+import { isMyTagGroup } from '../../utils/privateTagGroup.js';
 
 const router = express.Router();
 
@@ -56,11 +58,14 @@ router.get('/', optionalAuth, async (req, res, next) => {
     await assertNoTagFilterConflict(tagIds);
     const userId = req.user?.id || null;
     const isAdmin = req.user?.role === 'admin';
+    if (req.query.tag_g !== undefined && !isMyTagGroup(req.query.tag_g)) return res.status(400).json({ error: 'tag_g 参数无效' });
+    if (isMyTagGroup(req.query.tag_g) && !userId) return res.status(401).json({ error: '登录后才能筛选我的标签' });
 
     const result = await imageService.getImages({
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
       sort, order, tagIds,
+      privateTagUserId: isMyTagGroup(req.query.tag_g) ? userId : null,
       albumId: album ? parseInt(album) : null,
       orientation, search,
       userId,
@@ -133,6 +138,7 @@ router.get('/uploader/:userId', optionalAuth, async (req, res, next) => {
         .orWhere('i.is_public', true)
         .orWhereIn('i.album_id', db('albums').select('id').where({ is_public: true })));
     }
+    favoritesQuery = filterPrivateAlbumImages(favoritesQuery, { userId: req.user?.id, isAdmin: req.user?.role === 'admin' }, db, 'i.');
     const favorites = await favoritesQuery;
     res.json({
       user: { id: user.id, username: user.username, nickname: user.nickname || user.username, avatar: user.avatar },
@@ -143,7 +149,7 @@ router.get('/uploader/:userId', optionalAuth, async (req, res, next) => {
 
 router.post('/:id/like', optionalAuth, async (req, res, next) => {
   try {
-    const image = await db('images').where({ id: req.params.id }).first();
+    const image = await filterPrivateAlbumImages(db('images').where({ id: req.params.id }), { userId: req.user?.id, isAdmin: req.user?.role === 'admin' }, db).first();
     if (!image) return res.status(404).json({ error: '图片不存在' });
     if (req.user?.role !== 'admin' && image.uploader_id !== req.user?.id && !image.is_public) {
       const album = image.album_id ? await db('albums').where({ id: image.album_id }).select('is_public').first() : null;
@@ -175,7 +181,7 @@ router.post('/:id/like', optionalAuth, async (req, res, next) => {
 
 router.post('/:id/favorite', authMiddleware, async (req, res, next) => {
   try {
-    const image = await db('images').where({ id: req.params.id }).first();
+    const image = await filterPrivateAlbumImages(db('images').where({ id: req.params.id }), { userId: req.user.id, isAdmin: req.user.role === 'admin' }, db).first();
     if (!image) return res.status(404).json({ error: '图片不存在' });
     const isAdmin = req.user.role === 'admin';
     if (!isAdmin && image.uploader_id !== req.user.id && !image.is_public) {
@@ -200,7 +206,10 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
     const isOwner = req.user?.id && image.uploader_id === req.user.id;
     let isPublicAlbum = false;
     if (image.album_id) {
-      const album = await db('albums').where({ id: image.album_id }).select('is_public').first();
+      const album = await db('albums').where({ id: image.album_id }).select('is_public', 'is_private', 'user_id').first();
+      if (album?.is_private && !isAdmin && !isOwner && Number(album.user_id) !== Number(req.user?.id)) {
+        return res.status(403).json({ error: '无权访问私密相册图片' });
+      }
       isPublicAlbum = album?.is_public === true || album?.is_public === 1;
     }
     if (!isAdmin && !isOwner && !isPublicAlbum && !image.is_public && image.uploader_id !== null) {

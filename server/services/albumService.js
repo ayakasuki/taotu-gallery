@@ -6,6 +6,24 @@ import db from '../db/index.js';
 
 import logger from '../config/logger.js';
 import imageService from './imageService.js';
+import { albumPrivacyUpdates, albumPolicyError, filterHealthyImages, filterAlbumImagesForViewer, isUnsafeImage } from '../utils/albumPrivacy.js';
+
+async function healthyAlbumCover(album) {
+  let cover = album.cover_image_id
+    ? await filterHealthyImages(db('images').where({ id: album.cover_image_id, album_id: album.id })).first()
+    : null;
+  if (!cover) cover = await filterHealthyImages(db('images').where({ album_id: album.id })).orderBy('created_at', 'desc').first();
+  album.cover_image_id = cover?.id || null;
+  if (!cover) return null;
+  const { path: localPath, original_path: originalPath, ...safeCover } = cover;
+  return { ...safeCover, ...imageService.buildImageUrls(cover) };
+}
+
+async function assertHealthyCover(albumId, coverId, database) {
+  if (coverId === null) return;
+  const cover = await database('images').where({ id: coverId, album_id: albumId }).first();
+  if (!cover || isUnsafeImage(cover)) throw albumPolicyError('非法请求：封面必须是当前相册内未标记为不健康的图片');
+}
 
 function normalizeAlbumName(name) {
   return String(name || '').trim();
@@ -35,10 +53,15 @@ async function assertAlbumNameAvailable({ name, userId = null, excludeId = null 
 
 // 获取相册列表
 async function getAlbums(options = {}) {
-  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, userGalleryOnly = false, search = '' } = options;
+  const { page = 1, limit = 20, sort = 'created_at', order = 'desc', tagIds, userId, publicOnly = false, ownOnly = false, isAdmin = false, filterUserId = null, userGalleryOnly = false, search = '', excludePrivateAlbums = false } = options;
   const offset = (page - 1) * limit;
 
   let query = db('albums');
+  const restrictPrivate = builder => {
+    if (excludePrivateAlbums || publicOnly || !userId) builder.where({ is_private: false });
+    else if (!isAdmin) builder.where(inner => inner.where({ is_private: false }).orWhere({ user_id: userId }));
+  };
+  restrictPrivate(query);
 
   // 权限过滤
   if (filterUserId) {
@@ -79,6 +102,7 @@ async function getAlbums(options = {}) {
   const albums = await query.orderBy(sortField, sortOrder).offset(offset).limit(limit);
 
   let countQuery = db('albums').count('* as count');
+  restrictPrivate(countQuery);
   if (filterUserId) {
     countQuery = countQuery.where({ user_id: filterUserId });
   } else if (userGalleryOnly) {
@@ -116,22 +140,13 @@ async function getAlbums(options = {}) {
     album.owner_name = owner?.nickname || owner?.username || '系统';
     album.owner_avatar = owner?.avatar || null;
 
-    if (album.cover_image_id) {
-      album.cover_image = await db('images').where({ id: album.cover_image_id }).first();
-    } else {
-      album.cover_image = await db('images').where({ album_id: album.id }).first();
-    }
-    if (album.cover_image) {
-      const urls = imageService.buildImageUrls(album.cover_image);
-      Object.assign(album.cover_image, urls);
-      delete album.cover_image.path;
-      delete album.cover_image.original_path;
-    }
+    album.cover_image = await healthyAlbumCover(album);
     album.tags = await db('album_tags')
       .join('tags', 'album_tags.tag_id', 'tags.id')
       .where('album_tags.album_id', album.id)
       .select('tags.*', 'album_tags.source');
-    const [{ cnt }] = await db('images').where({ album_id: album.id }).count('* as cnt');
+    const countViewer = excludePrivateAlbums ? {} : { userId, isAdmin };
+    const [{ cnt }] = await filterAlbumImagesForViewer(db('images').where({ album_id: album.id }), countViewer).count('* as cnt');
     album.image_count = cnt;
   }
 
@@ -139,9 +154,12 @@ async function getAlbums(options = {}) {
 }
 
 // 获取单个相册
-async function getAlbumById(albumId) {
+async function getAlbumById(albumId, viewer = {}) {
   const album = await db('albums').where({ id: albumId }).first();
   if (!album) return null;
+  if (album.is_private && (viewer.external || (!viewer.isAdmin && Number(album.user_id) !== Number(viewer.userId)))) {
+    throw albumPolicyError('私密相册不允许通过此请求访问', 403);
+  }
 
   const owner = album.user_id
     ? await db('users').where({ id: album.user_id }).select('username', 'nickname', 'avatar').first()
@@ -149,26 +167,10 @@ async function getAlbumById(albumId) {
   album.owner_name = owner?.nickname || owner?.username || '系统';
   album.owner_avatar = owner?.avatar || null;
 
-  // 获取封面：优先使用手动/系统写入的封面，缺失时回退到相册内最新图片
-  if (album.cover_image_id) {
-    album.cover_image = await db('images').where({ id: album.cover_image_id }).first();
-  }
-  if (!album.cover_image) {
-    album.cover_image = await db('images')
-      .where({ album_id: albumId })
-      .orderBy('created_at', 'desc')
-      .first();
-  }
-  if (album.cover_image) {
-    const urls = imageService.buildImageUrls(album.cover_image);
-    Object.assign(album.cover_image, urls);
-    delete album.cover_image.path;
-    delete album.cover_image.original_path;
-  }
+  album.cover_image = await healthyAlbumCover(album);
 
   // 获取图片列表（带 URL）
-  album.images = await db('images')
-    .where({ album_id: albumId })
+  album.images = await filterAlbumImagesForViewer(db('images').where({ album_id: albumId }), viewer)
     .orderBy('created_at', 'desc');
 
   for (const image of album.images) {
@@ -185,6 +187,8 @@ async function getAlbumById(albumId) {
 // 创建相册
 async function createAlbum(data) {
   const normalizedName = await assertAlbumNameAvailable({ name: data.name, userId: data.user_id || null });
+  const privacy = albumPrivacyUpdates(data);
+  if (data.cover_image_id) throw albumPolicyError('新相册请先添加健康图片后再设置封面');
   const [id] = await db('albums').insert({
     name: normalizedName,
     description: data.description || null,
@@ -192,14 +196,15 @@ async function createAlbum(data) {
     is_public: data.is_public || false,
     all_picture_public: data.all_picture_public || false,
     hide_from_gallery: data.hide_from_gallery || false,
-    user_id: data.user_id || null
+    user_id: data.user_id || null,
+    ...privacy
   });
   logger.info(`相册已创建: ${normalizedName} (ID: ${id})`);
-  return getAlbumById(id);
+  return getAlbumById(id, { userId: data.user_id });
 }
 
 // 更新相册
-async function updateAlbum(albumId, data) {
+async function updateAlbum(albumId, data, viewer = {}) {
   const album = await db('albums').where({ id: albumId }).first();
   if (!album) throw createAlbumError('相册不存在', 404);
 
@@ -212,13 +217,25 @@ async function updateAlbum(albumId, data) {
     });
   }
   if (data.description !== undefined) updates.description = data.description;
-  if (data.cover_image_id !== undefined) updates.cover_image_id = data.cover_image_id;
-  if (data.is_public !== undefined) updates.is_public = data.is_public;
-  if (data.all_picture_public !== undefined) updates.all_picture_public = data.all_picture_public;
-  if (data.hide_from_gallery !== undefined) updates.hide_from_gallery = data.hide_from_gallery;
-
-  await db('albums').where({ id: albumId }).update(updates);
-  return getAlbumById(albumId);
+  await db.transaction(async trx => {
+    const current = await trx('albums').where({ id: albumId }).forUpdate().first();
+    if (!current) throw createAlbumError('相册不存在', 404);
+    if (viewer.external && (current.is_private || data.is_private === true || data.is_private === 1)) {
+      throw albumPolicyError('私密相册只能在登录后的站内管理', 403);
+    }
+    Object.assign(updates, albumPrivacyUpdates(data, current));
+    if (data.cover_image_id !== undefined) {
+      await assertHealthyCover(albumId, data.cover_image_id, trx);
+      updates.cover_image_id = data.cover_image_id;
+    }
+    await trx('albums').where({ id: albumId }).update(updates);
+    if (updates.is_private || (updates.is_private === undefined && current.is_private)) {
+      await trx('images').where({ album_id: albumId }).update({ is_public: false, updated_at: trx.fn.now() });
+    } else if (updates.all_picture_public !== undefined) {
+      await trx('images').where({ album_id: albumId }).update({ is_public: updates.all_picture_public, updated_at: trx.fn.now() });
+    }
+  });
+  return getAlbumById(albumId, { userId: album.user_id, ...viewer });
 }
 
 // 删除相册（不删除图片，仅解除关联）
@@ -233,8 +250,8 @@ async function deleteAlbum(albumId) {
 }
 
 // 随机获取相册
-async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOnly = true) {
-  let query = db('albums');
+async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOnly = true, excludeIds = []) {
+  let query = db('albums').where({ is_private: false });
 
   // 权限过滤
   if (publicOnly) {
@@ -251,12 +268,35 @@ async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOn
     });
   }
 
+  if (excludeIds.length) query = query.whereNotIn('albums.id', excludeIds);
   const albums = await query.orderByRaw('RAND()').limit(count);
 
+  if (!albums.length) return albums;
+  const albumIds = albums.map(album => album.id);
+  const fallbackCovers = await filterHealthyImages(db('images').whereIn('album_id', albumIds))
+    .select('album_id').min({ image_id: 'id' }).count('* as image_count').groupBy('album_id');
+  const fallbackByAlbum = new Map(fallbackCovers.map(cover => [String(cover.album_id), cover.image_id]));
+  const countByAlbum = new Map(fallbackCovers.map(cover => [String(cover.album_id), Number(cover.image_count)]));
+  const coverIds = [...new Set(albums.flatMap(album => [album.cover_image_id, fallbackByAlbum.get(String(album.id))]).filter(Boolean))];
+  const [covers, albumTags] = await Promise.all([
+    coverIds.length ? filterHealthyImages(db('images').whereIn('id', coverIds)) : [],
+    db('album_tags').join('tags', 'album_tags.tag_id', 'tags.id')
+      .whereIn('album_tags.album_id', albumIds)
+      .select('tags.*', 'album_tags.album_id as tagged_album_id')
+  ]);
+  const coversById = new Map(covers.map(cover => [String(cover.id), cover]));
+  const tagsByAlbum = new Map();
+  for (const { tagged_album_id, ...tag } of albumTags) {
+    const key = String(tagged_album_id);
+    if (!tagsByAlbum.has(key)) tagsByAlbum.set(key, []);
+    tagsByAlbum.get(key).push(tag);
+  }
   for (const album of albums) {
-    album.cover_image = album.cover_image_id
-      ? await db('images').where({ id: album.cover_image_id }).first()
-      : await db('images').where({ album_id: album.id }).first();
+    const selectedCover = coversById.get(String(album.cover_image_id));
+    const cover = Number(selectedCover?.album_id) === Number(album.id) ? selectedCover : coversById.get(String(fallbackByAlbum.get(String(album.id))));
+    album.cover_image = cover ? { ...cover } : null;
+    album.cover_image_id = cover?.id || null;
+    album.image_count = countByAlbum.get(String(album.id)) || 0;
     if (album.cover_image) {
       const urls = imageService.buildImageUrls(album.cover_image);
       Object.assign(album.cover_image, urls);
@@ -264,10 +304,7 @@ async function getRandomAlbums(count = 1, tagIds = null, userId = null, publicOn
       delete album.cover_image.original_path;
     }
 
-    album.tags = await db('album_tags')
-      .join('tags', 'album_tags.tag_id', 'tags.id')
-      .where('album_tags.album_id', album.id)
-      .select('tags.*');
+    album.tags = tagsByAlbum.get(String(album.id)) || [];
   }
 
   return albums;

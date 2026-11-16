@@ -717,6 +717,33 @@ select.fluent-select {
   background: rgba(248, 95, 154, 0.36);
 }
 
+.taotu-transient-scrollbar {
+  scrollbar-width: none !important;
+}
+
+.taotu-transient-scrollbar::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.taotu-transient-scrollbar.scrollbar-visible {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(124, 133, 156, 0.4) transparent !important;
+}
+
+.taotu-transient-scrollbar.scrollbar-visible::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+}
+
+.taotu-transient-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.taotu-transient-scrollbar.scrollbar-visible::-webkit-scrollbar-thumb {
+  background: rgba(124, 133, 156, 0.4);
+}
+
 @media (max-width: 900px) {
   .grid-cols-3,
   .grid-cols-4,

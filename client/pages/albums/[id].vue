@@ -18,7 +18,7 @@
               <h1>{{ album.name }}</h1>
               <span class="visibility-badge" :class="{ public: album.is_public }">
                 <TaotuIcon name="visibility-info" />
-                {{ album.is_public ? '公开' : '私有' }}
+                {{ album.is_private ? '私密' : album.is_public ? '公开' : '私有' }}
               </span>
             </div>
 

@@ -340,6 +340,11 @@ async function indexImageFile({ filePath, albumId = null, tagIds = [], userId = 
   indexingPathKeys.add(pathKey);
   try {
   const existing = await db('images').where({ path_key: pathKey }).first();
+  const targetAlbumId = existing?.album_id || albumId;
+  if (targetAlbumId) {
+    const album = await db('albums').where({ id: targetAlbumId }).select('is_private').first();
+    if (album?.is_private) makePublic = false;
+  }
   if (existing) {
     const thumbPaths = imageProcessor.getExistingThumbnailPath(filePath, 'thumb');
     const mediumPaths = imageProcessor.getExistingThumbnailPath(filePath, 'medium');

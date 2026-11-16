@@ -27,6 +27,8 @@ import apiUserTagsRouter from './routes/api/userTags.js';
 import apiImagesRouter from './routes/api/images.js';
 import apiAlbumsRouter from './routes/api/albums.js';
 import apiEmbedRouter from './routes/api/embed.js';
+import randomMediaRouter from './routes/api/randomMedia.js';
+import internalTokensRouter from './routes/internal/tokens.js';
 import apiUploadRouter from './routes/api/upload.js';
 import apiUrlUploadRouter from './routes/api/urlUpload.js';
 import apiAnnouncementsRouter from './routes/api/announcements.js';
@@ -96,7 +98,7 @@ function parseCookies(req) {
   }, {});
 }
 
-async function resolveMediaUser(req) {
+async function resolveMediaUser(req, allowApiToken = true) {
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : '';
   const cookies = parseCookies(req);
@@ -113,7 +115,7 @@ async function resolveMediaUser(req) {
     } catch {}
   }
 
-  if (req.query.tk) {
+  if (allowApiToken && req.query.tk) {
     const tokenRecord = await db('api_tokens').where({ token: req.query.tk }).first();
     if (tokenRecord?.user_id && (getPermissions(tokenRecord).includes('images:read') || getPermissions(tokenRecord).includes('admin:manage'))) {
       await db('api_tokens').where({ id: tokenRecord.id }).update({ last_used_at: db.fn.now() });
@@ -130,6 +132,14 @@ async function resolveMediaUser(req) {
 
 async function canAccessImageAsset(req, record) {
   if (!record) return false;
+  const album = record.album_id ? await db('albums').where({ id: record.album_id }).select('is_public', 'is_private', 'user_id').first() : null;
+  if (album?.is_private) {
+    if (req.query.tk || req.apiToken) return false;
+    const sessionUser = await resolveMediaUser(req, false);
+    if (!sessionUser) return false;
+    if (record.nsfw_status) return sessionUser.role === 'admin' || Number(record.uploader_id) === Number(sessionUser.id);
+    return sessionUser.role === 'admin' || Number(album.user_id) === Number(sessionUser.id) || Number(record.uploader_id) === Number(sessionUser.id);
+  }
   const privacyModeEnabled = await isPrivacyModeEnabled();
   let user = privacyModeEnabled ? await resolvePrivacyUser(req) : null;
   if (privacyModeEnabled && !user) return false;
@@ -144,10 +154,7 @@ async function canAccessImageAsset(req, record) {
 
   if (record.is_public === true || record.is_public === 1) return true;
 
-  if (record.album_id) {
-    const album = await db('albums').where({ id: record.album_id }).select('is_public').first();
-    if (album?.is_public === true || album?.is_public === 1) return true;
-  }
+  if (album?.is_public === true || album?.is_public === 1) return true;
 
   const resolvedUser = user || await resolveMediaUser(req);
   if (!resolvedUser) return false;
@@ -253,8 +260,14 @@ app.get('/api/public/contact', async (req, res, next) => {
 app.use('/api/internal/images', requirePrivacyAccess, internalImagesRouter);
 app.use('/api/internal/albums', requirePrivacyAccess, internalAlbumsRouter);
 app.use('/api/internal/dashboard', internalDashboardRouter);
+app.use('/api/internal/tokens', internalTokensRouter);
 
 // 对外 API
+app.use(['/api/images/random', '/api/albums/random'], (req, res, next) => {
+  res.set('Cache-Control', 'private, no-store, max-age=0');
+  next();
+});
+app.use('/api/random-media', randomMediaRouter);
 app.use('/api/tags', apiTokenAccess, apiLogger, requirePrivacyAccess, apiTagsRouter);
 app.use('/api/tag-groups', apiTokenAccess, requirePrivacyAccess, apiTagGroupsRouter);
 app.use('/api/user-tags', apiUserTagsRouter);

@@ -15,6 +15,9 @@ import db from '../../db/index.js';
 import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js';
 import configService from '../../services/configService.js';
 import { getPermissions } from '../../middleware/apiTokenAccess.js';
+import { temporaryImage } from '../../utils/temporaryMedia.js';
+import { parseRandomCount, parseRandomExclusions, shouldRedirectRandomImage } from '../../utils/randomRequest.js';
+import { MY_TAG_GROUP_ID, isMyTagGroup } from '../../utils/privateTagGroup.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +26,10 @@ const router = express.Router();
 
 // 尝试从 JWT 或 API Token 获取用户 ID
 async function resolveUser(req) {
+  if (req.apiTokenUserId) {
+    const user = await db('users').where({ id: req.apiTokenUserId }).select('id', 'username', 'role', 'is_disabled', 'review_status').first();
+    return user && !user.is_disabled && user.review_status !== 'pending' ? user : null;
+  }
   // 优先 JWT
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -66,12 +73,34 @@ async function resolveUser(req) {
 // 查询图片列表
 router.get('/', async (req, res, next) => {
   try {
-    const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnlyParam, userId: targetUserId } = req.query;
-    const tagIds = parseTagIds(tags);
-    await assertNoTagFilterConflict(tagIds);
+    const { page, limit, sort, order, tags, album, orientation, search, mine, public: publicOnlyParam, userId: targetUserId, tag_g, sid } = req.query;
+    let tagIds = parseTagIds(tags) || [];
     const user = await resolveUser(req);
+    if (req.apiToken && !user) return res.status(403).json({ error: 'Token 所属用户不可用' });
     const userId = user?.id || null;
     const isAdmin = user?.role === 'admin';
+    const selectedGroupIds = tag_g ? tag_g.split(',') : [];
+    if (selectedGroupIds.some(id => !isMyTagGroup(id) && id !== '__system' && !/^\d+$/.test(id))) return res.status(400).json({ error: 'tag_g 参数无效' });
+    if (selectedGroupIds.includes(MY_TAG_GROUP_ID) && !userId) return res.status(401).json({ error: '登录后才能筛选我的标签' });
+    if (selectedGroupIds.some(id => /^\d+$/.test(id)) || sid) {
+      const groups = await configService.readTagGroups();
+      for (const groupId of selectedGroupIds.filter(id => /^\d+$/.test(id))) {
+        const group = groups.groups.find(item => Number(item.id) === Number(groupId));
+        if (group) {
+          tagIds.push(...(group.tagIds || []));
+          for (const subgroup of group.subgroups || []) tagIds.push(...(subgroup.tagIds || []));
+        }
+      }
+      if (sid) {
+        const selectedSids = sid.split(',').map(Number);
+        if (selectedSids.some(id => !Number.isInteger(id))) return res.status(400).json({ error: 'sid 参数无效' });
+        for (const subgroup of groups.groups.flatMap(group => group.subgroups || [])) {
+          if (selectedSids.includes(subgroup.sid)) tagIds.push(...(subgroup.tagIds || []));
+        }
+      }
+    }
+    tagIds = [...new Set(tagIds)];
+    await assertNoTagFilterConflict(tagIds);
 
     const ownOnly = mine === 'true' && userId;
     const publicOnly = publicOnlyParam === 'true';
@@ -81,12 +110,14 @@ router.get('/', async (req, res, next) => {
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
       sort, order, tagIds,
+      privateTagUserId: selectedGroupIds.includes(MY_TAG_GROUP_ID) ? userId : null,
       albumId: album ? parseInt(album) : null,
       orientation, search,
       userId,
       publicOnly,
       ownOnly,
       isAdmin,
+      excludePrivateAlbums: true,
       filterUserId
     });
     res.json(result);
@@ -100,9 +131,11 @@ router.get('/random', async (req, res, next) => {
   try {
     const { count, tags, album, orientation, pic, tag_g, sid } = req.query;
     let tagIds = parseTagIds(tags) || [];
-    const requestedCount = parseInt(count) || 1;
+    const requestedCount = parseRandomCount(count);
+    const excludeIds = parseRandomExclusions(req.query.exclude);
     const useMedium = pic === 'md';
     const user = await resolveUser(req);
+    if (req.apiToken && !user) return res.status(403).json({ error: 'Token 所属用户不可用' });
     const userId = user?.id || null;
     const isAdmin = user?.role === 'admin';
 
@@ -111,11 +144,14 @@ router.get('/random', async (req, res, next) => {
     // tags 参数：按标签 ID 筛选
     // 三者叠加（OR 逻辑）
     const groupData = await configService.readTagGroups();
+    const groupIds = tag_g ? tag_g.split(',') : [];
+    if (groupIds.some(id => !isMyTagGroup(id) && id !== '__system' && !/^\d+$/.test(id))) return res.status(400).json({ error: 'tag_g 参数无效' });
+    if (groupIds.includes(MY_TAG_GROUP_ID) && !userId) return res.status(401).json({ error: '登录后才能筛选我的标签' });
 
     if (tag_g) {
-      const groupIds = tag_g.split(',').map(Number);
       for (const gid of groupIds) {
-        const group = groupData.groups.find(g => g.id === gid);
+        if (isMyTagGroup(gid) || gid === '__system') continue;
+        const group = groupData.groups.find(g => Number(g.id) === Number(gid));
         if (group) {
           // 如果没有指定 sid，则取分组内所有标签（含子分组）
           if (!sid) {
@@ -146,6 +182,12 @@ router.get('/random', async (req, res, next) => {
 
     const images = await imageService.getRandomImages({
       count: requestedCount,
+      excludeIds,
+      strictAccess: !!req.apiToken,
+      includeTags: false,
+      excludePrivateAlbums: true,
+      healthyOnly: true,
+      privateTagUserId: groupIds.includes(MY_TAG_GROUP_ID) ? userId : null,
       tagIds: tagIds.length > 0 ? tagIds : null,
       albumId: album ? parseInt(album) : null,
       orientation,
@@ -156,6 +198,16 @@ router.get('/random', async (req, res, next) => {
 
     if (images.length === 0) {
       return res.status(404).json({ error: '没有符合条件的图片' });
+    }
+
+    if (requestedCount > 1 || shouldRedirectRandomImage(req.query.jump)) {
+      const baseUrl = await imageService.getPublicBaseUrl();
+      const signed = images.map(image => temporaryImage(image, 'images:random', req.apiToken?.id || 0, process.env.JWT_SECRET, req.apiToken ? 0 : userId || 0));
+      res.set('Cache-Control', 'private, no-store');
+      if (requestedCount === 1) {
+        return res.redirect(302, baseUrl + (useMedium ? signed[0].medium_url : signed[0].url));
+      }
+      return res.json({ images: signed });
     }
 
     // count=1 时直接返回图片二进制
@@ -175,13 +227,14 @@ router.get('/random', async (req, res, next) => {
       }
 
       if (fs.existsSync(filePath)) {
-        res.set('Content-Type', image.mime_type || 'image/jpeg');
-        res.set('Cache-Control', 'no-cache');
+        const originalPath = path.resolve(__dirname, '../../..', image.path);
+        res.set('Content-Type', filePath === originalPath ? (image.mime_type || 'image/jpeg') : 'image/jpeg');
+        res.set('Cache-Control', 'private, no-store, max-age=0');
         return res.sendFile(filePath);
       }
+      return res.status(404).json({ error: '图片文件不存在' });
     }
 
-    res.json({ images });
   } catch (err) {
     next(err);
   }
@@ -197,7 +250,8 @@ router.get('/:id', async (req, res, next) => {
     if (!image) return res.status(404).json({ error: '图片不存在' });
     let isPublicAlbum = false;
     if (image.album_id) {
-      const album = await db('albums').where({ id: image.album_id }).select('is_public').first();
+      const album = await db('albums').where({ id: image.album_id }).select('is_public', 'is_private').first();
+      if (album?.is_private) return res.status(403).json({ error: '私密相册图片不允许通过对外接口访问' });
       isPublicAlbum = album?.is_public === true || album?.is_public === 1;
     }
     if (!isAdmin && image.uploader_id !== userId && !isPublicAlbum && !image.is_public) {

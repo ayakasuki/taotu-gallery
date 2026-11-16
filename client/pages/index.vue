@@ -1,6 +1,6 @@
 <template>
   <div class="gallery-page">
-    <aside class="gallery-sidebar taotu-panel">
+    <aside class="gallery-sidebar taotu-panel taotu-transient-scrollbar" :class="{ 'scrollbar-visible': sidebarScrollbarVisible }" @wheel.passive="showSidebarScrollbar" @touchmove.passive="showSidebarScrollbar" @scroll.passive="showSidebarScrollbar">
       <section class="filter-section">
         <button class="filter-heading" @click="toggleFilterSection('source')">
           <span>图库来源</span>
@@ -120,7 +120,7 @@
               </div>
             </div>
           </div>
-          <button v-if="selectedTagIds.length > 0" class="clear-tags-btn" @click="clearTags">清空已选 {{ selectedTagIds.length }} 个标签</button>
+          <button v-if="selectedTagIds.length > 0 || selectedMyTagGroup" class="clear-tags-btn" @click="clearTags">清空已选筛选</button>
         </div>
       </section>
     </aside>
@@ -233,6 +233,10 @@ const gallerySource = ref('public')
 const selectedUserId = ref(null)
 const users = ref([])
 const tagGroups = ref([])
+const configuredTagGroups = ref([])
+const selectedMyTagGroup = ref(false)
+const { scrollbarVisible: sidebarScrollbarVisible, showScrollbar: showSidebarScrollbar } = useTransientScrollbar()
+const myTagGroupId = '__my_tags__'
 const openSections = reactive({ source: true, sort: true, mode: true, tags: true })
 const allGroupsExpanded = ref(false)
 const sourceCounts = reactive({ public: '-', mine: '-', favorites: '-', user: '-' })
@@ -292,6 +296,8 @@ const handleAuthInvalid = () => {
   isAdmin.value = false
   gallerySource.value = 'public'
   selectedUserId.value = null
+  selectedMyTagGroup.value = false
+  tagGroups.value = buildSidebarTagGroups(configuredTagGroups.value)
 }
 
 onMounted(async () => {
@@ -352,18 +358,31 @@ const loadSourceCounts = async () => {
 const loadTagGroups = async () => {
   try {
     const data = await api.get('/api/tag-groups')
-    tagGroups.value = buildSidebarTagGroups(data.groups || [])
+    configuredTagGroups.value = data.groups || []
   } catch {
-    tagGroups.value = buildSidebarTagGroups([])
+    configuredTagGroups.value = []
   }
+  tagGroups.value = buildSidebarTagGroups(configuredTagGroups.value)
 }
 
 const buildSidebarTagGroups = (groups = []) => {
-  const normalizedGroups = groups.map(group => ({
+  const myTagIds = gallerySource.value === 'mine'
+    ? allTags.value.filter(tag => tag.isUserTag && !tag.isPublicUserTag).map(tag => tag.id)
+    : []
+  const myTagKeys = new Set(myTagIds.map(mutualIdKey))
+  const normalizedGroups = groups.filter(group => group.id !== myTagGroupId).map(group => ({
       ...group,
       _expanded: false,
-      subgroups: (group.subgroups || []).map(sg => ({ ...sg, _expanded: false }))
+      tagIds: (group.tagIds || []).filter(id => !myTagKeys.has(mutualIdKey(id))),
+      subgroups: (group.subgroups || []).map(sg => ({
+        ...sg,
+        tagIds: (sg.tagIds || []).filter(id => !myTagKeys.has(mutualIdKey(id))),
+        _expanded: false
+      }))
   }))
+  if (myTagIds.length > 0) {
+    normalizedGroups.unshift({ id: myTagGroupId, name: '我的标签', tagIds: myTagIds, subgroups: [], _expanded: false, isVirtual: true })
+  }
   const groupedKeys = new Set()
   for (const group of normalizedGroups) {
     for (const id of group.tagIds || []) groupedKeys.add(mutualIdKey(id))
@@ -372,7 +391,7 @@ const buildSidebarTagGroups = (groups = []) => {
     }
   }
   const ungroupedIds = allTags.value
-    .filter(tag => !groupedKeys.has(mutualIdKey(tag.id)))
+    .filter(tag => !groupedKeys.has(mutualIdKey(tag.id)) && !myTagKeys.has(mutualIdKey(tag.id)))
     .map(tag => tag.id)
   if (ungroupedIds.length > 0) {
     normalizedGroups.push({
@@ -408,6 +427,7 @@ const loadGallery = () => {
   page.value = 1
   const params = {
     tags: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined,
+    tag_g: gallerySource.value === 'mine' && selectedMyTagGroup.value ? myTagGroupId : undefined,
     page: 1,
     limit: pageSize,
     gallery: 'true'
@@ -423,7 +443,7 @@ const loadGallery = () => {
   }
   return fetchImages(params)
     .then(() => {
-      sourceCounts[gallerySource.value] = total.value || 0
+      if (!selectedTagIds.value.length && !selectedMyTagGroup.value) sourceCounts[gallerySource.value] = total.value || 0
     })
     .then(() => nextTick())
     .then(() => scheduleLayout())
@@ -436,6 +456,7 @@ const loadMore = async () => {
     limit: pageSize,
     append: true,
     tags: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined,
+    tag_g: gallerySource.value === 'mine' && selectedMyTagGroup.value ? myTagGroupId : undefined,
     gallery: 'true'
   }
   if (gallerySource.value === 'favorites') params.favorites = true
@@ -454,13 +475,19 @@ const checkLoadMoreInView = () => {
 }
 
 const switchSource = (source) => {
+  if (gallerySource.value !== source) {
+    selectedTagIds.value = []
+    selectedMyTagGroup.value = false
+  }
   gallerySource.value = source
+  tagGroups.value = buildSidebarTagGroups(configuredTagGroups.value)
   if (source !== 'user') selectedUserId.value = null
   loadGallery()
   if (source === 'mine') loadAlbums()
 }
 
 const handleTagSelection = (newTagIds) => {
+  selectedMyTagGroup.value = false
   selectedTagIds.value = newTagIds
   loadGallery()
 }
@@ -532,10 +559,17 @@ const toggleTag = (tag) => {
   handleTagSelection(next)
 }
 const isGroupSelected = (group) => {
+  if (group.id === myTagGroupId) return selectedMyTagGroup.value
   const ids = getGroupAllTagIds(group)
   return ids.length > 0 && ids.every(isSelectedTag)
 }
 const toggleGroup = (group) => {
+  if (group.id === myTagGroupId) {
+    selectedMyTagGroup.value = !selectedMyTagGroup.value
+    selectedTagIds.value = []
+    loadGallery()
+    return
+  }
   const ids = getGroupAllTagIds(group)
   if (isGroupSelected(group)) {
     handleTagSelection(selectedTagIds.value.filter(id => !ids.some(gid => mutualIdKey(gid) === mutualIdKey(id))))
@@ -562,6 +596,7 @@ const toggleSubgroup = (sg) => {
   }
 }
 const clearTags = () => {
+  selectedMyTagGroup.value = false
   handleTagSelection([])
 }
 
@@ -763,8 +798,6 @@ const moveToAlbum = async () => {
   overflow-y: auto;
   padding: 14px 12px;
   border-radius: 16px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(124, 133, 156, 0.22) transparent;
   margin: 0px 30px 0px 30px;
 }
 

@@ -20,6 +20,7 @@ export function useGallery() {
         sort: params.sort || sort.value,
         order: params.order || order.value,
         tags: params.tags || undefined,
+        tag_g: params.tag_g || undefined,
         album: params.album || undefined,
         mine: params.mine || undefined,
         public: params.public || undefined,

@@ -18,6 +18,7 @@ import tagService from './tagService.js';
 import conditionTagService from './conditionTagService.js';
 import nsfwService from './nsfwService.js';
 import storageDeleteService from './storageDeleteService.js';
+import { albumPolicyError } from '../utils/albumPrivacy.js';
 
 const DEFAULT_FORMATS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'ico'];
 
@@ -281,7 +282,7 @@ async function prepareLocalUploadPath(originalname, userId = null) {
 }
 
 // 处理上传后的图片
-async function processUploadedFile(file, albumId = null, tags = [], userId = null, isPublic = false, userTagIds = [], uploadSource = 'upload') {
+async function processUploadedFile(file, albumId = null, tags = [], userId = null, isPublic = false, userTagIds = [], uploadSource = 'upload', external = false) {
   const relativePath = pathUtils.toRelativePath(file.path);
 
   // 获取图片元信息
@@ -315,7 +316,17 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
   const hashPath = imageService.generateHashPath(file.originalname);
 
   // 写入数据库
-  const [imageId] = await db('images').insert({
+  const imageId = await db.transaction(async trx => {
+    if (albumId) {
+      const album = await trx('albums').where({ id: albumId }).forUpdate().first();
+      if (!album) throw albumPolicyError('目标相册不存在', 404);
+      if (album.is_private && (isPublic || external)) {
+        const error = albumPolicyError('非法请求：私密相册禁止公开图片和 API Token 上传', external ? 403 : 400);
+        error.code = 'PRIVATE_ALBUM_UPLOAD';
+        throw error;
+      }
+    }
+    const [id] = await trx('images').insert({
     filename: file.originalname,
     path: relativePath,
     path_key: pathUtils.getPathKey(relativePath),
@@ -333,6 +344,8 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
     album_id: albumId,
     uploader_id: userId || null,
     is_public: isPublic
+    });
+    return id;
   });
 
   let nsfwReview = {
@@ -417,7 +430,7 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
   if (albumId) {
     try {
       const album = await db('albums').where({ id: albumId }).first();
-      if (album && !album.cover_image_id) {
+      if (album && !album.cover_image_id && !nsfwReview.nsfw) {
         await db('albums').where({ id: albumId }).update({ cover_image_id: imageId });
         logger.info(`自动设置相册 ${albumId} 封面: 图片 ${imageId}`);
       }
@@ -467,13 +480,17 @@ async function processUploadedFile(file, albumId = null, tags = [], userId = nul
 }
 
 // 批量处理上传文件
-async function processUploadedFiles(files, albumId = null, tags = [], userId = null, isPublic = false, userTagIds = []) {
+async function processUploadedFiles(files, albumId = null, tags = [], userId = null, isPublic = false, userTagIds = [], external = false) {
   const results = [];
   for (const file of files) {
     try {
-      const result = await processUploadedFile(file, albumId, tags, userId, isPublic, userTagIds);
+      const result = await processUploadedFile(file, albumId, tags, userId, isPublic, userTagIds, 'upload', external);
       results.push({ success: true, ...result });
     } catch (err) {
+      if (err.code === 'PRIVATE_ALBUM_UPLOAD') {
+        const derivatives = [...imageProcessor.getExistingThumbnailPath(file.path, 'thumb'), ...imageProcessor.getExistingThumbnailPath(file.path, 'medium')];
+        await Promise.all([file.path, ...derivatives].map(filePath => fs.unlink(filePath).catch(() => {})));
+      }
       logger.error(`上传处理失败: ${file.originalname} - ${err.message}`);
       results.push({
         success: false,

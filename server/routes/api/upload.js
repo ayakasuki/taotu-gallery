@@ -2,6 +2,7 @@
  * 对外 API - 图片上传（需登录）
  */
 import express from 'express';
+import fs from 'node:fs/promises';
 
 import uploadService from '../../services/uploadService.js';
 import authMiddleware from '../../middleware/auth.js';
@@ -79,7 +80,13 @@ router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, nex
     assertNoDuplicateInputTags(newTags);
     const user = await db('users').where({ id: userId }).first();
     const isAdmin = user?.role === 'admin';
-    await assertUploadAlbumAccess(albumId, userId, isAdmin);
+    const targetAlbum = await assertUploadAlbumAccess(albumId, userId, isAdmin);
+    if (targetAlbum?.is_private && (req.apiToken || req.body.is_public === '1')) {
+      const error = new Error(req.apiToken ? '私密相册不能通过 API Token 上传' : '非法请求：私密相册图片不能公开');
+      error.statusCode = req.apiToken ? 403 : 400;
+      error.code = 'PRIVATE_ALBUM_UPLOAD';
+      throw error;
+    }
 
     // 处理新标签：管理员创建公共标签，普通用户创建自己的私有标签
     if (newTags.length > 0) {
@@ -140,7 +147,7 @@ router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, nex
     const publicTags = tags.filter(id => typeof id === 'number' || (typeof id === 'string' && !String(id).startsWith('u')));
     const userTagIds = tags.filter(id => typeof id === 'string' && String(id).startsWith('u')).map(id => parseInt(String(id).substring(1)));
 
-    const results = await uploadService.processUploadedFiles(req.files, albumId, publicTags, userId, req.body.is_public === '1', userTagIds);
+    const results = await uploadService.processUploadedFiles(req.files, albumId, publicTags, userId, req.body.is_public === '1', userTagIds, !!req.apiToken);
 
     const successCount = results.filter(r => r.success).length;
     const failCount = results.filter(r => !r.success).length;
@@ -150,6 +157,9 @@ router.post('/', authMiddleware, uploadService.uploadFiles, async (req, res, nex
       results
     });
   } catch (err) {
+    if (err.code === 'PRIVATE_ALBUM_UPLOAD') {
+      await Promise.all((req.files || []).map(file => fs.unlink(file.path).catch(() => {})));
+    }
     next(err);
   }
 });

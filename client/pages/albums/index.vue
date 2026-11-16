@@ -81,7 +81,7 @@
         <div class="album-meta">
           <div class="meta-line title-line">
             <h2 @click="navigateTo(`/albums/${album.id}`)">{{ album.name }}</h2>
-            <span class="visibility-pill" :class="{ public: album.is_public }">{{ album.is_public ? '公开' : '私有' }}</span>
+            <span class="visibility-pill" :class="{ public: album.is_public }">{{ album.is_private ? '私密' : album.is_public ? '公开' : '私有' }}</span>
           </div>
 
           <p class="image-count">{{ album.image_count || 0 }} 张图片</p>
@@ -178,7 +178,7 @@
         </div>
         <div class="summary-main">
           <strong>{{ managingAlbum.name }}</strong>
-          <span>{{ managingAlbum.image_count || manageImages.length || 0 }} 张图片 · {{ managingAlbum.is_public ? '公开' : '私有' }}</span>
+          <span>{{ managingAlbum.image_count || manageImages.length || 0 }} 张图片 · {{ managingAlbum.is_private ? '私密' : managingAlbum.is_public ? '公开' : '私有' }}</span>
           <span>创建者：{{ managingAlbum.owner_name || '系统' }}</span>
         </div>
         <button type="button" class="summary-edit" @click="activeManageTab = 'settings'">编辑信息</button>
@@ -207,18 +207,18 @@
         </div>
 
         <div v-if="manageImages.length > 0" class="manage-image-grid">
-          <button
+          <div
             v-for="img in manageImages"
             :key="img.id"
-            type="button"
             class="manage-image"
             :class="{ selected: selectedManageIds.includes(img.id), cover: managingAlbum.cover_image_id === img.id }"
-            @click="toggleManageImage(img.id)"
           >
-            <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
-            <span class="select-mark"></span>
-            <button type="button" class="set-cover-btn" @click.stop="setCover(img)">设为封面</button>
-          </button>
+            <button type="button" class="manage-image-select" :aria-label="`选择图片 ${img.filename}`" @click="toggleManageImage(img.id)">
+              <img :src="getThumbUrl(img)" :alt="img.filename" loading="lazy" />
+              <span class="select-mark"></span>
+            </button>
+            <button type="button" class="set-cover-btn" :disabled="isUnsafeImage(img)" :title="isUnsafeImage(img) ? '不健康图片不能设为封面' : '设为封面'" @click.stop="setCover(img)">设为封面</button>
+          </div>
         </div>
         <div v-else class="manage-empty">相册内暂无图片</div>
 
@@ -248,10 +248,24 @@
 
           <div class="setting-row">
             <div>
+              <strong>私密相册</strong>
+              <span>仅供站内授权查看，不参与对外接口</span>
+              <small class="setting-warning">
+                <TaotuIcon name="warning" />
+                开启后关闭公开相册、公开所有图片和主页隐藏，并禁止对外查询及随机访问（含本人 Token）。
+              </small>
+            </div>
+            <button type="button" class="pink-switch" :class="{ active: editForm.isPrivate }" role="switch" :aria-checked="editForm.isPrivate" @click="togglePrivateAlbum">
+              <i></i>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div>
               <strong>公开相册</strong>
               <span>开启后所有人可查看此相册</span>
             </div>
-            <button type="button" class="pink-switch" :class="{ active: editForm.isPublic }" @click="editForm.isPublic = !editForm.isPublic">
+            <button type="button" class="pink-switch" :class="{ active: editForm.isPublic }" :disabled="editForm.isPrivate" @click="editForm.isPublic = !editForm.isPublic">
               <i></i>
             </button>
           </div>
@@ -269,7 +283,7 @@
               type="button"
               class="pink-switch"
               :class="{ active: editForm.imagesPublic }"
-              :disabled="imagePublicSaving"
+              :disabled="imagePublicSaving || editForm.isPrivate"
               @click="toggleAlbumImagesPublic"
             >
               <i></i>
@@ -285,7 +299,7 @@
                 不影响相册内查看、图片详情、随机图 API 和已有外链访问逻辑。
               </small>
             </div>
-            <button type="button" class="pink-switch" :class="{ active: editForm.hideFromGallery }" @click="editForm.hideFromGallery = !editForm.hideFromGallery">
+            <button type="button" class="pink-switch" :class="{ active: editForm.hideFromGallery }" :disabled="editForm.isPrivate" @click="editForm.hideFromGallery = !editForm.hideFromGallery">
               <i></i>
             </button>
           </div>
@@ -337,7 +351,7 @@ const managingAlbum = ref(null)
 const manageImages = ref([])
 const selectedManageIds = ref([])
 const activeManageTab = ref('images')
-const editForm = reactive({ name: '', description: '', isPublic: false, imagesPublic: false, hideFromGallery: false })
+const editForm = reactive({ name: '', description: '', isPrivate: false, isPublic: false, imagesPublic: false, hideFromGallery: false })
 const imagePublicSaving = ref(false)
 const deleteDialog = reactive({
   show: false,
@@ -462,6 +476,7 @@ const getCoverUrl = (album) => {
 }
 
 const getThumbUrl = (img) => normalizeAssetUrl(img.thumb_url || img.medium_url || img.url)
+const isUnsafeImage = (img) => [true, 1, '1'].includes(img?.nsfw_status)
 const ownerAvatar = (album) => normalizeAssetUrl(album.owner_avatar)
 const ownerInitial = (album) => (album.owner_name || '系').slice(0, 1).toUpperCase()
 
@@ -502,6 +517,7 @@ const openManage = async (album) => {
   selectedManageIds.value = []
   editForm.name = album.name || ''
   editForm.description = album.description || ''
+  editForm.isPrivate = !!album.is_private
   editForm.isPublic = !!album.is_public
   editForm.imagesPublic = !!album.all_picture_public
   editForm.hideFromGallery = !!album.hide_from_gallery
@@ -525,6 +541,7 @@ const loadManageImages = async (albumId) => {
     }
     editForm.name = managingAlbum.value.name || ''
     editForm.description = managingAlbum.value.description || ''
+    editForm.isPrivate = !!managingAlbum.value.is_private
     editForm.isPublic = !!managingAlbum.value.is_public
     editForm.imagesPublic = !!managingAlbum.value.all_picture_public
     editForm.hideFromGallery = !!managingAlbum.value.hide_from_gallery
@@ -544,9 +561,11 @@ const toggleSelectAllManage = () => {
 }
 
 const setCover = async (img) => {
+  if (isUnsafeImage(img)) return alert('不健康图片不能设为封面')
   try {
     const updated = await api.put(`/api/admin/albums/${managingAlbum.value.id}`, { cover_image_id: img.id })
     managingAlbum.value = { ...managingAlbum.value, ...updated }
+    if (updated.is_private) manageImages.value = manageImages.value.map(img => ({ ...img, is_public: false }))
     await Promise.all([loadAlbums(page.value), loadManageImages(managingAlbum.value.id)])
   } catch (err) {
     alert('设置封面失败: ' + (err.data?.error || err.message))
@@ -575,12 +594,22 @@ const removeSelectedFromAlbumNow = async (ids) => {
   }
 }
 
+const togglePrivateAlbum = () => {
+  editForm.isPrivate = !editForm.isPrivate
+  if (editForm.isPrivate) {
+    editForm.isPublic = false
+    editForm.imagesPublic = false
+    editForm.hideFromGallery = false
+  }
+}
+
 const saveAlbumSettings = async () => {
   if (!editForm.name.trim()) return alert('请输入相册名称')
   try {
     const updated = await api.put(`/api/admin/albums/${managingAlbum.value.id}`, {
       name: editForm.name.trim(),
       description: editForm.description.trim(),
+      is_private: editForm.isPrivate,
       is_public: editForm.isPublic,
       hide_from_gallery: editForm.hideFromGallery
     })
@@ -592,7 +621,7 @@ const saveAlbumSettings = async () => {
 }
 
 const toggleAlbumImagesPublic = async () => {
-  if (!managingAlbum.value || imagePublicSaving.value) return
+  if (!managingAlbum.value || imagePublicSaving.value || editForm.isPrivate) return
   const nextValue = !editForm.imagesPublic
   imagePublicSaving.value = true
   try {
@@ -1439,6 +1468,16 @@ const confirmDeleteDialog = async () => {
   border-color: #f15c96;
 }
 
+.manage-image-select {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .manage-image img {
   width: 100%;
   height: 100%;
@@ -1497,6 +1536,12 @@ const confirmDeleteDialog = async () => {
 .manage-image.cover .set-cover-btn {
   background: #f15c96;
   color: #fff;
+}
+
+.manage-image .set-cover-btn:disabled {
+  background: #e2e4eb;
+  color: #8b93a7;
+  cursor: not-allowed;
 }
 
 .remove-selected {
@@ -1622,6 +1667,11 @@ const confirmDeleteDialog = async () => {
 
 .pink-switch.active i {
   transform: translateX(22px);
+}
+
+.pink-switch:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1120px) {

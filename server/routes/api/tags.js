@@ -17,6 +17,10 @@ const SYSTEM_TAGS = [
 ];
 
 async function resolveUser(req) {
+  if (req.apiTokenUserId) {
+    const user = await db('users').where({ id: req.apiTokenUserId }).select('id', 'role', 'is_disabled', 'review_status').first();
+    return user && !user.is_disabled && user.review_status !== 'pending' ? user : null;
+  }
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     try {
@@ -85,7 +89,6 @@ router.get('/', async (req, res, next) => {
     if (userId) {
       const privateUserTags = await db('user_tags').where({ user_id: userId, is_public: false });
       for (const ut of privateUserTags) {
-        if (!existingNames.has(ut.name)) {
           const tag = {
             id: `u${ut.id}`, name: ut.name,
             display_name: ut.display_name || ut.name,
@@ -95,8 +98,6 @@ router.get('/', async (req, res, next) => {
           };
           if (tag.combinable) combinable.push(tag);
           else nonCombinable.push(tag);
-          existingNames.add(ut.name);
-        }
       }
     }
 

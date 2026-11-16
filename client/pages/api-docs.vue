@@ -44,7 +44,9 @@
                 </span>
                 <TaotuIcon v-if="apiToken === token.token" name="success" />
               </button>
-              <div v-if="tokenOptions.length === 0" class="token-empty">当前账号暂无 API Token</div>
+              <div v-if="tokenOptionsLoading" class="token-empty">正在读取 Token…</div>
+              <div v-else-if="tokenOptionsError" class="token-empty">{{ tokenOptionsError }}</div>
+              <div v-else-if="tokenOptions.length === 0" class="token-empty">当前账号暂无 API Token</div>
               <div v-else-if="filteredTokenOptions.length === 0" class="token-empty">没有匹配的 Token</div>
             </div>
           </div>
@@ -74,7 +76,7 @@
             <span v-if="selectedFilterCount > 0">已选筛选 ({{ selectedFilterCount }})</span>
             <button v-if="selectedFilterCount > 0" type="button" @click="clearFilters">清除全部</button>
           </div>
-          <div class="important-filter-box">
+          <div class="important-filter-box taotu-transient-scrollbar" :class="{ 'scrollbar-visible': filterScrollbarVisible }" @wheel.passive="showFilterScrollbar" @touchmove.passive="showFilterScrollbar" @scroll.passive="showFilterScrollbar">
             <TagGroupSelectorFlat
               :tags="tags"
               :selectedGroupIds="selectedGroupIds"
@@ -96,15 +98,22 @@
           <span class="config-label">返回数量</span>
           <div class="count-control">
             <button type="button" @click="changeCount(-1)">−</button>
-            <input v-model.number="randomCount" type="number" min="1" max="100" @input="normalizeCount" />
+            <input v-model.number="randomCount" type="number" min="1" max="100" step="1" @input="onCountInput" @blur="normalizeCount" @keydown.enter.prevent="normalizeCount" />
             <button type="button" @click="changeCount(1)">＋</button>
           </div>
-          <span class="range-text">1-100</span>
+          <span class="range-text" title="此页面可选 1–100；直接调用随机 API 每次最多 2000 条，后续请求可用 exclude 排除已返回的 ID">1-100</span>
         </div>
 
         <div class="form-row switch-row" v-if="selectedEndpoint === 'images-random'">
           <span class="config-label">随机图片使用中等图</span>
           <button type="button" class="pink-switch" :class="{ active: useMedium }" @click="useMedium = !useMedium; debouncedRefresh()">
+            <i></i>
+          </button>
+        </div>
+
+        <div class="form-row switch-row" v-if="selectedEndpoint === 'images-random' && effectiveCount === 1">
+          <span class="config-label" title="开启后跳转到 15 分钟有效的签名图片地址，无论是否携带 API Token；默认直接返回图片">跳转图片 URL</span>
+          <button type="button" class="pink-switch" :class="{ active: jumpToImage }" role="switch" :aria-checked="jumpToImage" @click="jumpToImage = !jumpToImage; debouncedRefresh()">
             <i></i>
           </button>
         </div>
@@ -202,7 +211,7 @@
               </figure>
             </div>
             <div v-else-if="previewMode === 'images' && previewImageUrl" class="single-preview">
-              <img :src="previewImageUrl" @error="onImageError" />
+              <img :key="previewImageUrl" :src="previewImageUrl" @error="onImageError" />
             </div>
             <div v-else-if="previewMode === 'json'" class="preview-data">
               <pre><code>{{ previewJsonText }}</code></pre>
@@ -233,13 +242,17 @@ import TagGroupSelectorFlat from '~/components/tags/TagGroupSelectorFlat.vue'
 
 const config = useRuntimeConfig()
 const api = useApi()
+const { scrollbarVisible: filterScrollbarVisible, showScrollbar: showFilterScrollbar } = useTransientScrollbar()
+const { checkAuth } = useAuth()
 const { tags, selectedTagIds, fetchTags } = useTags()
 
 const albums = ref([])
 const selectedAlbum = ref(null)
 const randomCount = ref(1)
+const effectiveCount = computed(() => Math.max(1, Math.min(100, Math.trunc(Number(randomCount.value) || 1))))
 const apiToken = ref('')
 const useMedium = ref(true)
+const jumpToImage = ref(false)
 const selectedGroupIds = ref([])
 const selectedSids = ref([])
 const selectedEndpoint = ref('images-random')
@@ -256,6 +269,8 @@ const showToken = ref(false)
 const tokenDropdownOpen = ref(false)
 const tokenPickerRef = ref(null)
 const tokenOptions = ref([])
+const tokenOptionsLoading = ref(false)
+const tokenOptionsError = ref('')
 const visiblePreviewLimit = ref(9)
 const requestSeq = ref(0)
 
@@ -309,17 +324,18 @@ const generatedUrl = computed(() => {
 
   switch (selectedEndpoint.value) {
     case 'images':
-      params.set('limit', randomCount.value)
+      params.set('limit', effectiveCount.value)
       return `${base}/api/images?${params.toString()}`
     case 'images-random':
-      params.set('count', randomCount.value)
+      params.set('count', effectiveCount.value)
       if (useMedium.value) params.set('pic', 'md')
+      if (effectiveCount.value === 1 && jumpToImage.value) params.set('jump', '1')
       return `${base}/api/images/random?${params.toString()}`
     case 'albums':
-      params.set('limit', randomCount.value)
+      params.set('limit', effectiveCount.value)
       return `${base}/api/albums?${params.toString()}`
     case 'albums-random':
-      params.set('count', randomCount.value)
+      params.set('count', effectiveCount.value)
       return `${base}/api/albums/random?${params.toString()}`
     case 'embed-image':
       params.set('format', embedFormat.value)
@@ -348,13 +364,15 @@ const curlDataParams = computed(() => curlParamLines(true))
 const curlDataParamsPlain = computed(() => curlParamLines(false))
 
 const responseStructure = computed(() => {
-  if (selectedEndpoint.value === 'images-random' && Number(randomCount.value) === 1) {
-    return '// count=1 时直接返回图片二进制\n// Content-Type: image/jpeg 或图片原 mime_type\n// 使用 pic=md 时优先返回中等图'
+  if (selectedEndpoint.value === 'images-random' && effectiveCount.value === 1) {
+    return jumpToImage.value
+      ? '// jump=1 或只带 jump 时，返回 302 到 15 分钟有效的签名图片地址\n// 无论是否携带 API Token 均生效；pic=md 使用中等图'
+      : '// 默认或 jump=0 时直接返回图片二进制，不跳转，地址保持原 API URL\n// 每次请求重新校验 Token、权限、来源白名单和额度\n// pic=md 使用中等图；jump=1 可跳转到临时签名图片地址'
   }
-  if (selectedEndpoint.value === 'images-random') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/image/...', medium_url: '/thumb/...?s=medium', width: 1920, height: 1080 }] }, null, 2)
+  if (selectedEndpoint.value === 'images-random') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/api/random-media/1/full?exp=...&tid=...&scope=images:random&sig=...', medium_url: '/api/random-media/1/medium?exp=...&tid=...&scope=images:random&sig=...', width: 1920, height: 1080 }] }, null, 2)
   if (selectedEndpoint.value === 'images') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/image/...', thumb_url: '/thumb/...?s=thumb', medium_url: '/thumb/...?s=medium' }], total: 100, page: 1, limit: 20 }, null, 2)
   if (selectedEndpoint.value === 'albums') return JSON.stringify({ albums: [{ id: 1, name: '...', image_count: 10, cover_image: {} }], total: 5, page: 1 }, null, 2)
-  if (selectedEndpoint.value === 'albums-random') return JSON.stringify({ albums: [{ id: 1, name: '...', cover_image: {} }] }, null, 2)
+  if (selectedEndpoint.value === 'albums-random') return JSON.stringify({ albums: [{ id: 1, name: '...', cover_image: { url: '/api/random-media/1/full?exp=...&tid=...&scope=albums:random&sig=...' } }] }, null, 2)
   if (selectedEndpoint.value === 'tags') return JSON.stringify({ combinable: [{ id: 1, name: '...' }], nonCombinable: [] }, null, 2)
   if (selectedEndpoint.value.startsWith('embed-')) return `// 返回 ${embedFormat.value} 格式\n// source 格式返回 JSON；HTML、BBCode、Markdown 返回文本`
   return '{}'
@@ -386,6 +404,7 @@ const normalizeAssetUrl = (url) => {
 }
 
 const fetchPreview = async (force = false) => {
+  if (refreshTimer) clearTimeout(refreshTimer)
   requestSeq.value += 1
   const seq = requestSeq.value
   previewLoading.value = true
@@ -401,7 +420,7 @@ const fetchPreview = async (force = false) => {
     if (apiToken.value) headers.Authorization = `Bearer ${apiToken.value}`
     const url = withRefreshParam(generatedUrl.value, force ? Date.now() : requestSeq.value)
 
-    if (selectedEndpoint.value === 'images-random' && Number(randomCount.value) === 1) {
+    if (selectedEndpoint.value === 'images-random' && effectiveCount.value === 1) {
       previewImageUrl.value = url
       previewMode.value = 'images'
       return
@@ -424,6 +443,7 @@ const fetchPreview = async (force = false) => {
     previewMode.value = previewImages.value.length > 0 ? 'images' : 'json'
     if (previewImages.value.length === 0 && selectedEndpoint.value.includes('image')) previewNoImage.value = true
   } catch (err) {
+    if (seq !== requestSeq.value) return
     previewError.value = err.data?.error || err.message || '请求失败'
     previewData.value = { error: previewError.value }
     previewMode.value = 'json'
@@ -437,7 +457,8 @@ const withRefreshParam = (url, value) => {
   return `${url}${joiner}_preview=${value}`
 }
 
-const onImageError = () => {
+const onImageError = (event) => {
+  if (!event.target?.isConnected || event.target.getAttribute('src') !== previewImageUrl.value) return
   previewLoading.value = false
   previewImageUrl.value = null
   previewNoImage.value = true
@@ -474,12 +495,18 @@ const escapeHtml = (value) => String(value)
   .replace(/"/g, '&quot;')
 
 const changeCount = (step) => {
-  randomCount.value = Math.max(1, Math.min(100, Number(randomCount.value || 1) + step))
+  randomCount.value = Math.max(1, Math.min(100, effectiveCount.value + step))
+  debouncedRefresh()
+}
+
+const onCountInput = () => {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  if (randomCount.value === '' || Number(randomCount.value) < 1 || Number(randomCount.value) > 100) return
   debouncedRefresh()
 }
 
 const normalizeCount = () => {
-  randomCount.value = Math.max(1, Math.min(100, Number(randomCount.value || 1)))
+  randomCount.value = effectiveCount.value
   debouncedRefresh()
 }
 
@@ -495,17 +522,29 @@ const resetConfig = () => {
   selectedAlbum.value = null
   randomCount.value = defaultCountForEndpoint(selectedEndpoint.value)
   useMedium.value = true
+  jumpToImage.value = false
   embedFormat.value = 'markdown'
   embedSize.value = 'medium'
   clearFilters()
 }
 
 const loadTokenOptions = async () => {
+  if (tokenOptionsLoading.value) return
+  if (!checkAuth()) {
+    tokenOptions.value = []
+    tokenOptionsError.value = '登录后可选择自己的 Token'
+    return
+  }
+  tokenOptionsLoading.value = true
+  tokenOptionsError.value = ''
   try {
-    const data = await api.get('/api/admin/api/tokens')
+    const data = await api.get('/api/internal/tokens')
     tokenOptions.value = (data.tokens || []).filter(token => token.token)
   } catch {
     tokenOptions.value = []
+    tokenOptionsError.value = '读取 Token 失败，请稍后重试'
+  } finally {
+    tokenOptionsLoading.value = false
   }
 }
 
@@ -554,6 +593,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  requestSeq.value += 1
   document.removeEventListener('pointerdown', handleTokenPickerPointer)
   if (refreshTimer) clearTimeout(refreshTimer)
 })
@@ -907,6 +947,8 @@ onBeforeUnmount(() => {
 }
 
 .important-filter-box {
+  max-height: 650px;
+  overflow-y: auto;
   padding: 12px;
   border: 1px solid rgba(230, 219, 236, 0.86);
   border-radius: 10px;

@@ -6,6 +6,7 @@ import express from 'express';
 import configService from '../../services/configService.js';
 import db from '../../db/index.js';
 import jwt from 'jsonwebtoken';
+import { MY_TAG_GROUP_ID } from '../../utils/privateTagGroup.js';
 
 const router = express.Router();
 
@@ -18,6 +19,10 @@ function tagIdVariants(id) {
 }
 
 async function resolveUser(req) {
+  if (req.apiTokenUserId) {
+    const user = await db('users').where({ id: req.apiTokenUserId }).select('id', 'role', 'is_disabled', 'review_status').first();
+    return user && !user.is_disabled && user.review_status !== 'pending' ? user : null;
+  }
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     try {
@@ -90,7 +95,10 @@ router.get('/', async (req, res, next) => {
       }))
     }));
 
-    res.json({ groups: [systemGroup, ...filteredGroups] });
+    const ownPrivateTags = userId ? await db('user_tags').where({ user_id: userId, is_public: false }).select('id') : [];
+    const myTagGroups = userId ? [{ id: MY_TAG_GROUP_ID, name: '我的标签', system: true, tagIds: ownPrivateTags.map(tag => `u${tag.id}`), subgroups: [] }] : [];
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ groups: [...myTagGroups, systemGroup, ...filteredGroups] });
   } catch (err) { next(err); }
 });
 

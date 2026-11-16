@@ -52,7 +52,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
 router.get('/:id', optionalAuth, async (req, res, next) => {
   try {
     const isAdmin = req.user?.role === 'admin';
-    const album = await albumService.getAlbumById(parseInt(req.params.id));
+    const album = await albumService.getAlbumById(parseInt(req.params.id), { userId: req.user?.id, isAdmin });
     if (!album) return res.status(404).json({ error: '相册不存在' });
     if (!isAdmin && !album.is_public && (!req.user?.id || album.user_id !== req.user.id)) {
       return res.status(403).json({ error: '无权访问此相册' });

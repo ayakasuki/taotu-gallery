@@ -12,10 +12,16 @@ import albumService from '../../services/albumService.js';
 import db from '../../db/index.js';
 import jwt from 'jsonwebtoken';
 import {parseTagIds, assertNoTagFilterConflict} from '../../utils/tagConflict.js';
+import { temporaryImage } from '../../utils/temporaryMedia.js';
+import { isUnsafeImage } from '../../utils/albumPrivacy.js';
 
 const router = express.Router();
 
 async function resolveUser(req) {
+  if (req.apiTokenUserId) {
+    const user = await db('users').where({ id: req.apiTokenUserId }).first();
+    return user && !user.is_disabled && user.review_status !== 'pending' ? user : null;
+  }
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     try {
@@ -52,7 +58,8 @@ router.get('/image', async (req, res, next) => {
       image = await imageService.getImageById(parseInt(id));
       let isPublicAlbum = false;
       if (image?.album_id) {
-        const album = await db('albums').where({ id: image.album_id }).select('is_public').first();
+        const album = await db('albums').where({ id: image.album_id }).select('is_public', 'is_private').first();
+        if (album?.is_private) return res.status(403).json({ error: '私密相册图片不允许通过对外接口访问' });
         isPublicAlbum = album?.is_public === true || album?.is_public === 1;
       }
       if (image && !isAdmin && image.uploader_id !== userId && !isPublicAlbum && !image.is_public && image.uploader_id !== null) {
@@ -61,6 +68,11 @@ router.get('/image', async (req, res, next) => {
     }
 
     if (!image) return res.status(404).json({ error: '图片不存在' });
+    if (isUnsafeImage(image)) return res.status(403).json({ error: '不健康图片不能对外嵌入' });
+    if (random !== undefined) {
+      res.set('Cache-Control', 'private, no-store, max-age=0');
+      image = temporaryImage(image, 'embed', req.apiToken?.id || 0, process.env.JWT_SECRET, req.apiToken ? 0 : userId || 0);
+    }
 
     const baseUrl = await imageService.getPublicBaseUrl();
     const embedCodes = imageService.generateEmbedCodes(baseUrl, image);
@@ -89,7 +101,7 @@ router.get('/album', async (req, res, next) => {
       const albums = await albumService.getRandomAlbums(1, tagIds, userId, !userId);
       album = albums[0];
     } else if (id) {
-      album = await albumService.getAlbumById(parseInt(id));
+      album = await albumService.getAlbumById(parseInt(id), { userId, isAdmin, external: true });
       // 权限检查
       if (album && !album.is_public) {
         if (!isAdmin && (!userId || (album.user_id !== userId && album.user_id !== null))) {
@@ -103,12 +115,19 @@ router.get('/album', async (req, res, next) => {
     const baseUrl = await imageService.getPublicBaseUrl();
     let image;
     if (mode === 'random' && album.images && album.images.length > 0) {
-      image = album.images[Math.floor(Math.random() * album.images.length)];
+      const healthyImages = album.images.filter(candidate => !isUnsafeImage(candidate));
+      image = healthyImages[Math.floor(Math.random() * healthyImages.length)];
     } else {
       image = album.cover_image || (album.images && album.images[0]);
     }
 
     if (!image) return res.status(404).json({ error: '相册内无图片' });
+    if (isUnsafeImage(image)) return res.status(403).json({ error: '不健康图片不能对外嵌入' });
+    if (random !== undefined || mode === 'random') {
+      res.set('Cache-Control', 'private, no-store, max-age=0');
+      image = temporaryImage(image, 'embed', req.apiToken?.id || 0, process.env.JWT_SECRET, req.apiToken ? 0 : userId || 0);
+      album = { id: album.id, name: album.name, description: album.description, image_count: album.image_count, cover_image: image };
+    }
 
     const embedCodes = imageService.generateEmbedCodes(baseUrl, {
       ...image,

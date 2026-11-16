@@ -57,11 +57,26 @@ export function ipCidrMatch(ip, cidr) {
 
 export function isSourceAllowed({ ip, referer, origin, fetchSite, host, protocol }, ipRules, refererRules) {
   const ipAllowed = ipRules.some((entry) => entry === ip || (entry.includes('/') && ipCidrMatch(ip, entry)));
-  const source = referer || origin;
-  const refererAllowed = source && refererRules.some((entry) => matchesRefererRule(entry, source));
-  const sameOriginAllowed = !source && fetchSite === 'same-origin' && host
-    && refererRules.some((entry) => matchesRefererRule(entry, `${protocol || 'http'}://${host}`));
-  return Boolean(ipAllowed || refererAllowed || sameOriginAllowed);
+  if (ipAllowed) return true;
+  if (!refererRules.length) return false;
+  try {
+    if (origin && referer && new URL(origin).origin !== new URL(referer).origin) return false;
+    const source = origin || referer;
+    if (source) {
+      if (!refererRules.some(entry => matchesRefererRule(entry, source))) return false;
+      if (fetchSite && host) {
+        const requestOrigin = new URL(`${protocol || 'http'}://${host}`).origin;
+        const sameOrigin = new URL(source).origin === requestOrigin;
+        if (fetchSite === 'same-origin' && !sameOrigin) return false;
+        if (fetchSite === 'cross-site' && sameOrigin) return false;
+      }
+      return true;
+    }
+    return fetchSite === 'same-origin' && !!host
+      && refererRules.some(entry => matchesRefererRule(entry, `${protocol || 'http'}://${host}`));
+  } catch {
+    return false;
+  }
 }
 
 export function buildQuotaPeriods(limits, date = new Date()) {

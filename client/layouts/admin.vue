@@ -34,7 +34,7 @@
 
     <div class="admin-body">
       <aside class="admin-sidebar">
-        <nav class="sidebar-scroll">
+        <nav class="sidebar-scroll taotu-transient-scrollbar" :class="{ 'scrollbar-visible': sidebarScrollbarVisible }" @wheel.passive="showSidebarScrollbar" @touchmove.passive="showSidebarScrollbar" @scroll.passive="showSidebarScrollbar">
           <section v-for="group in menuGroups" :key="group.title" class="menu-group">
             <h3>{{ group.title }}</h3>
             <NuxtLink v-for="item in group.items" :key="item.to" :to="item.to" class="sidebar-link">
@@ -70,6 +70,7 @@
 
 <script setup>
 const api = useApi()
+const { scrollbarVisible: sidebarScrollbarVisible, showScrollbar: showSidebarScrollbar } = useTransientScrollbar()
 const route = useRoute()
 const {
   readSiteConfigCache,
@@ -393,6 +394,7 @@ const handleLogout = () => {
 
 .sidebar-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 18px 14px;
 }
