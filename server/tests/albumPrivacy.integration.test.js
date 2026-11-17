@@ -170,6 +170,71 @@ test('album privacy and random media HTTP integration on an isolated database', 
       await json('/api/images/random?count=2&tag_g=__my_tags__', {}, 401);
     });
 
+    await suite.test('tag lists filter direct and subgroup tags without exposing private tags across users', async () => {
+      await db('tags').insert([
+        { id: 6, name: 'subgroup-tag', display_name: 'Subgroup', is_public: true },
+        { id: 7, name: 'admin-tag', display_name: 'Admin only', is_public: false }
+      ]);
+      await db('user_tags').insert({ id: 14, user_id: 3, name: 'overlap', is_public: true });
+      await db('tag_groups').insert([
+        { id: 1, name: 'test-group', tag_ids: JSON.stringify([5, 'u11', 'u13', 'u14', 7]), subgroups: JSON.stringify([{ sid: 11, name: 'child', tagIds: [6] }]) },
+        { id: 2, name: 'second-group', tag_ids: JSON.stringify([6]), subgroups: JSON.stringify([{ sid: 12, name: 'other-child', tagIds: [5] }]) }
+      ]);
+      const ids = data => data.all.map(tag => String(tag.id)).sort();
+      assert.deepEqual(ids(await json('/api/tags?tag_g=1')), ['5', '6', 'u14']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=1', { userId: 2 })), ['5', '6', 'u11', 'u14']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=1', { apiToken: token })), ['5', '6', 'u11', 'u14']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=1', { userId: 3 })), ['5', '6', 'u13', 'u14']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=1', { userId: 1 })), ['5', '6', '7', 'u14']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=__system')), ['__tagged', '__untagged']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=__my_tags__', { apiToken: token })), ['u11', 'u12']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=my_tags&sid=11', { apiToken: token })), ['6', 'u11', 'u12']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=1%2C2&sid=11%2C12', { apiToken: token })), ['5', '6', 'u11', 'u14']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=1&sid=11', { apiToken: token })), ['5', '6', 'u11', 'u14']);
+      assert.deepEqual(ids(await json('/api/tags?tag_g=2&sid=11')), ['5', '6']);
+      assert.deepEqual(ids(await json('/api/tags?sid=11')), ['6']);
+      assert.deepEqual(ids(await json('/api/tags?sid=11%2C12')), ['5', '6']);
+      await json('/api/tags?tag_g=__my_tags__', {}, 401);
+      await json('/api/tags?tag_g=my_tags&sid=11', {}, 401);
+      await json('/api/tags?tag_g=unknown', {}, 400);
+      await json('/api/tags?tag_g=999', {}, 400);
+      await json('/api/tags?tag_g=1%2C', {}, 400);
+      await json('/api/tags?sid=999', {}, 400);
+      await json('/api/tags?sid=11%2Cbad', {}, 400);
+      assert.ok((await json('/api/tags')).all.length > 2);
+    });
+
+    await suite.test('simple random URLs retain compact links while the default response provides detailed absolute links', async () => {
+      await db('image_tags').insert({ image_id: 101, tag_id: 5, source: 'manual' });
+      await json('/api/images/random?count=1&simple_url=1', {}, 400);
+      await json('/api/images/random?count=1&simple_url=0', {}, 400);
+      await json('/api/images/random?simple_url=1', { apiToken: token }, 400);
+      await json('/api/images/random?count=2&simple_url=bad', {}, 400);
+      const regular = (await json('/api/images/random?count=2')).images;
+      assert.ok(Array.isArray(regular[0].tags));
+      assert.equal(new URL(regular[0].url).origin, base);
+      const response = await request('/api/images/random?count=2&simple_url=1&pic=md&exclude=104,501', { apiToken: token });
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('cache-control'), /no-store/);
+      const { images } = await response.json();
+      assert.deepEqual(images.map(image => image.id).sort(), [101, 301]);
+      for (const image of images) {
+        assert.deepEqual(Object.keys(image), ['id', 'filename', 'width', 'height', 'mime_type', 'url', 'medium_url', 'thumb_url']);
+        assert.ok(image.url.startsWith('/api/random-media/'));
+        assert.equal((await request(image.medium_url)).status, 200);
+      }
+      const detailed = (await json('/api/images/random?count=2&simple_url=0&pic=md&exclude=104,501', { apiToken: token })).images;
+      assert.deepEqual(Object.keys(detailed[0]), ['id', 'filename', 'tags', 'url', 'medium_url']);
+      assert.equal(new URL(detailed[0].medium_url).origin, base);
+      assert.deepEqual(detailed.find(image => image.id === 101).tags.map(tag => tag.id).sort(), [5, 'u11']);
+      const withThumb = (await json('/api/images/random?count=2&exclude=104,501', { apiToken: token })).images;
+      assert.ok(withThumb.every(image => new URL(image.thumb_url).origin === base));
+      assert.ok(withThumb.every(image => image.path === undefined && image.hash_path === undefined));
+      const guest = (await json('/api/images/random?count=2&exclude=104,301,501')).images;
+      assert.deepEqual(guest.map(image => image.id), [101]);
+      assert.deepEqual(guest[0].tags.map(tag => tag.id), [5]);
+    });
+
     await suite.test('private albums revoke old signed links and reject every conflicting public setting', async () => {
       const old = (await json('/api/images/random?count=2&album=12', { apiToken: token })).images[0];
       const oldAnonymous = (await json('/api/images/random?count=2&album=12')).images[0];

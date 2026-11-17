@@ -134,6 +134,13 @@ router.get('/random', async (req, res, next) => {
     const requestedCount = parseRandomCount(count);
     const excludeIds = parseRandomExclusions(req.query.exclude);
     const useMedium = pic === 'md';
+    const simpleUrl = req.query.simple_url === '1';
+    if (req.query.simple_url !== undefined && !['0', '1'].includes(req.query.simple_url)) {
+      return res.status(400).json({ error: 'simple_url 参数无效' });
+    }
+    if (req.query.simple_url !== undefined && requestedCount < 2) {
+      return res.status(400).json({ error: 'simple_url 仅支持返回数量至少为 2 的随机图片' });
+    }
     const user = await resolveUser(req);
     if (req.apiToken && !user) return res.status(403).json({ error: 'Token 所属用户不可用' });
     const userId = user?.id || null;
@@ -184,7 +191,7 @@ router.get('/random', async (req, res, next) => {
       count: requestedCount,
       excludeIds,
       strictAccess: !!req.apiToken,
-      includeTags: false,
+      includeTags: requestedCount > 1 && !simpleUrl,
       excludePrivateAlbums: true,
       healthyOnly: true,
       privateTagUserId: groupIds.includes(MY_TAG_GROUP_ID) ? userId : null,
@@ -207,7 +214,24 @@ router.get('/random', async (req, res, next) => {
       if (requestedCount === 1) {
         return res.redirect(302, baseUrl + (useMedium ? signed[0].medium_url : signed[0].url));
       }
-      return res.json({ images: signed });
+      if (simpleUrl) return res.json({ images: signed });
+      const requestOrigin = `${req.protocol}://${req.get('host')}`;
+      return res.json({ images: signed.map((item, index) => ({
+          id: item.id,
+          filename: item.filename,
+          tags: (images[index].tags || [])
+            .filter(tag => tag.source === 'user'
+              ? tag.is_public === true || tag.is_public === 1 || (userId && Number(tag.user_id) === Number(userId))
+              : isAdmin || tag.is_public !== false && tag.is_public !== 0)
+            .map(tag => ({
+              id: tag.source === 'user' ? `u${tag.id}` : tag.id,
+              name: tag.name,
+              display_name: tag.display_name || tag.name
+            })),
+          url: new URL(item.url, requestOrigin).href,
+          ...(!useMedium ? { thumb_url: new URL(item.thumb_url, requestOrigin).href } : {}),
+          medium_url: new URL(item.medium_url, requestOrigin).href
+      })) });
     }
 
     // count=1 时直接返回图片二进制

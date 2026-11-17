@@ -4,6 +4,7 @@
     <div class="selector-section">
       <label class="section-label">主分组</label>
       <div class="chip-list">
+        <span v-if="groupsOnly" class="tag-chip group-chip" :class="{ selected: !hasSelection }" @click="clearAll">全部</span>
         <span v-for="g in groups" :key="g.id" class="tag-chip group-chip"
           :class="{ selected: selectedGroupIds.includes(g.id), disabled: isGroupDisabled(g.id) }"
           @click="toggleGroup(g.id)">
@@ -26,7 +27,7 @@
     </div>
 
     <!-- 标签选择区 -->
-    <div class="selector-section" v-if="availableTags.length > 0">
+    <div class="selector-section" v-if="!groupsOnly && availableTags.length > 0">
       <label class="section-label">标签</label>
       <div class="chip-list">
         <span v-for="tag in availableTags" :key="tag.id" class="tag-chip"
@@ -46,7 +47,7 @@
       <span v-for="sid in selectedSids" :key="'s'+sid" class="summary-chip subgroup">
         {{ getSubgroupName(sid) }} <button @click="removeSid(sid)">×</button>
       </span>
-      <span v-for="id in selectedTagIds" :key="'t'+id" class="summary-chip tag">
+      <span v-for="id in groupsOnly ? [] : selectedTagIds" :key="'t'+id" class="summary-chip tag">
         {{ getTagName(id) }} <button @click="toggleTagById(id)">×</button>
       </span>
       <button class="clear-all" @click="clearAll">清除全部</button>
@@ -57,6 +58,8 @@
 <script setup>
 const props = defineProps({
   tags: { type: Object, default: () => ({ combinable: [], nonCombinable: [] }) },
+  groupsOnly: { type: Boolean, default: false },
+  apiToken: { type: String, default: '' },
   selectedGroupIds: { type: Array, default: () => [] },
   selectedSids: { type: Array, default: () => [] },
   selectedTagIds: { type: Array, default: () => [] }
@@ -69,20 +72,32 @@ const emit = defineEmits([
 ])
 
 const api = useApi()
+const { readAuthToken } = useUiCache()
+const config = useRuntimeConfig()
 const groups = ref([])
 const myTagGroupId = '__my_tags__'
+let groupRequestSeq = 0
 
 const allTags = computed(() => [...(props.tags.combinable || []), ...(props.tags.nonCombinable || [])])
 
-onMounted(async () => {
+const loadGroups = async () => {
+  const seq = ++groupRequestSeq
   try {
-    const data = await api.get('/api/tag-groups')
+    const data = readAuthToken() || !props.apiToken
+      ? await api.get('/api/tag-groups')
+      : await $fetch(`${config.public.apiBase || ''}/api/tag-groups`, { headers: { Authorization: `Bearer ${props.apiToken}` } })
+    if (seq !== groupRequestSeq) return
     groups.value = (data.groups || []).map(g => ({
       ...g,
       subgroups: (g.subgroups || []).map(sg => ({ ...sg, _groupId: g.id }))
     }))
-  } catch {}
-})
+  } catch {
+    if (seq === groupRequestSeq) groups.value = []
+  }
+}
+onMounted(loadGroups)
+watch(() => props.apiToken, loadGroups)
+onBeforeUnmount(() => { groupRequestSeq += 1 })
 
 // 计算被主分组覆盖的子分组 sid 集合
 const coveredSids = computed(() => {
@@ -139,11 +154,11 @@ const availableTags = computed(() => {
 })
 
 const hasSelection = computed(() => {
-  return props.selectedGroupIds.length > 0 || props.selectedSids.length > 0 || props.selectedTagIds.length > 0
+  return props.selectedGroupIds.length > 0 || props.selectedSids.length > 0 || (!props.groupsOnly && props.selectedTagIds.length > 0)
 })
 
 // 主分组切换
-const isGroupDisabled = (id) => id !== myTagGroupId && !props.selectedGroupIds.includes(id) && wouldConflictWithSelection(collectGroupTagIds(id))
+const isGroupDisabled = (id) => !props.groupsOnly && id !== myTagGroupId && !props.selectedGroupIds.includes(id) && wouldConflictWithSelection(collectGroupTagIds(id))
 
 const toggleGroup = (id) => {
   if (isGroupDisabled(id)) return
@@ -155,7 +170,7 @@ const toggleGroup = (id) => {
 }
 
 // 子分组切换
-const isSubgroupDisabled = (sg) => !props.selectedSids.includes(sg.sid) && (coveredSids.value.has(sg.sid) || wouldConflictWithSelection(collectSubgroupTagIds(sg.sid)))
+const isSubgroupDisabled = (sg) => !props.groupsOnly && !props.selectedSids.includes(sg.sid) && (coveredSids.value.has(sg.sid) || wouldConflictWithSelection(collectSubgroupTagIds(sg.sid)))
 
 const toggleSubgroup = (sg) => {
   if (isSubgroupDisabled(sg)) return

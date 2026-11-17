@@ -70,15 +70,17 @@
           </div>
         </div>
 
-        <div class="config-section tag-filter-section" v-if="currentEp.showTags">
+        <div class="config-section tag-filter-section" v-if="currentEp.showTags || selectedEndpoint === 'tags'">
           <div class="section-head">
-            <span class="config-label">标签筛选</span>
+            <span class="config-label">{{ selectedEndpoint === 'tags' ? '标签分组筛选' : '标签筛选' }}</span>
             <span v-if="selectedFilterCount > 0">已选筛选 ({{ selectedFilterCount }})</span>
             <button v-if="selectedFilterCount > 0" type="button" @click="clearFilters">清除全部</button>
           </div>
           <div class="important-filter-box taotu-transient-scrollbar" :class="{ 'scrollbar-visible': filterScrollbarVisible }" @wheel.passive="showFilterScrollbar" @touchmove.passive="showFilterScrollbar" @scroll.passive="showFilterScrollbar">
             <TagGroupSelectorFlat
               :tags="tags"
+              :groupsOnly="selectedEndpoint === 'tags'"
+              :apiToken="apiToken"
               :selectedGroupIds="selectedGroupIds"
               :selectedSids="selectedSids"
               :selectedTagIds="selectedTagIds"
@@ -102,6 +104,13 @@
             <button type="button" @click="changeCount(1)">＋</button>
           </div>
           <span class="range-text" title="此页面可选 1–100；直接调用随机 API 每次最多 2000 条，后续请求可用 exclude 排除已返回的 ID">1-100</span>
+        </div>
+
+        <div class="form-row switch-row" v-if="selectedEndpoint === 'images-random'">
+          <span class="config-label" title="仅在返回至少 2 张图片时可用；开启后只返回原有精简签名链接字段">简约 URL</span>
+          <button type="button" class="pink-switch" :class="{ active: simpleUrl && effectiveCount >= 2 }" :disabled="effectiveCount < 2" role="switch" :aria-checked="simpleUrl && effectiveCount >= 2" @click="simpleUrl = !simpleUrl; debouncedRefresh()">
+            <i></i>
+          </button>
         </div>
 
         <div class="form-row switch-row" v-if="selectedEndpoint === 'images-random'">
@@ -244,6 +253,7 @@ const config = useRuntimeConfig()
 const api = useApi()
 const { scrollbarVisible: filterScrollbarVisible, showScrollbar: showFilterScrollbar } = useTransientScrollbar()
 const { checkAuth } = useAuth()
+const { readAuthToken } = useUiCache()
 const { tags, selectedTagIds, fetchTags } = useTags()
 
 const albums = ref([])
@@ -253,6 +263,7 @@ const effectiveCount = computed(() => Math.max(1, Math.min(100, Math.trunc(Numbe
 const apiToken = ref('')
 const useMedium = ref(true)
 const jumpToImage = ref(false)
+const simpleUrl = ref(false)
 const selectedGroupIds = ref([])
 const selectedSids = ref([])
 const selectedEndpoint = ref('images-random')
@@ -300,7 +311,7 @@ const embedSizeOptions = [
   { label: '中图（1280px）', value: 'medium' },
   { label: '完整图', value: 'full' }
 ]
-const selectedFilterCount = computed(() => selectedGroupIds.value.length + selectedSids.value.length + selectedTagIds.value.length)
+const selectedFilterCount = computed(() => selectedGroupIds.value.length + selectedSids.value.length + (selectedEndpoint.value === 'tags' ? 0 : selectedTagIds.value.length))
 const previewImages = computed(() => extractPreviewImages(previewData.value))
 const visiblePreviewImages = computed(() => previewImages.value.slice(0, visiblePreviewLimit.value))
 const previewJsonText = computed(() => previewData.value ? JSON.stringify(previewData.value, null, 2) : '')
@@ -316,10 +327,15 @@ const filteredTokenOptions = computed(() => {
 const generatedUrl = computed(() => {
   const base = import.meta.client ? window.location.origin : 'http://localhost'
   const params = new URLSearchParams()
-  if (selectedGroupIds.value.length > 0) params.set('tag_g', selectedGroupIds.value.join(','))
-  if (selectedSids.value.length > 0) params.set('sid', selectedSids.value.join(','))
-  if (selectedTagIds.value.length > 0) params.set('tags', selectedTagIds.value.join(','))
-  if (selectedAlbum.value) params.set('album', selectedAlbum.value)
+  if (selectedEndpoint.value === 'tags') {
+    if (selectedGroupIds.value.length > 0) params.set('tag_g', selectedGroupIds.value.join(','))
+    if (selectedSids.value.length > 0) params.set('sid', selectedSids.value.join(','))
+  } else {
+    if (selectedGroupIds.value.length > 0) params.set('tag_g', selectedGroupIds.value.join(','))
+    if (selectedSids.value.length > 0) params.set('sid', selectedSids.value.join(','))
+    if (selectedTagIds.value.length > 0) params.set('tags', selectedTagIds.value.join(','))
+    if (selectedAlbum.value) params.set('album', selectedAlbum.value)
+  }
   if (apiToken.value) params.set('tk', apiToken.value)
 
   switch (selectedEndpoint.value) {
@@ -329,6 +345,7 @@ const generatedUrl = computed(() => {
     case 'images-random':
       params.set('count', effectiveCount.value)
       if (useMedium.value) params.set('pic', 'md')
+      if (effectiveCount.value >= 2 && simpleUrl.value) params.set('simple_url', '1')
       if (effectiveCount.value === 1 && jumpToImage.value) params.set('jump', '1')
       return `${base}/api/images/random?${params.toString()}`
     case 'albums':
@@ -369,11 +386,18 @@ const responseStructure = computed(() => {
       ? '// jump=1 或只带 jump 时，返回 302 到 15 分钟有效的签名图片地址\n// 无论是否携带 API Token 均生效；pic=md 使用中等图'
       : '// 默认或 jump=0 时直接返回图片二进制，不跳转，地址保持原 API URL\n// 每次请求重新校验 Token、权限、来源白名单和额度\n// pic=md 使用中等图；jump=1 可跳转到临时签名图片地址'
   }
-  if (selectedEndpoint.value === 'images-random') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/api/random-media/1/full?exp=...&tid=...&scope=images:random&sig=...', medium_url: '/api/random-media/1/medium?exp=...&tid=...&scope=images:random&sig=...', width: 1920, height: 1080 }] }, null, 2)
+  if (selectedEndpoint.value === 'images-random') {
+    const signedPath = (size) => `/api/random-media/1/${size}?exp=...&tid=...&scope=images:random&sig=...`
+    const origin = import.meta.client ? window.location.origin : 'https://example.com'
+    const image = simpleUrl.value
+      ? { id: 1, filename: '...', url: signedPath('full'), thumb_url: signedPath('thumb'), medium_url: signedPath('medium'), width: 1920, height: 1080, mime_type: 'image/jpeg' }
+      : { id: 1, filename: '...', tags: [{ id: 1, name: '...', display_name: '...' }], url: origin + signedPath('full'), ...(!useMedium.value ? { thumb_url: origin + signedPath('thumb') } : {}), medium_url: origin + signedPath('medium') }
+    return JSON.stringify({ images: [image] }, null, 2)
+  }
   if (selectedEndpoint.value === 'images') return JSON.stringify({ images: [{ id: 1, filename: '...', url: '/image/...', thumb_url: '/thumb/...?s=thumb', medium_url: '/thumb/...?s=medium' }], total: 100, page: 1, limit: 20 }, null, 2)
   if (selectedEndpoint.value === 'albums') return JSON.stringify({ albums: [{ id: 1, name: '...', image_count: 10, cover_image: {} }], total: 5, page: 1 }, null, 2)
   if (selectedEndpoint.value === 'albums-random') return JSON.stringify({ albums: [{ id: 1, name: '...', cover_image: { url: '/api/random-media/1/full?exp=...&tid=...&scope=albums:random&sig=...' } }] }, null, 2)
-  if (selectedEndpoint.value === 'tags') return JSON.stringify({ combinable: [{ id: 1, name: '...' }], nonCombinable: [] }, null, 2)
+  if (selectedEndpoint.value === 'tags') return JSON.stringify({ combinable: [{ id: 1, name: '...', display_name: '...' }], nonCombinable: [], all: [{ id: 1, name: '...', display_name: '...' }] }, null, 2)
   if (selectedEndpoint.value.startsWith('embed-')) return `// 返回 ${embedFormat.value} 格式\n// source 格式返回 JSON；HTML、BBCode、Markdown 返回文本`
   return '{}'
 })
@@ -418,6 +442,7 @@ const fetchPreview = async (force = false) => {
   try {
     const headers = {}
     if (apiToken.value) headers.Authorization = `Bearer ${apiToken.value}`
+    else if (selectedEndpoint.value === 'tags' && readAuthToken()) headers.Authorization = `Bearer ${readAuthToken()}`
     const url = withRefreshParam(generatedUrl.value, force ? Date.now() : requestSeq.value)
 
     if (selectedEndpoint.value === 'images-random' && effectiveCount.value === 1) {
@@ -523,6 +548,7 @@ const resetConfig = () => {
   randomCount.value = defaultCountForEndpoint(selectedEndpoint.value)
   useMedium.value = true
   jumpToImage.value = false
+  simpleUrl.value = false
   embedFormat.value = 'markdown'
   embedSize.value = 'medium'
   clearFilters()
@@ -1013,6 +1039,11 @@ onBeforeUnmount(() => {
 
 .pink-switch.active {
   background: linear-gradient(135deg, #ff7caf, #f15c96);
+}
+
+.pink-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pink-switch.active i {
